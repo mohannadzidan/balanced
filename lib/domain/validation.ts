@@ -40,6 +40,25 @@ export const positiveDurationMin = z.int().positive()
 export const nonNegativeMin = z.int().nonnegative()
 
 /**
+ * A `FormData` value read as a duration in whole minutes (daily target,
+ * minimum block). Unlike a minute-of-day, this never accepts `"HH:MM"` — a
+ * duration is not a clock time.
+ */
+export const positiveDurationMinFromForm = z
+  .string()
+  .transform((raw, ctx) => {
+    const value = raw.trim()
+
+    if (!/^\d+$/.test(value)) {
+      ctx.addIssue("Enter a whole number of minutes.")
+      return z.NEVER
+    }
+
+    return Number(value)
+  })
+  .pipe(positiveDurationMin)
+
+/**
  * A `FormData` value read as a minute of day.
  *
  * `<input type="time">` submits `"HH:MM"` while a numeric or hidden field
@@ -132,30 +151,63 @@ function checkTransitionGroupComplete(
 }
 
 /**
- * Create-activity input, strict-placement variant (FR-013,
- * contracts/server-actions.md §1). Only one member of the eventual
- * `constraintType`-discriminated union exists so far; the flexible variant
- * arrives with its own fields in a later task, kept out of this shape until
- * then so it can't be set here by mistake.
- *
- * Transitions are optional (FR-009, FR-010): at most one `pre` and one `post`
- * is naturally satisfied by each position having a single field triple rather
- * than a list, and each triple is all-or-nothing (`checkTransitionGroupComplete`).
+ * Transitions are optional (FR-009, FR-010) on either constraint type: at
+ * most one `pre` and one `post` is naturally satisfied by each position
+ * having a single field triple rather than a list, and each triple is
+ * all-or-nothing (`checkTransitionGroupComplete`).
+ */
+const transitionFields = {
+  preName: activityName.optional(),
+  preStartMin: minuteOfDayFromForm.optional(),
+  preEndMin: minuteOfDayFromForm.optional(),
+  postName: activityName.optional(),
+  postStartMin: minuteOfDayFromForm.optional(),
+  postEndMin: minuteOfDayFromForm.optional(),
+}
+
+/**
+ * Create-activity input, strict variant (contracts/server-actions.md §1).
+ * `placementStartMin`/`placementEndMin` *are* the activity's fixed times, and
+ * `placementKind` is always `"strict"` — a Strict activity's window cannot be
+ * merely preferred.
+ */
+const strictActivitySchema = z.object({
+  name: activityName,
+  constraintType: z.literal("strict"),
+  placementKind: z.literal("strict"),
+  placementStartMin: minuteOfDayFromForm,
+  placementEndMin: minuteOfDayFromForm,
+  ...transitionFields,
+})
+
+/**
+ * Create-activity input, flexible variant (FR-012, FR-013,
+ * contracts/server-actions.md §1). `placementKind` picks the Temporal
+ * Placement category — Preferred (Soft) or Strict (Hard) — and there is only
+ * ever one `placementStartMin`/`placementEndMin` pair, so submitting both a
+ * preferred and a strict window is unrepresentable at the boundary.
+ */
+const flexibleActivitySchema = z.object({
+  name: activityName,
+  constraintType: z.literal("flexible"),
+  placementKind: z.enum(["preferred", "strict"]),
+  placementStartMin: minuteOfDayFromForm,
+  placementEndMin: minuteOfDayFromForm,
+  dailyTargetMin: positiveDurationMinFromForm,
+  minBlockMin: positiveDurationMinFromForm,
+  ...transitionFields,
+})
+
+/**
+ * Create-activity input, discriminated on `constraintType` (FR-004). Each
+ * variant's fields stay exclusive to it — flexible-only fields cannot be set
+ * on a strict submission and vice versa.
  */
 export const createActivitySchema = z
-  .object({
-    name: activityName,
-    constraintType: z.literal("strict"),
-    placementKind: z.literal("strict"),
-    placementStartMin: minuteOfDayFromForm,
-    placementEndMin: minuteOfDayFromForm,
-    preName: activityName.optional(),
-    preStartMin: minuteOfDayFromForm.optional(),
-    preEndMin: minuteOfDayFromForm.optional(),
-    postName: activityName.optional(),
-    postStartMin: minuteOfDayFromForm.optional(),
-    postEndMin: minuteOfDayFromForm.optional(),
-  })
+  .discriminatedUnion("constraintType", [
+    strictActivitySchema,
+    flexibleActivitySchema,
+  ])
   .superRefine((data, ctx) => {
     checkTransitionGroupComplete(
       { name: data.preName, startMin: data.preStartMin, endMin: data.preEndMin },
@@ -168,6 +220,16 @@ export const createActivitySchema = z
       ctx
     )
   })
+
+/**
+ * Schedule a standalone Flexible block (FR-015, contracts/server-actions.md
+ * §2). `startMin` is user-supplied; `endMin` is computed in the action from
+ * the activity's `minBlockMin`, never submitted.
+ */
+export const scheduleFlexibleBlockSchema = z.object({
+  activityId: z.string().trim().min(1, "Select an activity."),
+  startMin: minuteOfDayFromForm,
+})
 
 /**
  * Turn a failed `safeParse` into the error half of `ActionState`.
