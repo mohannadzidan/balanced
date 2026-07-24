@@ -1,3 +1,5 @@
+import type { TemporalPlacementRule } from "@/lib/domain/types"
+
 /**
  * Scheduling rule checks, as pure functions.
  *
@@ -50,4 +52,21 @@ export function checkEndAfterStart(
     return hard("End time must be after start time.")
   }
   return ok()
+}
+
+/**
+ * data-model.md §2: a Strict activity's placement rule is meaningless unless
+ * it is itself a Strict Window — "preferred" cannot apply to times that are
+ * fixed, not merely favored — and its range must still satisfy FR-005.
+ *
+ * Both failures are Hard: a strict activity with a malformed or
+ * wrongly-classified placement has nothing valid to schedule against.
+ */
+export function checkStrictActivityPlacement(
+  rule: TemporalPlacementRule
+): RuleVerdict {
+  if (rule.kind !== "strict") {
+    return hard("A Strict activity's placement must be a Strict Window.")
+  }
+  return checkEndAfterStart(rule.startMin, rule.endMin)
 }
