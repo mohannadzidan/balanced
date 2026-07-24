@@ -1,3 +1,4 @@
+import { rangeContains, rangesOverlap, type TimeRange } from "@/lib/time"
 import type { TemporalPlacementRule } from "@/lib/domain/types"
 
 /**
@@ -83,6 +84,45 @@ export function checkTransitions(
   for (const transition of transitions) {
     const verdict = checkEndAfterStart(transition.startMin, transition.endMin)
     if (!verdict.ok) return verdict
+  }
+  return ok()
+}
+
+/**
+ * data-model.md §2: whether a Flexible block falls inside its activity's
+ * Temporal Placement window. A block outside a `"strict"` window is Hard
+ * (rejected, FR-016); outside a `"preferred"` window is Soft (persisted and
+ * flagged, FR-017). Touching the window's edges counts as inside
+ * (`rangeContains` allows shared endpoints).
+ */
+export function evaluatePlacement(
+  rule: TemporalPlacementRule,
+  startMin: number,
+  endMin: number
+): RuleVerdict {
+  const window: TimeRange = { startMin: rule.startMin, endMin: rule.endMin }
+  if (rangeContains(window, { startMin, endMin })) {
+    return ok()
+  }
+  if (rule.kind === "strict") {
+    return hard("Block falls outside the activity's Strict Window.")
+  }
+  return soft("Block falls outside the activity's Preferred Window.")
+}
+
+/**
+ * FR-016: a standalone block must not intersect any already-occupied range
+ * on the day's timeline. Intersection requires positive-length overlap —
+ * back-to-back blocks sharing an endpoint are not a conflict. Always Hard.
+ */
+export function checkNoOverlap(
+  range: TimeRange,
+  occupiedRanges: TimeRange[]
+): RuleVerdict {
+  for (const occupied of occupiedRanges) {
+    if (rangesOverlap(range, occupied)) {
+      return hard("Block overlaps an existing block on the timeline.")
+    }
   }
   return ok()
 }
