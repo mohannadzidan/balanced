@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest"
 
 import {
   checkEndAfterStart,
+  checkNoOverlap,
   checkStrictActivityPlacement,
   checkTransitions,
+  evaluatePlacement,
   hard,
   ok,
   soft,
@@ -143,6 +145,77 @@ describe("checkTransitions", () => {
     const verdict = checkTransitions([
       { startMin: 480, endMin: 600 },
       { startMin: 1080, endMin: 1000 },
+    ])
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
+  })
+})
+
+describe("evaluatePlacement", () => {
+  it("rejects a block outside a Strict Window as hard (FR-016)", () => {
+    const verdict = evaluatePlacement(
+      { kind: "strict", startMin: 1080, endMin: 1380 },
+      480,
+      600
+    )
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
+  })
+
+  it("rejects a block outside a Preferred Window as soft (FR-017)", () => {
+    const verdict = evaluatePlacement(
+      { kind: "preferred", startMin: 1080, endMin: 1380 },
+      480,
+      600
+    )
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("soft")
+  })
+
+  it("accepts a block fully inside the window", () => {
+    expect(
+      evaluatePlacement({ kind: "preferred", startMin: 1080, endMin: 1380 }, 1140, 1260)
+    ).toEqual({ ok: true })
+  })
+
+  it("accepts a block touching both window endpoints", () => {
+    expect(
+      evaluatePlacement({ kind: "strict", startMin: 1080, endMin: 1380 }, 1080, 1380)
+    ).toEqual({ ok: true })
+  })
+})
+
+describe("checkNoOverlap", () => {
+  it("accepts a range with no occupied ranges", () => {
+    expect(checkNoOverlap({ startMin: 600, endMin: 660 }, [])).toEqual({
+      ok: true,
+    })
+  })
+
+  it("accepts a range that only touches an occupied range's endpoint", () => {
+    expect(
+      checkNoOverlap({ startMin: 600, endMin: 660 }, [
+        { startMin: 540, endMin: 600 },
+      ])
+    ).toEqual({ ok: true })
+  })
+
+  it("rejects a genuine intersection as hard", () => {
+    const verdict = checkNoOverlap({ startMin: 600, endMin: 660 }, [
+      { startMin: 630, endMin: 700 },
+    ])
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
+  })
+
+  it("checks against every occupied range, not just the first", () => {
+    const verdict = checkNoOverlap({ startMin: 600, endMin: 660 }, [
+      { startMin: 0, endMin: 60 },
+      { startMin: 630, endMin: 700 },
     ])
     expect(verdict.ok).toBe(false)
     if (verdict.ok) return
