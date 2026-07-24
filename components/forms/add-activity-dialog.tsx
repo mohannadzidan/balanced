@@ -4,6 +4,7 @@ import { useActionState, useState } from "react"
 
 import { createActivity } from "@/app/actions"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,60 @@ import {
 import type { ActionState } from "@/lib/domain/validation"
 
 const initialState: ActionState = { ok: true }
+
+type TransitionFieldsProps = {
+  position: "pre" | "post"
+  label: string
+  fieldErrors: Record<string, string[]>
+}
+
+/**
+ * The Name/Start/End fields for one transition position. Rendered only while
+ * its checkbox is checked, so an unchecked group submits nothing at all —
+ * that all-or-nothing absence is what `createActivitySchema` expects
+ * (FR-009, T027).
+ */
+function TransitionFields({ position, label, fieldErrors }: TransitionFieldsProps) {
+  const nameField = `${position}Name`
+  const startField = `${position}StartMin`
+  const endField = `${position}EndMin`
+
+  return (
+    <div className="flex flex-col gap-1.5 border-l-2 pl-3">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor={nameField}>{label} name</Label>
+        <Input id={nameField} name={nameField} required />
+        {fieldErrors[nameField]?.map((message) => (
+          <p key={message} className="text-sm text-destructive">
+            {message}
+          </p>
+        ))}
+      </div>
+
+      <div className="flex gap-4">
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label htmlFor={startField}>Start</Label>
+          <Input id={startField} name={startField} type="time" required />
+          {fieldErrors[startField]?.map((message) => (
+            <p key={message} className="text-sm text-destructive">
+              {message}
+            </p>
+          ))}
+        </div>
+
+        <div className="flex flex-1 flex-col gap-1.5">
+          <Label htmlFor={endField}>End</Label>
+          <Input id={endField} name={endField} type="time" required />
+          {fieldErrors[endField]?.map((message) => (
+            <p key={message} className="text-sm text-destructive">
+              {message}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Add Activity: name, Constraint Type, and the Strict Window start/end
@@ -55,11 +110,15 @@ export function AddActivityDialog() {
   // rule out times at or before it, both in the browser's own time picker
   // and via its built-in constraint validation on submit (FR-005).
   const [startTime, setStartTime] = useState("")
+  const [preEnabled, setPreEnabled] = useState(false)
+  const [postEnabled, setPostEnabled] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
   if (open !== prevOpen) {
     setPrevOpen(open)
     if (!open) {
       setStartTime("")
+      setPreEnabled(false)
+      setPostEnabled(false)
     }
   }
 
@@ -134,6 +193,42 @@ export function AddActivityDialog() {
                 </p>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="preEnabled"
+                checked={preEnabled}
+                onCheckedChange={setPreEnabled}
+              />
+              <Label htmlFor="preEnabled">Add Pre-Transition</Label>
+            </div>
+            {preEnabled && (
+              <TransitionFields
+                position="pre"
+                label="Pre-transition"
+                fieldErrors={fieldErrors}
+              />
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="postEnabled"
+                checked={postEnabled}
+                onCheckedChange={setPostEnabled}
+              />
+              <Label htmlFor="postEnabled">Add Post-Transition</Label>
+            </div>
+            {postEnabled && (
+              <TransitionFields
+                position="post"
+                label="Post-transition"
+                fieldErrors={fieldErrors}
+              />
+            )}
           </div>
 
           <DialogFooter>
