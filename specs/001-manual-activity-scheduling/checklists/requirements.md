@@ -31,11 +31,19 @@
 
 ## Notes
 
-- All items pass. The source description named specific technologies (Next.js, Turso); these were
-  deliberately excluded from functional requirements and success criteria and instead captured as a
-  single architectural assumption, since the project constitution already fixes the technology stack
-  independent of this feature.
-- No [NEEDS CLARIFICATION] markers were needed: the source description supplied concrete example
-  values and explicit validation rules for every scenario, so remaining gaps (date-range scope,
-  edit/delete, container eligibility) were resolved with clearly documented, low-risk defaults in the
-  Assumptions section rather than blocking questions.
+- Revalidated 2026-07-25 after the pivot to a rules-based architecture. All items still pass.
+- The spec now leads with a **Rules Model (Cross-Cutting Concept)** section framing activities as
+  global definitions governed by typed rules (scope / mutually-exclusive category / Hard vs. Soft).
+  Phase 4's "Container" is reframed as the canonical instance of the system-wide **Overlap Rule**
+  (host + overlap budget + allowed-guest set), and Temporal Placement is now an exclusive
+  Preferred-Window (Soft) vs. Strict-Window (Hard) choice.
+- The source description named specific technologies (Next.js, Turso) and UI labels ("Is Container",
+  "Interruptible Minutes"); tech names are confined to the Input quote and a single architectural
+  assumption, and legacy UI labels appear only as parenthetical aliases so requirements and success
+  criteria stay technology-agnostic and stakeholder-readable.
+- The complexity warning is captured as a hard behavioural requirement (FR-026 / SC-007): overlapping
+  time is counted once and never inflates total logged time or the host's logged duration.
+- No [NEEDS CLARIFICATION] markers were needed. The **Recurrence** rule, the automated
+  generator/solver, and multi-day/carry-over behaviour are introduced conceptually but explicitly
+  scoped OUT of this feature (manual, single-day, current-date-only) in the Assumptions section rather
+  than left ambiguous — a documented, low-risk default consistent with Constitution V (YAGNI).

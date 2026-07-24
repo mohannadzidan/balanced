@@ -4,7 +4,25 @@ Users struggle to balance strict full-time work, freelance goals, learning, and 
 
 ## Solution
 
-A dynamic, client-side scheduling application that treats time like a physics engine. It automatically generates daily plans based on strict blocks and flexible goals, prioritizes activities based on rolling deficits, and reactively recalculates the schedule in real-time when activities finish early, run late, or get displaced. It uses an Iterative Constraint Relaxation solver to shrink, nudge, or displace lower-priority blocks to make room for reality, ensuring time is always accounted for and optimized.
+A dynamic, client-side scheduling application that treats time like a physics engine. Every activity is a reusable global definition governed by a set of typed **rules** — some system-wide (such as how far one activity may overlap another) and some activity-specific (such as the time window it may occupy). The solver treats these rules as the constraints of the physics engine: hard rules form the immovable skeleton, soft rules define the space it is free to bend. It automatically generates daily plans based on strict blocks and flexible goals, prioritizes activities based on rolling deficits, and reactively recalculates the schedule in real-time when activities finish early, run late, or get displaced. It uses an Iterative Constraint Relaxation solver to shrink, nudge, or displace lower-priority blocks to make room for reality, ensuring time is always accounted for and optimized.
+
+## Rules Model
+
+Activities are **global definitions**, not one-off calendar entries. A definition is authored once (name, base target, semantics) and the scheduler instantiates it as concrete blocks on a given day. Constraints on where, when, and how an activity may be placed are expressed as **rules** attached to the definition, rather than as ad-hoc boolean flags. This keeps the solver generic: it evaluates a block against its rule set instead of special-casing each property.
+
+Rules have two scopes:
+
+- **System-wide rules** apply across all activities and govern how activities interact. The primary one is the **Overlap Rule**: a *host* activity may be overlapped/interrupted by a designated *allowed-guest* set for a bounded total of X minutes (e.g., an 8h "Office Work" host may be overlapped by "Lunch" for up to 60 minutes, letting the user step out to the food court without deleting or shrinking the work block). This generalizes the earlier "Container + interruptible minutes + allowed interrupters" mechanism: the host declares an overlap budget and a guest set, and each guest is carved out of the host's span for its duration.
+
+- **Activity-level rules** are attached to a single definition. Rules are grouped into **categories**, and within a category the rules are **mutually exclusive** — an activity carries at most one. Two categories are defined initially:
+  - **Temporal Placement**, whose exclusive options are:
+    - **Preferred Window** (soft): the scheduler tries to place the activity between a start/end time but may relax the window under pressure. This is the current flexible-activity behavior.
+    - **Strict Window** (hard boundary): the activity must fall entirely within a start/end time. The boundary is non-negotiable, though the activity may still float freely *inside* the window.
+  - **Recurrence**, whose exclusive options are:
+    - **Recurring** (default): the definition carries an allowed-days set and is re-evaluated by the daily generator on every matching day. It participates in rolling carry-over.
+    - **One-Time**: the definition is bound to a single specific date. It appears only on that date, is invisible to the generator on every other day, and is **exempt from carry-over** — an unmet target simply lapses when the day ends rather than snowballing into a deficit (mirroring vacation-day proration). A one-time activity still carries the same Temporal Placement, Overlap, and block-size rules as any other; only its lifecycle differs. It can be strict (a doctor appointment) or flexible (a one-off "finish taxes, 3h today"). Once its date has passed, the definition is inert.
+
+Every rule is additionally classified as **Hard** (a violation is rejected, or the block is immovable) or **Soft** (a violation is permitted, and the solver relaxes it in cascade order). This classification is exactly what the Iterative Constraint Relaxation solver consumes: hard rules define the skeleton and the rejection conditions; soft rules define the shrink → nudge → relax → displace search space.
 
 ## User Stories
 
@@ -59,11 +77,24 @@ A dynamic, client-side scheduling application that treats time like a physics en
 49. As a user, I want the system to send a reality-check FCM notification with quick actions if I have not interacted with the app 15 minutes after an activity auto-starts, so that the solver's data does not drift.
 50. As a user, I want to tap "Delayed 15m" or "Skip" directly from the notification tray, so that I can adjust the schedule without opening the full app.
 51. As a developer, I want the app to evaluate contested gaps using Weighted Deficit Priority, so that the activity furthest behind relative to its base target gets the slot.
+52. As a user, I want to author each activity once as a global definition carrying its own rules, so that the scheduler can reuse it across days without re-entering constraints.
+53. As a user, I want to set a system-wide Overlap Rule so that a host activity (e.g., Work) can be overlapped by an allowed set of guest activities (e.g., Lunch) for a bounded total of minutes, without shrinking or deleting the host block.
+54. As a user, I want to give an activity either a Preferred Window or a Strict Window but never both, so that I can express whether its time boundaries are negotiable or hard.
+55. As a developer, I want rules grouped into mutually-exclusive categories, so that an activity cannot hold contradictory constraints (e.g., both a strict and a preferred window) and the solver can assume one rule per category.
+56. As a developer, I want every rule classified as Hard or Soft, so that the solver knows which constraints form the immovable skeleton and which are relaxable during the cascade.
+57. As a user, I want to add a one-time activity bound to a specific date (either strict like a doctor appointment or flexible like a one-off task), so that I can capture single occurrences without creating a recurring definition.
+58. As a user, I want a one-time activity to appear only on its date and be invisible to the daily generator on every other day, so that it does not clutter future schedules.
+59. As a user, I want one-time activities to be exempt from carry-over, so that an unmet one-off target lapses cleanly instead of snowballing into a rolling deficit.
+60. As a developer, I want the daily generator to pull one-time activities whose date matches today alongside recurring activities whose allowed-days match today, so that both are placed under the same rules.
 
 ## Implementation Decisions
 
 - **Architecture**: Next.js/React frontend with a client-side solver. Turso (SQLite) for persistence. FCM for push notifications.
 - **Solver Engine**: The scheduler runs entirely in the browser as a pure function. It takes the current timeline state and an event (e.g., "Finish Early", "Overlap Detected") and returns the new timeline state.
+- **Rules Model**: Activities are global definitions carrying typed rules. Each rule is scoped system-wide or per-activity, grouped into mutually-exclusive categories (at most one rule per category per activity), and classified Hard or Soft. The solver consumes this classification directly rather than branching on named activity flags.
+- **Overlap Rule (system-wide)**: A host activity declares an overlap budget (minutes) and an allowed-guest set. Guests are carved out of the host's span up to the budget. The budget is scoped per host *instance* and expires when that instance ends. This supersedes the standalone "Is Container" flag; the container in the phased plan is its canonical instance.
+- **Temporal Placement Rule (activity-level, exclusive)**: An activity carries either a Preferred Window (soft, relaxable by the cascade) or a Strict Window (hard boundary, but the block floats inside it) — never both. Absence of either means the activity may be placed anywhere.
+- **Recurrence Rule (activity-level, exclusive)**: An activity is either Recurring (allowed-days set, re-evaluated by the generator every matching day, subject to carry-over) or One-Time (bound to a single date, placed only on that date, exempt from carry-over). One-time definitions are queried by date rather than by allowed-days and become inert after their date passes. This subsumes the existing allowed-days property under the Recurring option.
 - **Iterative Constraint Relaxation Cascade**: When a high-priority activity needs a slot occupied by a lower-priority one, the solver applies: 1. Shrink (down to min block), 2. Nudge (within preferred window), 3. Relax (drop preferred window), 4. Displace & Bank (delete and add to deficit).
 - **Hard Constraints**: Strict activities, Pinned blocks, and frozen midnight-spanning blocks are immovable. The solver rejects overlaps between two Hard Constraints.
 - **Spare Time Bank**: Scoped to the parent container instance. Expires when the container ends. Triggers a UI prompt for quick actions.
