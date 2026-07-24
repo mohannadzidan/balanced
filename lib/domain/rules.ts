@@ -70,3 +70,19 @@ export function checkStrictActivityPlacement(
   }
   return checkEndAfterStart(rule.startMin, rule.endMin)
 }
+
+/**
+ * data-model.md §4 Edge Case: each supplied transition (0–2, pre and/or
+ * post) must itself satisfy FR-005. Deliberately does not check adjacency to
+ * the parent activity — a gap between a transition and its parent is
+ * allowed, and the transition renders at its own recorded times.
+ */
+export function checkTransitions(
+  transitions: Array<{ startMin: number; endMin: number }>
+): RuleVerdict {
+  for (const transition of transitions) {
+    const verdict = checkEndAfterStart(transition.startMin, transition.endMin)
+    if (!verdict.ok) return verdict
+  }
+  return ok()
+}

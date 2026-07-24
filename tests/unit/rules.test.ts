@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest"
 import {
   checkEndAfterStart,
   checkStrictActivityPlacement,
+  checkTransitions,
   hard,
   ok,
   soft,
@@ -109,5 +110,42 @@ describe("checkStrictActivityPlacement", () => {
     expect(
       checkStrictActivityPlacement({ kind: "strict", startMin: 600, endMin: 630 })
     ).toEqual({ ok: true })
+  })
+})
+
+describe("checkTransitions", () => {
+  it("rejects an invalid range as hard (Edge Case)", () => {
+    const verdict = checkTransitions([{ startMin: 480, endMin: 480 }])
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
+  })
+
+  it("accepts a gap between a transition and its parent activity", () => {
+    // Commute 08:00-09:30, parent activity starts at 10:00 — no adjacency
+    // enforcement (data-model.md §4).
+    expect(checkTransitions([{ startMin: 480, endMin: 570 }])).toEqual({
+      ok: true,
+    })
+  })
+
+  it("accepts a pre-only transition list", () => {
+    expect(checkTransitions([{ startMin: 480, endMin: 600 }])).toEqual({
+      ok: true,
+    })
+  })
+
+  it("accepts an empty transition list", () => {
+    expect(checkTransitions([])).toEqual({ ok: true })
+  })
+
+  it("rejects when any of multiple transitions is invalid", () => {
+    const verdict = checkTransitions([
+      { startMin: 480, endMin: 600 },
+      { startMin: 1080, endMin: 1000 },
+    ])
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
   })
 })

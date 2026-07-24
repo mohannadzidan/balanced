@@ -91,19 +91,83 @@ export function optionalFormValue(
 }
 
 /**
+ * A transition group (`pre`/`post`) is all-or-nothing: the user either fills
+ * in all three fields or leaves all three blank (FR-009, contracts/
+ * server-actions.md §1). Reports a field error on whichever member of the
+ * group is missing so the dialog can point at the empty field, not just
+ * reject the form as a whole.
+ */
+function checkTransitionGroupComplete(
+  values: { name?: string; startMin?: number; endMin?: number },
+  position: "pre" | "post",
+  ctx: z.RefinementCtx
+): void {
+  const anyProvided =
+    values.name !== undefined ||
+    values.startMin !== undefined ||
+    values.endMin !== undefined
+  if (!anyProvided) return
+
+  if (values.name === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${position === "pre" ? "Pre" : "Post"}-transition name is required.`,
+      path: [`${position}Name`],
+    })
+  }
+  if (values.startMin === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${position === "pre" ? "Pre" : "Post"}-transition start is required.`,
+      path: [`${position}StartMin`],
+    })
+  }
+  if (values.endMin === undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `${position === "pre" ? "Pre" : "Post"}-transition end is required.`,
+      path: [`${position}EndMin`],
+    })
+  }
+}
+
+/**
  * Create-activity input, strict-placement variant (FR-013,
  * contracts/server-actions.md §1). Only one member of the eventual
  * `constraintType`-discriminated union exists so far; the flexible variant
  * arrives with its own fields in a later task, kept out of this shape until
  * then so it can't be set here by mistake.
+ *
+ * Transitions are optional (FR-009, FR-010): at most one `pre` and one `post`
+ * is naturally satisfied by each position having a single field triple rather
+ * than a list, and each triple is all-or-nothing (`checkTransitionGroupComplete`).
  */
-export const createActivitySchema = z.object({
-  name: activityName,
-  constraintType: z.literal("strict"),
-  placementKind: z.literal("strict"),
-  placementStartMin: minuteOfDayFromForm,
-  placementEndMin: minuteOfDayFromForm,
-})
+export const createActivitySchema = z
+  .object({
+    name: activityName,
+    constraintType: z.literal("strict"),
+    placementKind: z.literal("strict"),
+    placementStartMin: minuteOfDayFromForm,
+    placementEndMin: minuteOfDayFromForm,
+    preName: activityName.optional(),
+    preStartMin: minuteOfDayFromForm.optional(),
+    preEndMin: minuteOfDayFromForm.optional(),
+    postName: activityName.optional(),
+    postStartMin: minuteOfDayFromForm.optional(),
+    postEndMin: minuteOfDayFromForm.optional(),
+  })
+  .superRefine((data, ctx) => {
+    checkTransitionGroupComplete(
+      { name: data.preName, startMin: data.preStartMin, endMin: data.preEndMin },
+      "pre",
+      ctx
+    )
+    checkTransitionGroupComplete(
+      { name: data.postName, startMin: data.postStartMin, endMin: data.postEndMin },
+      "post",
+      ctx
+    )
+  })
 
 /**
  * Turn a failed `safeParse` into the error half of `ActionState`.
