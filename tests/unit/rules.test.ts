@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 
 import {
   checkEndAfterStart,
+  checkStrictActivityPlacement,
   hard,
   ok,
   soft,
@@ -78,5 +79,35 @@ describe("checkEndAfterStart", () => {
       if (verdict.ok) continue
       expect(verdict.message.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe("checkStrictActivityPlacement", () => {
+  it("rejects End <= Start as hard (FR-005, AS-4)", () => {
+    const verdict = checkStrictActivityPlacement({
+      kind: "strict",
+      startMin: 600,
+      endMin: 600,
+    })
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
+  })
+
+  it("rejects a preferred-kind rule on a strict activity as hard", () => {
+    const verdict = checkStrictActivityPlacement({
+      kind: "preferred",
+      startMin: 600,
+      endMin: 630,
+    })
+    expect(verdict.ok).toBe(false)
+    if (verdict.ok) return
+    expect(verdict.classification).toBe("hard")
+  })
+
+  it("accepts a valid 10:00-10:30 strict window", () => {
+    expect(
+      checkStrictActivityPlacement({ kind: "strict", startMin: 600, endMin: 630 })
+    ).toEqual({ ok: true })
   })
 })
