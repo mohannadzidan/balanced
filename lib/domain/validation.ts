@@ -91,6 +91,21 @@ export function optionalFormValue(
 }
 
 /**
+ * Create-activity input, strict-placement variant (FR-013,
+ * contracts/server-actions.md §1). Only one member of the eventual
+ * `constraintType`-discriminated union exists so far; the flexible variant
+ * arrives with its own fields in a later task, kept out of this shape until
+ * then so it can't be set here by mistake.
+ */
+export const createActivitySchema = z.object({
+  name: activityName,
+  constraintType: z.literal("strict"),
+  placementKind: z.literal("strict"),
+  placementStartMin: minuteOfDayFromForm,
+  placementEndMin: minuteOfDayFromForm,
+})
+
+/**
  * Turn a failed `safeParse` into the error half of `ActionState`.
  *
  * `z.flattenError` types each field entry as possibly `undefined` because the
