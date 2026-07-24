@@ -198,6 +198,36 @@ export async function getDayView(date: string): Promise<{
 }
 
 /**
+ * Every occupied interval on the timeline for a date — strict activity
+ * spans, transitions, and scheduled blocks (both standalone and guest).
+ * Input to the standalone-block overlap check (FR-016).
+ */
+export async function getOccupiedRanges(
+  date: string
+): Promise<Array<{ startMin: number; endMin: number }>> {
+  const { activities, transitions, blocks } = await getDayView(date)
+
+  const activityRanges = activities
+    .filter((activity) => activity.constraintType === "strict")
+    .map((activity) => ({
+      startMin: activity.placement.startMin,
+      endMin: activity.placement.endMin,
+    }))
+
+  const transitionRanges = transitions.map((transition) => ({
+    startMin: transition.startMin,
+    endMin: transition.endMin,
+  }))
+
+  const blockRanges = blocks.map((block) => ({
+    startMin: block.startMin,
+    endMin: block.endMin,
+  }))
+
+  return [...activityRanges, ...transitionRanges, ...blockRanges]
+}
+
+/**
  * Atomic: the activity row, its required Temporal Placement rule row, and
  * 0–2 Transition rows commit together or not at all — an activity without
  * its placement rule must be unrepresentable (contracts/data-access.md
