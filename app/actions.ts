@@ -12,11 +12,12 @@ import { randomUUID } from "node:crypto"
 import { revalidatePath } from "next/cache"
 
 import { insertActivityWithRules } from "@/lib/db/queries"
-import type { StrictActivity } from "@/lib/domain/types"
-import { checkStrictActivityPlacement } from "@/lib/domain/rules"
+import type { StrictActivity, Transition } from "@/lib/domain/types"
+import { checkStrictActivityPlacement, checkTransitions } from "@/lib/domain/rules"
 import {
   createActivitySchema,
   invalidActionState,
+  optionalFormValue,
   type ActionState,
 } from "@/lib/domain/validation"
 import { todayISO } from "@/lib/time"
@@ -36,6 +37,12 @@ export async function createActivity(
     placementKind: formData.get("placementKind"),
     placementStartMin: formData.get("placementStartMin"),
     placementEndMin: formData.get("placementEndMin"),
+    preName: optionalFormValue(formData, "preName"),
+    preStartMin: optionalFormValue(formData, "preStartMin"),
+    preEndMin: optionalFormValue(formData, "preEndMin"),
+    postName: optionalFormValue(formData, "postName"),
+    postStartMin: optionalFormValue(formData, "postStartMin"),
+    postEndMin: optionalFormValue(formData, "postEndMin"),
   })
 
   if (!parsed.success) {
@@ -53,8 +60,36 @@ export async function createActivity(
     return { ok: false, formErrors: [verdict.message], fieldErrors: {} }
   }
 
+  const activityId = randomUUID()
+  const transitions: Transition[] = []
+  if (parsed.data.preName !== undefined) {
+    transitions.push({
+      id: randomUUID(),
+      activityId,
+      position: "pre",
+      name: parsed.data.preName,
+      startMin: parsed.data.preStartMin!,
+      endMin: parsed.data.preEndMin!,
+    })
+  }
+  if (parsed.data.postName !== undefined) {
+    transitions.push({
+      id: randomUUID(),
+      activityId,
+      position: "post",
+      name: parsed.data.postName,
+      startMin: parsed.data.postStartMin!,
+      endMin: parsed.data.postEndMin!,
+    })
+  }
+
+  const transitionsVerdict = checkTransitions(transitions)
+  if (!transitionsVerdict.ok) {
+    return { ok: false, formErrors: [transitionsVerdict.message], fieldErrors: {} }
+  }
+
   const activity: StrictActivity = {
-    id: randomUUID(),
+    id: activityId,
     name: parsed.data.name,
     constraintType: "strict",
     placement,
@@ -62,7 +97,7 @@ export async function createActivity(
     createdDate: todayISO(),
   }
 
-  await insertActivityWithRules({ activity, transitions: [] })
+  await insertActivityWithRules({ activity, transitions })
   revalidatePath("/")
 
   return { ok: true }
