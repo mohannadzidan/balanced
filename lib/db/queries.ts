@@ -11,7 +11,11 @@
 import type { InStatement } from "@libsql/client"
 
 import { db } from "@/lib/db/client"
-import type { ActivityRow, TemporalPlacementRuleRow } from "@/lib/db/schema"
+import type {
+  ActivityRow,
+  TemporalPlacementRuleRow,
+  TransitionRow,
+} from "@/lib/db/schema"
 import type {
   Activity,
   ScheduledBlock,
@@ -25,6 +29,17 @@ function toTemporalPlacementRule(
   return row.kind === "strict"
     ? { kind: "strict", startMin: row.start_min, endMin: row.end_min }
     : { kind: "preferred", startMin: row.start_min, endMin: row.end_min }
+}
+
+function toTransition(row: TransitionRow): Transition {
+  return {
+    id: row.id,
+    activityId: row.activity_id,
+    position: row.position,
+    name: row.name,
+    startMin: row.start_min,
+    endMin: row.end_min,
+  }
 }
 
 function toActivity(
@@ -69,32 +84,48 @@ function toActivity(
 /**
  * Everything needed to render the current day's timeline + sidebar in one
  * round of queries. Activities arrive with their Temporal Placement rule
- * already attached (FR-013). `transitions` and `blocks` are populated by
- * later user stories (US2, US3) — empty here.
+ * already attached (FR-013), and `transitions` with the day's activities
+ * they belong to. `blocks` is populated by a later user story (US3) — empty
+ * here.
  */
 export async function getDayView(date: string): Promise<{
   activities: Activity[]
   transitions: Transition[]
   blocks: ScheduledBlock[]
 }> {
-  const result = await db.execute({
-    sql: `SELECT
-            a.id AS id,
-            a.name AS name,
-            a.constraint_type AS constraint_type,
-            a.daily_target_min AS daily_target_min,
-            a.min_block_min AS min_block_min,
-            a.created_date AS created_date,
-            t.kind AS placement_kind,
-            t.start_min AS placement_start_min,
-            t.end_min AS placement_end_min
-          FROM activity a
-          JOIN temporal_placement_rule t ON t.activity_id = a.id
-          WHERE a.created_date = ?`,
-    args: [date],
-  })
+  const [activityResult, transitionResult] = await Promise.all([
+    db.execute({
+      sql: `SELECT
+              a.id AS id,
+              a.name AS name,
+              a.constraint_type AS constraint_type,
+              a.daily_target_min AS daily_target_min,
+              a.min_block_min AS min_block_min,
+              a.created_date AS created_date,
+              t.kind AS placement_kind,
+              t.start_min AS placement_start_min,
+              t.end_min AS placement_end_min
+            FROM activity a
+            JOIN temporal_placement_rule t ON t.activity_id = a.id
+            WHERE a.created_date = ?`,
+      args: [date],
+    }),
+    db.execute({
+      sql: `SELECT
+              tr.id AS id,
+              tr.activity_id AS activity_id,
+              tr.position AS position,
+              tr.name AS name,
+              tr.start_min AS start_min,
+              tr.end_min AS end_min
+            FROM transition tr
+            JOIN activity a ON a.id = tr.activity_id
+            WHERE a.created_date = ?`,
+      args: [date],
+    }),
+  ])
 
-  const activities = result.rows.map((row) => {
+  const activities = activityResult.rows.map((row) => {
     const activityRow: ActivityRow = {
       id: String(row.id),
       name: String(row.name),
@@ -114,7 +145,19 @@ export async function getDayView(date: string): Promise<{
     return toActivity(activityRow, placementRow)
   })
 
-  return { activities, transitions: [], blocks: [] }
+  const transitions = transitionResult.rows.map((row) => {
+    const transitionRow: TransitionRow = {
+      id: String(row.id),
+      activity_id: String(row.activity_id),
+      position: row.position as "pre" | "post",
+      name: String(row.name),
+      start_min: Number(row.start_min),
+      end_min: Number(row.end_min),
+    }
+    return toTransition(transitionRow)
+  })
+
+  return { activities, transitions, blocks: [] }
 }
 
 /**
