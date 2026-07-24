@@ -81,10 +81,13 @@ function TransitionFields({ position, label, fieldErrors }: TransitionFieldsProp
 }
 
 /**
- * Add Activity: name, Constraint Type, and the Strict Window start/end
- * (contracts/server-actions.md §1). Only "Strict" exists as a constraint
- * type until Flexible arrives (T043) — `placementKind` mirrors it as a
- * hidden field since a Strict activity's placement kind is never a choice.
+ * Add Activity: name, Constraint Type, and — depending on it — either the
+ * Strict Window start/end or a Flexible activity's Daily Target, Minimum
+ * Block, and Temporal Placement choice (contracts/server-actions.md §1,
+ * FR-012, FR-013). A Strict activity's `placementKind` is never a choice
+ * (mirrored as a hidden field); a Flexible activity's is a Preferred-vs-Strict
+ * select, and since there is only ever one start/end field pair, submitting
+ * both a preferred and a strict window is unrepresentable (AS-2).
  */
 export function AddActivityDialog() {
   const [open, setOpen] = useState(false)
@@ -110,6 +113,9 @@ export function AddActivityDialog() {
   // rule out times at or before it, both in the browser's own time picker
   // and via its built-in constraint validation on submit (FR-005).
   const [startTime, setStartTime] = useState("")
+  const [constraintType, setConstraintType] = useState<"strict" | "flexible">(
+    "strict"
+  )
   const [preEnabled, setPreEnabled] = useState(false)
   const [postEnabled, setPostEnabled] = useState(false)
   const [prevOpen, setPrevOpen] = useState(open)
@@ -117,6 +123,7 @@ export function AddActivityDialog() {
     setPrevOpen(open)
     if (!open) {
       setStartTime("")
+      setConstraintType("strict")
       setPreEnabled(false)
       setPostEnabled(false)
     }
@@ -133,8 +140,6 @@ export function AddActivityDialog() {
           <DialogTitle>Add Activity</DialogTitle>
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-4">
-          <input type="hidden" name="placementKind" value="strict" />
-
           {formErrors.length > 0 && (
             <p className="text-sm text-destructive">{formErrors.join(" ")}</p>
           )}
@@ -151,49 +156,146 @@ export function AddActivityDialog() {
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="constraintType">Constraint Type</Label>
-            <Select name="constraintType" defaultValue="strict">
+            <Select
+              name="constraintType"
+              value={constraintType}
+              onValueChange={(value) =>
+                setConstraintType(value as "strict" | "flexible")
+              }
+            >
               <SelectTrigger id="constraintType">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="strict">Strict</SelectItem>
+                <SelectItem value="flexible">Flexible</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          <div className="flex gap-4">
-            <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="placementStartMin">Start</Label>
-              <Input
-                id="placementStartMin"
-                name="placementStartMin"
-                type="time"
-                required
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-              {fieldErrors.placementStartMin?.map((message) => (
-                <p key={message} className="text-sm text-destructive">
-                  {message}
-                </p>
-              ))}
-            </div>
+          {constraintType === "strict" ? (
+            <>
+              <input type="hidden" name="placementKind" value="strict" />
+              <div className="flex gap-4">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="placementStartMin">Start</Label>
+                  <Input
+                    id="placementStartMin"
+                    name="placementStartMin"
+                    type="time"
+                    required
+                    onChange={(event) => setStartTime(event.target.value)}
+                  />
+                  {fieldErrors.placementStartMin?.map((message) => (
+                    <p key={message} className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
 
-            <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="placementEndMin">End</Label>
-              <Input
-                id="placementEndMin"
-                name="placementEndMin"
-                type="time"
-                required
-                min={startTime || undefined}
-              />
-              {fieldErrors.placementEndMin?.map((message) => (
-                <p key={message} className="text-sm text-destructive">
-                  {message}
-                </p>
-              ))}
-            </div>
-          </div>
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="placementEndMin">End</Label>
+                  <Input
+                    id="placementEndMin"
+                    name="placementEndMin"
+                    type="time"
+                    required
+                    min={startTime || undefined}
+                  />
+                  {fieldErrors.placementEndMin?.map((message) => (
+                    <p key={message} className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex gap-4">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="dailyTargetMin">Daily Target (minutes)</Label>
+                  <Input
+                    id="dailyTargetMin"
+                    name="dailyTargetMin"
+                    type="number"
+                    min={1}
+                    required
+                  />
+                  {fieldErrors.dailyTargetMin?.map((message) => (
+                    <p key={message} className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="minBlockMin">Minimum Block (minutes)</Label>
+                  <Input
+                    id="minBlockMin"
+                    name="minBlockMin"
+                    type="number"
+                    min={1}
+                    required
+                  />
+                  {fieldErrors.minBlockMin?.map((message) => (
+                    <p key={message} className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="placementKind">Temporal Placement</Label>
+                <Select name="placementKind" defaultValue="preferred">
+                  <SelectTrigger id="placementKind">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="preferred">
+                      Preferred Window (Soft)
+                    </SelectItem>
+                    <SelectItem value="strict">Strict Window (Hard)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex gap-4">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="placementStartMin">Window start</Label>
+                  <Input
+                    id="placementStartMin"
+                    name="placementStartMin"
+                    type="time"
+                    required
+                    onChange={(event) => setStartTime(event.target.value)}
+                  />
+                  {fieldErrors.placementStartMin?.map((message) => (
+                    <p key={message} className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label htmlFor="placementEndMin">Window end</Label>
+                  <Input
+                    id="placementEndMin"
+                    name="placementEndMin"
+                    type="time"
+                    required
+                    min={startTime || undefined}
+                  />
+                  {fieldErrors.placementEndMin?.map((message) => (
+                    <p key={message} className="text-sm text-destructive">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">
