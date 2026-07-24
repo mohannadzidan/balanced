@@ -49,7 +49,7 @@ that every user story builds on
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T005 [P] Implement `lib/time.ts`: `parseHHMM`/`formatHHMM` (`"HH:MM"` ⇄ minutes-from-midnight 0–1439), `durationMin`, `rangesOverlap`, `rangeContains`, and `todayISO()` returning the local `YYYY-MM-DD` date — all numeric, no string date math (Constitution II, research §10)
+- [X] T005 [P] Implement `lib/time.ts`: `parseHHMM`/`formatHHMM` (`"HH:MM"` ⇄ minutes-from-midnight 0–1439), `durationMin`, `rangesOverlap`, `rangeContains`, and `todayISO()` returning the local `YYYY-MM-DD` date — all numeric, no string date math (Constitution II, research §10)
 - [ ] T006 [P] Define the domain types in `lib/domain/types.ts` exactly as specified in data-model.md "Domain types": `PreferredWindow`, `StrictWindow`, `TemporalPlacementRule` (discriminated on `kind`), `OverlapRule`, `StrictActivity`, `FlexibleActivity`, `Activity`, `Transition`, `ScheduledBlock`
 - [ ] T007 [P] Write the schema migration `lib/db/migrations/0001_init.sql` creating all six tables per data-model.md — `activity`, `temporal_placement_rule` (PK `activity_id`), `overlap_rule` (PK `host_activity_id`), `overlap_allowed_guest` (composite PK + `CHECK (guest_activity_id <> host_activity_id)`), `transition` (`UNIQUE (activity_id, position)`), `scheduled_block` — with `ON DELETE CASCADE` FKs and the four indexes listed under "Referential integrity & indexing"
 - [ ] T008 [P] Create `lib/db/client.ts` exporting the single configured libSQL client from `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — the only connection point in the codebase (Constitution III)
