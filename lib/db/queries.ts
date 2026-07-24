@@ -282,3 +282,23 @@ export async function insertActivityWithRules(input: {
 
   await db.batch(statements, "write")
 }
+
+/**
+ * Insert one `scheduled_block` row. Used for both standalone blocks
+ * (`hostActivityId === null`) and guest blocks (non-null).
+ */
+export async function insertScheduledBlock(block: ScheduledBlock): Promise<void> {
+  await db.execute({
+    sql: `INSERT INTO scheduled_block
+            (id, activity_id, date, start_min, end_min, host_activity_id)
+          VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [
+      block.id,
+      block.activityId,
+      block.date,
+      block.startMin,
+      block.endMin,
+      block.hostActivityId,
+    ],
+  })
+}
