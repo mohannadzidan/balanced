@@ -17,8 +17,14 @@ import {
   insertActivityWithRules,
   insertScheduledBlock,
 } from "@/lib/db/queries"
-import type { StrictActivity, Transition } from "@/lib/domain/types"
+import type {
+  Activity,
+  StrictWindow,
+  TemporalPlacementRule,
+  Transition,
+} from "@/lib/domain/types"
 import {
+  checkEndAfterStart,
   checkNoOverlap,
   checkStrictActivityPlacement,
   checkTransitions,
@@ -34,9 +40,9 @@ import {
 import { todayISO } from "@/lib/time"
 
 /**
- * Creates a Strict activity with its required Temporal Placement rule
- * (contracts/server-actions.md §1). Flexible activities, transitions, and the
- * Overlap Rule arrive with later user stories.
+ * Creates a Strict or Flexible activity with its required Temporal Placement
+ * rule, optional transitions, and — for Strict activities — the Overlap Rule
+ * (contracts/server-actions.md §1, arriving with a later user story).
  */
 export async function createActivity(
   _prev: ActionState,
@@ -48,6 +54,8 @@ export async function createActivity(
     placementKind: formData.get("placementKind"),
     placementStartMin: formData.get("placementStartMin"),
     placementEndMin: formData.get("placementEndMin"),
+    dailyTargetMin: formData.get("dailyTargetMin"),
+    minBlockMin: formData.get("minBlockMin"),
     preName: optionalFormValue(formData, "preName"),
     preStartMin: optionalFormValue(formData, "preStartMin"),
     preEndMin: optionalFormValue(formData, "preEndMin"),
@@ -60,18 +68,48 @@ export async function createActivity(
     return invalidActionState(parsed)
   }
 
-  const placement = {
-    kind: "strict" as const,
-    startMin: parsed.data.placementStartMin,
-    endMin: parsed.data.placementEndMin,
-  }
-
-  const verdict = checkStrictActivityPlacement(placement)
-  if (!verdict.ok) {
-    return { ok: false, formErrors: [verdict.message], fieldErrors: {} }
-  }
-
   const activityId = randomUUID()
+
+  let activity: Activity
+  if (parsed.data.constraintType === "strict") {
+    const placement: StrictWindow = {
+      kind: "strict",
+      startMin: parsed.data.placementStartMin,
+      endMin: parsed.data.placementEndMin,
+    }
+    const verdict = checkStrictActivityPlacement(placement)
+    if (!verdict.ok) {
+      return { ok: false, formErrors: [verdict.message], fieldErrors: {} }
+    }
+    activity = {
+      id: activityId,
+      name: parsed.data.name,
+      constraintType: "strict",
+      placement,
+      overlap: null,
+      createdDate: todayISO(),
+    }
+  } else {
+    const placement: TemporalPlacementRule = {
+      kind: parsed.data.placementKind,
+      startMin: parsed.data.placementStartMin,
+      endMin: parsed.data.placementEndMin,
+    }
+    const verdict = checkEndAfterStart(placement.startMin, placement.endMin)
+    if (!verdict.ok) {
+      return { ok: false, formErrors: [verdict.message], fieldErrors: {} }
+    }
+    activity = {
+      id: activityId,
+      name: parsed.data.name,
+      constraintType: "flexible",
+      dailyTargetMin: parsed.data.dailyTargetMin,
+      minBlockMin: parsed.data.minBlockMin,
+      placement,
+      createdDate: todayISO(),
+    }
+  }
+
   const transitions: Transition[] = []
   if (parsed.data.preName !== undefined) {
     transitions.push({
@@ -97,15 +135,6 @@ export async function createActivity(
   const transitionsVerdict = checkTransitions(transitions)
   if (!transitionsVerdict.ok) {
     return { ok: false, formErrors: [transitionsVerdict.message], fieldErrors: {} }
-  }
-
-  const activity: StrictActivity = {
-    id: activityId,
-    name: parsed.data.name,
-    constraintType: "strict",
-    placement,
-    overlap: null,
-    createdDate: todayISO(),
   }
 
   await insertActivityWithRules({ activity, transitions })
