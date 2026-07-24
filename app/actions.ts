@@ -11,13 +11,24 @@ import { randomUUID } from "node:crypto"
 
 import { revalidatePath } from "next/cache"
 
-import { insertActivityWithRules } from "@/lib/db/queries"
+import {
+  getOccupiedRanges,
+  getDayView,
+  insertActivityWithRules,
+  insertScheduledBlock,
+} from "@/lib/db/queries"
 import type { StrictActivity, Transition } from "@/lib/domain/types"
-import { checkStrictActivityPlacement, checkTransitions } from "@/lib/domain/rules"
+import {
+  checkNoOverlap,
+  checkStrictActivityPlacement,
+  checkTransitions,
+  evaluatePlacement,
+} from "@/lib/domain/rules"
 import {
   createActivitySchema,
   invalidActionState,
   optionalFormValue,
+  scheduleFlexibleBlockSchema,
   type ActionState,
 } from "@/lib/domain/validation"
 import { todayISO } from "@/lib/time"
@@ -101,4 +112,67 @@ export async function createActivity(
   revalidatePath("/")
 
   return { ok: true }
+}
+
+/**
+ * Places a standalone Flexible block, `host_activity_id = NULL`
+ * (contracts/server-actions.md §2). A Strict-Window violation is Hard and
+ * rejects the write; a Preferred-Window violation is Soft and persists with
+ * a warning (FR-016, FR-017). The overlap check against the rest of the
+ * day's timeline is always Hard (FR-016).
+ */
+export async function scheduleFlexibleBlock(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const parsed = scheduleFlexibleBlockSchema.safeParse({
+    activityId: formData.get("activityId"),
+    startMin: formData.get("startMin"),
+  })
+
+  if (!parsed.success) {
+    return invalidActionState(parsed)
+  }
+
+  const date = todayISO()
+  const dayView = await getDayView(date)
+  const activity = dayView.activities.find(
+    (candidate) => candidate.id === parsed.data.activityId
+  )
+
+  if (!activity || activity.constraintType !== "flexible") {
+    return {
+      ok: false,
+      formErrors: ["Select a Flexible activity."],
+      fieldErrors: {},
+    }
+  }
+
+  const startMin = parsed.data.startMin
+  const endMin = startMin + activity.minBlockMin
+
+  const placementVerdict = evaluatePlacement(activity.placement, startMin, endMin)
+  if (!placementVerdict.ok && placementVerdict.classification === "hard") {
+    return { ok: false, formErrors: [placementVerdict.message], fieldErrors: {} }
+  }
+
+  const occupiedRanges = await getOccupiedRanges(date)
+  const overlapVerdict = checkNoOverlap({ startMin, endMin }, occupiedRanges)
+  if (!overlapVerdict.ok) {
+    return { ok: false, formErrors: [overlapVerdict.message], fieldErrors: {} }
+  }
+
+  await insertScheduledBlock({
+    id: randomUUID(),
+    activityId: activity.id,
+    date,
+    startMin,
+    endMin,
+    hostActivityId: null,
+  })
+  revalidatePath("/")
+
+  return placementVerdict.ok
+    ? { ok: true }
+    : { ok: true, warnings: [placementVerdict.message] }
 }
