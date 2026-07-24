@@ -13,6 +13,7 @@ import type { InStatement } from "@libsql/client"
 import { db } from "@/lib/db/client"
 import type {
   ActivityRow,
+  ScheduledBlockRow,
   TemporalPlacementRuleRow,
   TransitionRow,
 } from "@/lib/db/schema"
@@ -39,6 +40,17 @@ function toTransition(row: TransitionRow): Transition {
     name: row.name,
     startMin: row.start_min,
     endMin: row.end_min,
+  }
+}
+
+function toScheduledBlock(row: ScheduledBlockRow): ScheduledBlock {
+  return {
+    id: row.id,
+    activityId: row.activity_id,
+    date: row.date,
+    startMin: row.start_min,
+    endMin: row.end_min,
+    hostActivityId: row.host_activity_id,
   }
 }
 
@@ -84,16 +96,16 @@ function toActivity(
 /**
  * Everything needed to render the current day's timeline + sidebar in one
  * round of queries. Activities arrive with their Temporal Placement rule
- * already attached (FR-013), and `transitions` with the day's activities
- * they belong to. `blocks` is populated by a later user story (US3) — empty
- * here.
+ * already attached (FR-013), `transitions` with the day's activities they
+ * belong to, and `blocks` with both standalone (`hostActivityId === null`)
+ * and guest blocks scheduled for the date.
  */
 export async function getDayView(date: string): Promise<{
   activities: Activity[]
   transitions: Transition[]
   blocks: ScheduledBlock[]
 }> {
-  const [activityResult, transitionResult] = await Promise.all([
+  const [activityResult, transitionResult, blockResult] = await Promise.all([
     db.execute({
       sql: `SELECT
               a.id AS id,
@@ -121,6 +133,18 @@ export async function getDayView(date: string): Promise<{
             FROM transition tr
             JOIN activity a ON a.id = tr.activity_id
             WHERE a.created_date = ?`,
+      args: [date],
+    }),
+    db.execute({
+      sql: `SELECT
+              id AS id,
+              activity_id AS activity_id,
+              date AS date,
+              start_min AS start_min,
+              end_min AS end_min,
+              host_activity_id AS host_activity_id
+            FROM scheduled_block
+            WHERE date = ?`,
       args: [date],
     }),
   ])
@@ -157,7 +181,20 @@ export async function getDayView(date: string): Promise<{
     return toTransition(transitionRow)
   })
 
-  return { activities, transitions, blocks: [] }
+  const blocks = blockResult.rows.map((row) => {
+    const blockRow: ScheduledBlockRow = {
+      id: String(row.id),
+      activity_id: String(row.activity_id),
+      date: String(row.date),
+      start_min: Number(row.start_min),
+      end_min: Number(row.end_min),
+      host_activity_id:
+        row.host_activity_id === null ? null : String(row.host_activity_id),
+    }
+    return toScheduledBlock(blockRow)
+  })
+
+  return { activities, transitions, blocks }
 }
 
 /**
