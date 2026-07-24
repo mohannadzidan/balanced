@@ -35,10 +35,10 @@ it exists — `pnpm test` passing, then a commit. Do not batch tasks before veri
 
 **Purpose**: Dependencies, tooling, and UI primitives needed by every story
 
-- [ ] T001 Add runtime dependencies with `pnpm add @libsql/client zod` and confirm they land in `package.json` / `pnpm-lock.yaml` (research §8, §9)
-- [ ] T002 Add `pnpm add -D vitest`, create `vitest.config.ts` at the repository root (include `tests/**/*.test.ts`, node environment), and add `"test": "vitest run"` to the `scripts` block of `package.json`
-- [ ] T003 [P] Add the shadcn primitives with `pnpm dlx shadcn@latest add dialog select input label checkbox card badge` — they must land in `components/ui/` via the CLI, never hand-written (Constitution I, research §11)
-- [ ] T004 [P] Create `.env.example` documenting `TURSO_DATABASE_URL` (e.g. `file:local.db`) and `TURSO_AUTH_TOKEN`, and add `.env.local` plus `local.db*` to `.gitignore`
+- [X] T001 Add runtime dependencies with `pnpm add @libsql/client zod` and confirm they land in `package.json` / `pnpm-lock.yaml` (research §8, §9)
+- [X] T002 Add `pnpm add -D vitest`, create `vitest.config.ts` at the repository root (include `tests/**/*.test.ts`, node environment), and add `"test": "vitest run"` to the `scripts` block of `package.json`
+- [X] T003 [P] Add the shadcn primitives with `pnpm dlx shadcn@latest add dialog select input label checkbox card badge` — they must land in `components/ui/` via the CLI, never hand-written (Constitution I, research §11)
+- [X] T004 [P] Create `.env.example` documenting `TURSO_DATABASE_URL` (e.g. `file:local.db`) and `TURSO_AUTH_TOKEN`, and add `.env.local` plus `local.db*` to `.gitignore`
 
 ---
 
