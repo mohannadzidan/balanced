@@ -102,14 +102,14 @@ only a pre-transition → exactly two blocks persist and render.
 
 ### Implementation for User Story 2
 
-- [ ] T025 [US2] Extend `insertActivityWithRules` in `lib/db/queries.ts` to write 0–2 `transition` rows inside the same atomic batch as the activity and its placement rule (FR-010)
-- [ ] T026 [US2] Extend `getDayView` in `lib/db/queries.ts` to populate the `transitions` array for the day's activities, mapped to the `Transition` domain type
-- [ ] T027 [P] [US2] Extend `createActivitySchema` in `lib/domain/validation.ts` with optional `preName`/`preStartMin`/`preEndMin` and `postName`/`postStartMin`/`postEndMin` groups (each all-or-nothing, at most one of each position)
-- [ ] T028 [P] [US2] Add `checkTransitions` to `lib/domain/rules.ts` returning a **hard** verdict when any supplied transition has `endMin <= startMin`, with no adjacency enforcement against the parent activity (data-model.md §4, Edge Case)
-- [ ] T029 [US2] Extend `tests/unit/rules.test.ts` with transition cases: invalid range rejects hard; a gap between transition and parent is accepted; pre-only input is valid
-- [ ] T030 [US2] Extend `createActivity` in `app/actions.ts` to evaluate `checkTransitions` and pass the parsed transitions through to `insertActivityWithRules`
-- [ ] T031 [US2] Add "Add Pre-Transition" / "Add Post-Transition" checkboxes to `components/forms/add-activity-dialog.tsx`, each revealing Name/Start/End fields when enabled (FR-009)
-- [ ] T032 [US2] Merge transitions into the ordered block list in `components/timeline/timeline.tsx` and add a visually distinct `transition` variant in `components/timeline/timeline-block.tsx` (FR-011, SC-008)
+- [X] T025 [US2] Extend `insertActivityWithRules` in `lib/db/queries.ts` to write 0–2 `transition` rows inside the same atomic batch as the activity and its placement rule (FR-010)
+- [X] T026 [US2] Extend `getDayView` in `lib/db/queries.ts` to populate the `transitions` array for the day's activities, mapped to the `Transition` domain type
+- [X] T027 [P] [US2] Extend `createActivitySchema` in `lib/domain/validation.ts` with optional `preName`/`preStartMin`/`preEndMin` and `postName`/`postStartMin`/`postEndMin` groups (each all-or-nothing, at most one of each position)
+- [X] T028 [P] [US2] Add `checkTransitions` to `lib/domain/rules.ts` returning a **hard** verdict when any supplied transition has `endMin <= startMin`, with no adjacency enforcement against the parent activity (data-model.md §4, Edge Case)
+- [X] T029 [US2] Extend `tests/unit/rules.test.ts` with transition cases: invalid range rejects hard; a gap between transition and parent is accepted; pre-only input is valid
+- [X] T030 [US2] Extend `createActivity` in `app/actions.ts` to evaluate `checkTransitions` and pass the parsed transitions through to `insertActivityWithRules`
+- [X] T031 [US2] Add "Add Pre-Transition" / "Add Post-Transition" checkboxes to `components/forms/add-activity-dialog.tsx`, each revealing Name/Start/End fields when enabled (FR-009)
+- [X] T032 [US2] Merge transitions into the ordered block list in `components/timeline/timeline.tsx` and add a visually distinct `transition` variant in `components/timeline/timeline-block.tsx` (FR-011, SC-008)
 
 **Checkpoint**: User Stories 1 AND 2 both work independently
 
