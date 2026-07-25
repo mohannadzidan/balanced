@@ -1,0 +1,1 @@
+ALTER TABLE `activity` ADD `is_transition_only` integer DEFAULT false NOT NULL;

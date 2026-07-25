@@ -71,6 +71,22 @@ export function rangeContains(outer: TimeRange, inner: TimeRange): boolean {
   return inner.startMin >= outer.startMin && inner.endMin <= outer.endMin
 }
 
+/** Format a `Date`'s local time-of-day as a zero-padded `"HH:MM"` clock time. */
+export function formatTimeOfDate(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+}
+
+/** A `YYYY-MM-DD` date, `days` days later (negative to go back). */
+export function addDaysISO(dateISO: string, days: number): string {
+  const [year, month, day] = dateISO.split("-").map(Number)
+  const date = new Date(year, month - 1, day)
+  date.setDate(date.getDate() + days)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
 /** The current local calendar date as `YYYY-MM-DD`. */
 export function todayISO(): string {
   const now = new Date()
