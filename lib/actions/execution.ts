@@ -7,9 +7,14 @@ import {
   createOneOffActivity,
   extendActivity,
   finishActivityEarly,
+  pullActivityEarlier,
+  startQuickActivity,
   togglePinned,
+  type FinishEarlyResult,
 } from "@/lib/db/execution-queries"
 import { parseHHMM, todayISO } from "@/lib/time"
+
+export type { FinishEarlyOption, FinishEarlyPrompt, FinishEarlyResult } from "@/lib/db/execution-queries"
 
 export type ExecutionFormState = { ok: true } | { ok: false; error: string }
 
@@ -67,8 +72,34 @@ export async function createOneOffActivityAction(
   return { ok: true }
 }
 
-export async function finishEarlyAction(timelineActivityId: string): Promise<ExecutionFormState> {
+export async function finishEarlyAction(timelineActivityId: string): Promise<FinishEarlyResult> {
   const result = await finishActivityEarly(timelineActivityId)
+  revalidatePath("/")
+  return result
+}
+
+/** Accepts the Finish Early prompt's "pull the next block forward" option. */
+export async function acceptPullNextAction(
+  timelineActivityId: string,
+  newStartIso: string
+): Promise<ExecutionFormState> {
+  const result = await pullActivityEarlier(timelineActivityId, new Date(newStartIso))
+  revalidatePath("/")
+  return result
+}
+
+/** Accepts the Finish Early prompt's "start some other activity now" option. */
+export async function acceptStartNewAction(input: {
+  activityId: string
+  startIso: string
+  durationMin: number
+}): Promise<ExecutionFormState> {
+  const result = await startQuickActivity({
+    dateISO: todayISO(),
+    activityId: input.activityId,
+    startTime: new Date(input.startIso),
+    durationMin: input.durationMin,
+  })
   revalidatePath("/")
   return result
 }

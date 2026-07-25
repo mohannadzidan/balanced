@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
+import { useFinishEarlyPrompt } from "@/components/forms/finish-early-provider"
 import { extendActivityAction, finishEarlyAction } from "@/lib/actions/execution"
 
 function formatCountdown(ms: number): string {
@@ -39,6 +40,7 @@ export function ActiveActivityCard({
   const [now, setNow] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const { openPrompt } = useFinishEarlyPrompt()
 
   useEffect(() => {
     setNow(new Date())
@@ -56,7 +58,12 @@ export function ActiveActivityCard({
   function handleFinishEarly() {
     startTransition(async () => {
       const result = await finishEarlyAction(timelineActivityId)
-      setError(result.ok ? null : result.error)
+      if (result.ok) {
+        setError(null)
+        if (result.prompt) openPrompt(result.prompt)
+      } else {
+        setError(result.error)
+      }
     })
   }
 

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { activityTable, ruleTable, timelineActivityTable } from "@/lib/db/schema"
 import { getOrCreateTimeline } from "@/lib/db/timeline-queries"
+import { windowContains } from "@/lib/rules/window"
 import type { WindowRuleConfig } from "@/lib/rules/types"
 
 type ManualScheduleResult = { ok: true } | { ok: false; error: string }
@@ -37,10 +38,12 @@ export async function manualScheduleActivity(input: {
   const rules = await db.select().from(ruleTable).where(eq(ruleTable.activityId, input.activityId))
   const window = rules.find((rule) => rule.ruleType === "window")?.config as WindowRuleConfig | undefined
 
-  if (window?.kind === "strict") {
-    if (input.startMin < window.startMin || input.endMin > window.endMin) {
-      return { ok: false, error: "Falls outside this activity's Strict Window." }
-    }
+  // Strict and Flexible windows are both hard containers: a manually chosen
+  // slot can never start or end outside them, even though Flexible only
+  // requires *some* position inside the bounds rather than the full span.
+  if (window && !windowContains(window, input.startMin, input.endMin - input.startMin)) {
+    const kindLabel = window.kind === "strict" ? "Strict Window" : "Window"
+    return { ok: false, error: `Falls outside this activity's ${kindLabel}.` }
   }
 
   const startTime = dateAtMinute(input.dateISO, input.startMin)

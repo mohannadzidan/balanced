@@ -156,7 +156,11 @@ export async function finishGuestEarly(
 
   await db
     .update(timelineActivityTable)
-    .set({ actualStartTime, actualEndTime, status: "completed" })
+    // `endTime` moves to the real finish time so the block's displayed span
+    // reflects what actually happened — `guest.endTime` below still refers to
+    // the pre-update (originally scheduled) value, which is what "freed"
+    // must be measured against.
+    .set({ actualStartTime, actualEndTime, endTime: actualEndTime, status: "completed" })
     .where(eq(timelineActivityTable.id, guest.id))
 
   const freedMin = minutesBetween(actualEndTime, guest.endTime)
