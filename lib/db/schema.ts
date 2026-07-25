@@ -19,8 +19,17 @@ export const trackingLedgerTable = sqliteTable("tracking_ledger", {
   activityId: text("activity_id").primaryKey().notNull().references(() => activityTable.id, { onDelete: "cascade" }),
   rollingTargetMinutes: integer("rolling_target_minutes").notNull().default(0),
   rollingAchievedMinutes: integer("rolling_achieved_minutes").notNull().default(0),
+  /** The last date the carry-over evaluation ran for, so re-opening the app the same day is a no-op. */
+  lastEvaluatedDate: text("last_evaluated_date"),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(strftime('%s', 'now'))`),
 });
+
+/** A date on which an activity's Tracking target is prorated to zero and excluded from generation. */
+export const vacationDayTable = sqliteTable("vacation_day", {
+  id: text("id").primaryKey().notNull().$defaultFn(() => crypto.randomUUID()),
+  activityId: text("activity_id").notNull().references(() => activityTable.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+}, (table) => [uniqueIndex("activity_vacation_date_idx").on(table.activityId, table.date)]);
 
 export const ruleTable = sqliteTable("rule", {
   id: text("id").primaryKey().notNull().$defaultFn(() => crypto.randomUUID()),
@@ -45,6 +54,8 @@ export const timelineTable = sqliteTable("timeline", {
   id: text("id").primaryKey().notNull().$defaultFn(() => crypto.randomUUID()),
   date: text("date").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(strftime('%s', 'now'))`),
+  /** Cleared whenever an activity/rule edit invalidates this timeline, so the generator knows to run again. */
+  lastGeneratedAt: integer("last_generated_at", { mode: "timestamp" }),
 }, (table) => [uniqueIndex("date_idx").on(table.date)]);
 
 export const timelineActivityTable = sqliteTable("timeline_activity", {
@@ -58,6 +69,8 @@ export const timelineActivityTable = sqliteTable("timeline_activity", {
   actualEndTime: integer("actual_end_time", { mode: "timestamp" }),
   status: text("status").notNull().default("upcoming"),
   isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
+  /** Set by the solver when a tracked activity's daily target couldn't be fully placed. */
+  warningMessage: text("warning_message"),
 });
 
 export const timelineRuleTable = sqliteTable("timeline_rule", {

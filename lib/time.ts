@@ -71,6 +71,11 @@ export function rangeContains(outer: TimeRange, inner: TimeRange): boolean {
   return inner.startMin >= outer.startMin && inner.endMin <= outer.endMin
 }
 
+/** A window's span in minutes, accounting for a range that wraps past midnight (`endMin <= startMin`). */
+export function windowSpanMin(startMin: number, endMin: number): number {
+  return endMin <= startMin ? MINUTES_PER_DAY - startMin + endMin : endMin - startMin
+}
+
 /** Format a `Date`'s local time-of-day as a zero-padded `"HH:MM"` clock time. */
 export function formatTimeOfDate(date: Date): string {
   return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`

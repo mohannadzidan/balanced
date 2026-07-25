@@ -28,9 +28,12 @@ import {
   type ActivityFormState,
 } from "@/lib/actions/activity"
 import {
+  addVacationDayAction,
   deleteRuleAction,
+  removeVacationDayAction,
   saveOverlapRuleAction,
   saveSequenceRuleAction,
+  saveTrackingRuleAction,
   saveWindowRuleAction,
   type RuleFormState,
 } from "@/lib/actions/rules"
@@ -45,19 +48,23 @@ const emptyActivityState: ActivityFormState = { ok: false, error: "" }
 const selectClassName =
   "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
-const RULE_TYPES: RuleType[] = ["window", "sequence", "overlap"]
+const RULE_TYPES: RuleType[] = ["window", "sequence", "overlap", "tracking"]
 
 const RULE_LABELS: Record<RuleType, string> = {
   window: "Window Rule",
   sequence: "Sequence Rule",
   overlap: "Overlap Rule",
+  tracking: "Tracking Rule",
 }
 
 function windowSummary(rule: ActivityRules["window"]): string {
   if (!rule) return ""
   const spansMidnight = rule.endMin <= rule.startMin
   const range = `${formatHHMM(rule.startMin)}–${formatHHMM(rule.endMin)}${spansMidnight ? " (+1 day)" : ""}`
-  return `${rule.kind === "strict" ? "Strict" : "Preferred"} · ${range}`
+  if (rule.kind === "strict") return `Strict · ${range}`
+  const hours = rule.durationMin / 60
+  const durationLabel = Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`
+  return `Preferred · ${durationLabel} within ${range}`
 }
 
 function sequenceSummary(rule: ActivityRules["sequence"], nameById: Map<string, string>): string {
@@ -74,6 +81,12 @@ function overlapSummary(rule: ActivityRules["overlap"]): string {
   return `${rule.budgetMin}m budget · ${count} guest${count === 1 ? "" : "s"}`
 }
 
+function trackingSummary(rule: ActivityRules["tracking"]): string {
+  if (!rule) return ""
+  const cap = rule.capMin !== null ? `, cap ${rule.capMin}m` : ""
+  return `${rule.dailyTargetMin}m/day · min block ${rule.minBlockMinutes}m · carry-over ${rule.carryOverEnabled ? "on" : "off"}${cap}`
+}
+
 function WindowRuleForm({
   activityId,
   initial,
@@ -85,6 +98,7 @@ function WindowRuleForm({
 }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [kind, setKind] = useState<"strict" | "flexible">(initial?.kind ?? "flexible")
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
@@ -105,7 +119,8 @@ function WindowRuleForm({
         <select
           id={`${activityId}-window-kind`}
           name="kind"
-          defaultValue={initial?.kind ?? "flexible"}
+          value={kind}
+          onChange={(event) => setKind(event.target.value as "strict" | "flexible")}
           className={selectClassName}
         >
           <option value="flexible">Preferred (soft)</option>
@@ -114,7 +129,7 @@ function WindowRuleForm({
       </div>
       <div className="flex gap-2">
         <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${activityId}-window-start`}>Start</Label>
+          <Label htmlFor={`${activityId}-window-start`}>{kind === "flexible" ? "Bounds start" : "Start"}</Label>
           <Input
             id={`${activityId}-window-start`}
             name="startMin"
@@ -124,7 +139,7 @@ function WindowRuleForm({
           />
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${activityId}-window-end`}>End</Label>
+          <Label htmlFor={`${activityId}-window-end`}>{kind === "flexible" ? "Bounds end" : "End"}</Label>
           <Input
             id={`${activityId}-window-end`}
             name="endMin"
@@ -134,6 +149,23 @@ function WindowRuleForm({
           />
         </div>
       </div>
+      {kind === "flexible" && (
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${activityId}-window-duration`}>Duration (hours)</Label>
+          <Input
+            id={`${activityId}-window-duration`}
+            name="durationHours"
+            type="number"
+            min={0.25}
+            step={0.25}
+            defaultValue={initial?.kind === "flexible" ? initial.durationMin / 60 : 8}
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            How long the block actually runs — it can land anywhere inside the bounds above.
+          </p>
+        </div>
+      )}
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" size="sm" disabled={pending}>
         {pending ? "Saving…" : "Save Window Rule"}
@@ -279,6 +311,149 @@ function OverlapRuleForm({
   )
 }
 
+function VacationDaysManager({
+  activityId,
+  initialVacationDays,
+}: {
+  activityId: string
+  initialVacationDays: string[]
+}) {
+  const [pending, startTransition] = useTransition()
+  const [newDate, setNewDate] = useState("")
+
+  function handleAdd() {
+    if (!newDate) return
+    startTransition(async () => {
+      await addVacationDayAction(activityId, newDate)
+      setNewDate("")
+    })
+  }
+
+  function handleRemove(date: string) {
+    startTransition(async () => {
+      await removeVacationDayAction(activityId, date)
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label>Vacation days</Label>
+      {initialVacationDays.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {initialVacationDays.map((date) => (
+            <li key={date} className="flex items-center justify-between text-sm text-foreground">
+              {date}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                onClick={() => handleRemove(date)}
+              >
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <Input
+          type="date"
+          value={newDate}
+          onChange={(event) => setNewDate(event.target.value)}
+          className="flex-1"
+        />
+        <Button type="button" size="sm" disabled={pending || !newDate} onClick={handleAdd}>
+          Add
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function TrackingRuleForm({
+  activityId,
+  initial,
+  initialVacationDays,
+  onSaved,
+}: {
+  activityId: string
+  initial: ActivityRules["tracking"]
+  initialVacationDays: string[]
+  onSaved: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function handleSubmit(formData: FormData) {
+    startTransition(async () => {
+      const result = await saveTrackingRuleAction(activityId, emptyState, formData)
+      if (result.ok) {
+        setError(null)
+        onSaved()
+      } else {
+        setError(result.error)
+      }
+    })
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <form action={handleSubmit} className="flex flex-col gap-3">
+        <div className="flex gap-2">
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Label htmlFor={`${activityId}-target`}>Daily target (min)</Label>
+            <Input
+              id={`${activityId}-target`}
+              name="dailyTargetMin"
+              type="number"
+              min={1}
+              step={1}
+              defaultValue={initial?.dailyTargetMin ?? 60}
+              required
+            />
+          </div>
+          <div className="flex flex-1 flex-col gap-1.5">
+            <Label htmlFor={`${activityId}-min-block`}>Min block (min)</Label>
+            <Input
+              id={`${activityId}-min-block`}
+              name="minBlockMinutes"
+              type="number"
+              min={1}
+              step={1}
+              defaultValue={initial?.minBlockMinutes ?? 15}
+              required
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor={`${activityId}-cap`}>Daily cap (min, optional)</Label>
+          <Input
+            id={`${activityId}-cap`}
+            name="capMin"
+            type="number"
+            min={0}
+            step={1}
+            defaultValue={initial?.capMin ?? ""}
+            placeholder="No cap"
+          />
+        </div>
+        <label className="flex items-center gap-1.5 text-sm text-foreground">
+          <Checkbox name="carryOverEnabled" defaultChecked={initial?.carryOverEnabled ?? true} />
+          Carry deficits/surpluses forward
+        </label>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" size="sm" disabled={pending}>
+          {pending ? "Saving…" : "Save Tracking Rule"}
+        </Button>
+      </form>
+      {initial && (
+        <VacationDaysManager activityId={activityId} initialVacationDays={initialVacationDays} />
+      )}
+    </div>
+  )
+}
+
 function ActivityDetailsForm({
   activityId,
   initialName,
@@ -403,12 +578,14 @@ function RuleForm({
   type,
   activityId,
   initialRules,
+  initialVacationDays,
   otherActivities,
   onSaved,
 }: {
   type: RuleType
   activityId: string
   initialRules: ActivityRules
+  initialVacationDays: string[]
   otherActivities: { id: string; name: string }[]
   onSaved: () => void
 }) {
@@ -425,11 +602,21 @@ function RuleForm({
       />
     )
   }
+  if (type === "overlap") {
+    return (
+      <OverlapRuleForm
+        activityId={activityId}
+        initial={initialRules.overlap}
+        otherActivities={otherActivities}
+        onSaved={onSaved}
+      />
+    )
+  }
   return (
-    <OverlapRuleForm
+    <TrackingRuleForm
       activityId={activityId}
-      initial={initialRules.overlap}
-      otherActivities={otherActivities}
+      initial={initialRules.tracking}
+      initialVacationDays={initialVacationDays}
       onSaved={onSaved}
     />
   )
@@ -441,6 +628,7 @@ export function EditActivityRulesSheet({
   initialAllowedDays,
   initialIsTransitionOnly,
   initialRules,
+  initialVacationDays,
   otherActivities,
 }: {
   activityId: string
@@ -448,6 +636,7 @@ export function EditActivityRulesSheet({
   initialAllowedDays: Weekday[]
   initialIsTransitionOnly: boolean
   initialRules: ActivityRules
+  initialVacationDays: string[]
   otherActivities: { id: string; name: string }[]
 }) {
   const [activeRuleType, setActiveRuleType] = useState<RuleType | null>(null)
@@ -463,7 +652,8 @@ export function EditActivityRulesSheet({
   function summaryFor(type: RuleType): string {
     if (type === "window") return windowSummary(initialRules.window)
     if (type === "sequence") return sequenceSummary(initialRules.sequence, nameById)
-    return overlapSummary(initialRules.overlap)
+    if (type === "overlap") return overlapSummary(initialRules.overlap)
+    return trackingSummary(initialRules.tracking)
   }
 
   return (
@@ -523,6 +713,7 @@ export function EditActivityRulesSheet({
                     type={type}
                     activityId={activityId}
                     initialRules={initialRules}
+                    initialVacationDays={initialVacationDays}
                     otherActivities={otherActivities}
                     onSaved={close}
                   />
@@ -555,6 +746,7 @@ export function EditActivityRulesSheet({
                     type={activeRuleType}
                     activityId={activityId}
                     initialRules={initialRules}
+                    initialVacationDays={initialVacationDays}
                     otherActivities={otherActivities}
                     onSaved={close}
                   />

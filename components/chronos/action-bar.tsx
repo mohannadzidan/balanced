@@ -1,6 +1,5 @@
-import { Calendar } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { AddActivitySheet } from "@/components/forms/add-activity-sheet"
+import { OneOffEventSheet } from "@/components/forms/one-off-event-sheet"
 import { cn } from "@/lib/utils"
 
 export function ActionBar() {
@@ -10,10 +9,7 @@ export function ActionBar() {
     )}>
       <div className="flex gap-2">
         <AddActivitySheet />
-        <Button variant="outline" className="flex-1 flex items-center justify-center gap-2 shadow-whisper">
-          <Calendar className="h-4 w-4" />
-          One-Time Event
-        </Button>
+        <OneOffEventSheet />
       </div>
     </div>
   )

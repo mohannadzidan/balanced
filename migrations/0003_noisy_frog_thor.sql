@@ -1,0 +1,1 @@
+ALTER TABLE `timeline` ADD `last_generated_at` integer;

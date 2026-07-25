@@ -24,6 +24,7 @@ export function AddActivitySheet() {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  const [windowKind, setWindowKind] = useState<"strict" | "flexible">("flexible")
   const formRef = useRef<HTMLFormElement>(null)
 
   function handleSubmit(formData: FormData) {
@@ -84,7 +85,8 @@ export function AddActivitySheet() {
             <select
               id="activity-window-kind"
               name="windowKind"
-              defaultValue="flexible"
+              value={windowKind}
+              onChange={(event) => setWindowKind(event.target.value as "strict" | "flexible")}
               className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <option value="flexible">Preferred (soft)</option>
@@ -93,14 +95,31 @@ export function AddActivitySheet() {
           </div>
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="activity-window-start">Start</Label>
+              <Label htmlFor="activity-window-start">{windowKind === "flexible" ? "Bounds start" : "Start"}</Label>
               <Input id="activity-window-start" name="windowStartMin" type="time" defaultValue="09:00" required />
             </div>
             <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="activity-window-end">End</Label>
+              <Label htmlFor="activity-window-end">{windowKind === "flexible" ? "Bounds end" : "End"}</Label>
               <Input id="activity-window-end" name="windowEndMin" type="time" defaultValue="10:00" required />
             </div>
           </div>
+          {windowKind === "flexible" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="activity-window-duration">Duration (hours)</Label>
+              <Input
+                id="activity-window-duration"
+                name="windowDurationHours"
+                type="number"
+                min={0.25}
+                step={0.25}
+                defaultValue={8}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                How long the block actually runs — it can land anywhere inside the bounds above.
+              </p>
+            </div>
+          )}
           <label className="flex items-start gap-1.5 text-sm text-foreground">
             <Checkbox name="isTransitionOnly" className="mt-0.5" />
             <span>

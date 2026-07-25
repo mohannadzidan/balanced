@@ -15,6 +15,20 @@
       "when": 1784952148417,
       "tag": "0001_lively_wallflower",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784952863913,
+      "tag": "0002_conscious_owl",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784953990268,
+      "tag": "0003_noisy_frog_thor",
+      "breakpoints": true
     }
   ]
 }

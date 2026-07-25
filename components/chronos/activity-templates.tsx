@@ -1,7 +1,9 @@
 import { ActivityCard } from "./activity-card"
 import { EditActivityRulesSheet } from "@/components/forms/edit-activity-rules-sheet"
+import { ManualScheduleSheet } from "@/components/forms/manual-schedule-sheet"
 import { listActivities } from "@/lib/db/activity-queries"
 import { getActivityRules, listOtherActivities } from "@/lib/db/rule-queries"
+import { listVacationDays } from "@/lib/db/tracking-queries"
 import { weekdayLabel, type Weekday } from "@/lib/weekdays"
 
 export async function ActivityTemplates() {
@@ -16,6 +18,7 @@ export async function ActivityTemplates() {
       activity,
       rules: await getActivityRules(activity.id),
       otherActivities: await listOtherActivities(activity.id),
+      vacationDays: await listVacationDays(activity.id),
     }))
   )
 
@@ -25,7 +28,7 @@ export async function ActivityTemplates() {
         Activities
       </h2>
       <div className="space-y-2">
-        {rows.map(({ activity, rules, otherActivities }) => (
+        {rows.map(({ activity, rules, otherActivities, vacationDays }) => (
           <div key={activity.id} className="flex items-center gap-2">
             <ActivityCard
               className="flex-1"
@@ -37,16 +40,20 @@ export async function ActivityTemplates() {
               }
               badge={
                 activity.isTransitionOnly
-                  ? { label: "TRANSITION ONLY", variant: "secondary" }
-                  : { label: "TEMPLATE", variant: "outline" }
+                  ? { label: "Transition", variant: "secondary" }
+                  : { label: "Routine", variant: "outline" }
               }
             />
+            {!activity.isTransitionOnly && (
+              <ManualScheduleSheet activityId={activity.id} activityName={activity.name} />
+            )}
             <EditActivityRulesSheet
               activityId={activity.id}
               activityName={activity.name}
               initialAllowedDays={activity.allowedDays as Weekday[]}
               initialIsTransitionOnly={activity.isTransitionOnly}
               initialRules={rules}
+              initialVacationDays={vacationDays}
               otherActivities={otherActivities}
             />
           </div>
