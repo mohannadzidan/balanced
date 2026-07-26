@@ -26,6 +26,7 @@ import type {
   Timeline,
   TimelineActivity,
   TimelineStatus,
+  Weekday,
 } from "./types"
 
 function hasFixed(activity: Activity): boolean {
@@ -420,9 +421,10 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
       inst.chunkGroupId === null &&
       (inst.locked || ANCHOR_STATES.has(inst.state))
   )
-  const anchorActivityIds = new Set(
-    anchors.map((a) => a.activityId).filter((id): id is string => id !== null)
-  )
+  // An ad-hoc anchor has activityId: null (SPEC.md Section 9.5), so its key
+  // for "already spoken for, exclude from re-solving" purposes is its own
+  // instance id instead — see `groupKeyOf`.
+  const anchorActivityIds = new Set(anchors.map((a) => groupKeyOf(a)))
   const placedAnchors = anchors.filter(
     (a) => a.plannedStart !== null && a.plannedEnd !== null
   )
@@ -433,18 +435,14 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
       end: a.actualEnd ?? (a.plannedEnd as number),
     }))
   const anchorPlacements = new Map<string, Placement>(
-    placedAnchors
-      .filter((a): a is TimelineActivity & { activityId: string } =>
-        Boolean(a.activityId)
-      )
-      .map((a) => [
-        a.activityId,
-        {
-          start: a.plannedStart as number,
-          end: a.plannedEnd as number,
-          nestedIn: a.hostInstanceId,
-        },
-      ])
+    placedAnchors.map((a) => [
+      groupKeyOf(a),
+      {
+        start: a.plannedStart as number,
+        end: a.plannedEnd as number,
+        nestedIn: a.hostInstanceId,
+      },
+    ])
   )
   return { anchors, anchorActivityIds, baseOccupied, anchorPlacements }
 }
@@ -491,15 +489,38 @@ function rejectionResult(
   }
 }
 
+/**
+ * Re-solving an ad-hoc through the ordinary pipeline (see
+ * `adhocActivitiesFrom`) produces an instance with `activityId` set to its
+ * pseudo-activity id, since `freshInstance` doesn't know it's ad-hoc. This
+ * restores the `activityId: null, isAdhoc: true` tagging SPEC.md Section
+ * 9.5 requires, for every instance whose group key is a known ad-hoc id.
+ */
+function tagAdhocInstances(
+  instances: readonly TimelineActivity[],
+  adhocIds: ReadonlySet<string>
+): TimelineActivity[] {
+  if (adhocIds.size === 0) return [...instances]
+  return instances.map((inst) =>
+    adhocIds.has(groupKeyOf(inst))
+      ? { ...inst, activityId: null, isAdhoc: true }
+      : inst
+  )
+}
+
 function toResult(
   input: SolveInput,
-  instances: readonly TimelineActivity[],
+  rawInstances: readonly TimelineActivity[],
   diagnostics: readonly Diagnostic[],
   status: TimelineStatus,
   constants: CostConstants,
   totalRanked: number,
   revision: number
 ): SolveResult {
+  const adhocIds = new Set(
+    input.existing.filter((i) => i.isAdhoc).map((i) => groupKeyOf(i))
+  )
+  const instances = tagAdhocInstances(rawInstances, adhocIds)
   const cost = scheduleCost(
     instances,
     input.dayFrame.lengthMinutes,
@@ -1155,6 +1176,39 @@ function applyInstanceRuleOverrides(
 }
 
 /**
+ * An ad-hoc instance (SPEC.md Section 9.5) has no catalogue entry, so
+ * without this it would vanish the moment any event *other* than
+ * ADD_ADHOC re-solves the day — nothing else would know it exists.
+ * Reconstructs one pseudo-Activity per still-relevant ad-hoc instance
+ * (deduplicated by chunk group) from its own last-known rules, so every
+ * event's pipeline sees it as an ordinary candidate. `toResult`'s
+ * `tagAdhocInstances` restores the `activityId: null` tagging afterward.
+ */
+function adhocActivitiesFrom(
+  existing: readonly TimelineActivity[],
+  weekday: Weekday
+): Activity[] {
+  const seen = new Set<string>()
+  const activities: Activity[] = []
+  for (const inst of existing) {
+    if (!inst.isAdhoc) continue
+    const key = groupKeyOf(inst)
+    if (seen.has(key)) continue
+    seen.add(key)
+    activities.push({
+      id: key,
+      name: inst.name,
+      durationMinutes: inst.durationMinutes,
+      priorityRank: inst.priorityRank,
+      allowedDays: [weekday],
+      enabled: true,
+      rules: inst.rules,
+    })
+  }
+  return activities
+}
+
+/**
  * EDIT_INSTANCE_RULES (SPEC.md Section 9.6): replace one or more of an
  * instance's rules for today only, without touching the template — the
  * canonical case is adding an ad-hoc's id to today's Work OverlapRule. The
@@ -1308,7 +1362,12 @@ export function solve(input: SolveInput): SolveResult {
     priorityWeight(activity.priorityRank, totalRanked)
 
   const todaysCatalog = applyInstanceRuleOverrides(
-    input.catalog.filter((a) => a.enabled && a.allowedDays.includes(weekday)),
+    [
+      ...input.catalog.filter(
+        (a) => a.enabled && a.allowedDays.includes(weekday)
+      ),
+      ...adhocActivitiesFrom(input.existing, weekday),
+    ],
     input.existing
   )
 

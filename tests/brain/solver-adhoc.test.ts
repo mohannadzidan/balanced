@@ -138,6 +138,60 @@ describe("solve — ADD_ADHOC (SPEC.md 9.5)", () => {
     expect(result.rejection?.code).toBe("INVALID_STATE_FOR_EVENT")
   })
 
+  it("survives a later TICK instead of vanishing (it isn't in the catalogue)", () => {
+    const catalog = [activity("Work").rank(1).minutes(60).build()]
+    const generated = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+
+    const withAdhoc = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: generated.timeline.instances,
+      carryIn: [],
+      event: {
+        type: "ADD_ADHOC",
+        payload: {
+          name: "Dentist",
+          durationMinutes: 30,
+          priorityRank: 2,
+          rules: [],
+          date: dayFrame.date,
+        },
+      },
+      revision: generated.timeline.revision,
+    })
+    const dentist = withAdhoc.timeline.instances.find(
+      (i) => i.name === "Dentist"
+    )!
+    expect(dentist.plannedStart).toBe(60)
+
+    const ticked = solve({
+      dayFrame,
+      now: 10,
+      catalog,
+      existing: withAdhoc.timeline.instances,
+      carryIn: [],
+      event: { type: "TICK" },
+      revision: withAdhoc.timeline.revision,
+    })
+
+    const stillThere = ticked.timeline.instances.find(
+      (i) => i.name === "Dentist"
+    )
+    expect(stillThere).toBeDefined()
+    expect(stillThere?.isAdhoc).toBe(true)
+    expect(stillThere?.activityId).toBeNull()
+    expect(stillThere?.plannedStart).toBe(60)
+    expect(stillThere?.plannedEnd).toBe(90)
+  })
+
   it("gives successive ad-hocs distinct ids", () => {
     const first = solve({
       dayFrame,
