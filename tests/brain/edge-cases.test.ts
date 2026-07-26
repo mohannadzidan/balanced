@@ -208,4 +208,56 @@ describe("solve — remaining Section 11 edge cases", () => {
     expect(marathon.state).toBe("SKIPPED")
     expect(marathon.skipReason).toBe("NO_FREE_SPACE")
   })
+
+  it("case 13: an overlap budget is per host instance per day and does not roll over", () => {
+    // A fully congested Work (spans the whole day) forces both guests to
+    // compete for the same 30-minute shared budget purely through nesting —
+    // no freestanding fallback is available to either, so the budget's
+    // effect is directly observable.
+    const catalog = [
+      activity("Work")
+        .rank(1)
+        .minutes(dayFrame.lengthMinutes)
+        .overlap({ budget: 30, guests: ["email", "ping"] })
+        .build(),
+      activity("Email").rank(2).minutes(30).build(),
+      activity("Ping").rank(3).minutes(30).build(),
+    ]
+
+    const dayA = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const emailA = dayA.timeline.instances.find((i) => i.name === "Email")!
+    const pingA = dayA.timeline.instances.find((i) => i.name === "Ping")!
+    expect(emailA.state).toBe("PLANNED") // takes the whole 30-minute budget
+    expect(pingA.state).toBe("SKIPPED") // nothing left, and nowhere else to go
+
+    // A second, independent GENERATE_DAY on a fresh day frame with the
+    // identical catalogue: if the budget had somehow carried over from day
+    // A's exhaustion, Email would fail here too. It doesn't.
+    const dayFrameB = resolveDayFrame("2024-06-18", "UTC")
+    const dayB = solve({
+      dayFrame: dayFrameB,
+      now: 0,
+      catalog: [
+        activity("Work")
+          .rank(1)
+          .minutes(dayFrameB.lengthMinutes)
+          .overlap({ budget: 30, guests: ["email", "ping"] })
+          .build(),
+        activity("Email").rank(2).minutes(30).build(),
+        activity("Ping").rank(3).minutes(30).build(),
+      ],
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const emailB = dayB.timeline.instances.find((i) => i.name === "Email")!
+    expect(emailB.state).toBe("PLANNED")
+  })
 })
