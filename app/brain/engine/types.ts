@@ -253,6 +253,8 @@ export interface SolveInput {
   readonly event: Event
   readonly constants?: Partial<CostConstants>
   readonly options?: SolveOptions
+  /** The revision of `existing`, echoed back unchanged by a no-op TICK. */
+  readonly revision?: number
 }
 
 export type RejectionCode =

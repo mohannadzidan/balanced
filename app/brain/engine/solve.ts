@@ -1,5 +1,6 @@
 import { priorityWeight, scheduleCost } from "./cost"
 import { resolveConstants } from "./constants"
+import { applyBackdating } from "./lifecycle"
 import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
@@ -8,6 +9,7 @@ import { isDependent, placeSequenceChain } from "./sequence"
 import { weekdayOf } from "./time"
 import type {
   Activity,
+  CostConstants,
   DayFrame,
   Diagnostic,
   Interval,
@@ -139,53 +141,54 @@ function chunkedInstances(
   })
 }
 
+interface PipelineOutcome {
+  readonly instances: TimelineActivity[]
+  readonly diagnostics: Diagnostic[]
+  readonly status: TimelineStatus
+}
+
 /**
- * Engine build step 6 (SPEC.md Section 16): StrictWindowRule and
- * FlexibleWindowRule feasibility, with cost-aware candidate selection now
- * that drift has a price. Shrink, sequence, overlap, and events remain for
- * later build steps — `GENERATE_DAY` only.
+ * The Phase 1 / Phase 2 / Phase 2.5 solve, parameterized over exactly which
+ * activities are still up for solving and what's already occupying the day.
+ * `activitiesToSolve` excludes anything TICK has anchored (SPEC.md Section
+ * 9.2) — for `GENERATE_DAY` that's the full catalogue and `baseOccupied` is
+ * empty, reproducing the original single-pass behaviour exactly.
  */
-export function solve(input: SolveInput): SolveResult {
-  const constants = resolveConstants(input.constants)
+function runPipeline(
+  input: SolveInput,
+  constants: CostConstants,
+  activitiesToSolve: readonly Activity[],
+  baseOccupied: readonly Interval[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number
+): PipelineOutcome {
   const grid = constants.GRID
   const nodeLimit = constants.HARD_SET_NODE_LIMIT
   const freezeBoundary = input.now
   const lengthMinutes = input.dayFrame.lengthMinutes
-  const weekday = weekdayOf(input.dayFrame.date)
-  const totalRanked = input.catalog.length
-
-  const resolvedCache = new Map<string, ResolvedActivity>()
-  const resolve = (activity: Activity): ResolvedActivity => {
-    let resolved = resolvedCache.get(activity.id)
-    if (!resolved) {
-      resolved = resolveActivity(activity, input.dayFrame)
-      resolvedCache.set(activity.id, resolved)
-    }
-    return resolved
-  }
-  const weight = (activity: Activity): number =>
-    priorityWeight(activity.priorityRank, totalRanked)
-
-  const todaysCatalog = input.catalog.filter(
-    (a) => a.enabled && a.allowedDays.includes(weekday)
-  )
 
   // Sequence dependents (SPEC.md Section 5.6) are placed adjacent to their
   // host out of priority order, so they sit outside the normal hard-set /
   // discretionary partitioning below. A dependent that is itself Fixed keeps
   // its declared time and is treated as an ordinary host instead — there is
   // nothing left for the sequence relationship to solve for it.
-  const sequenceDependents = todaysCatalog.filter(
+  const sequenceDependents = activitiesToSolve.filter(
     (a) => isDependent(a) && !hasFixed(a)
   )
-  const hostPool = todaysCatalog.filter((a) => !sequenceDependents.includes(a))
+  const hostPool = activitiesToSolve.filter(
+    (a) => !sequenceDependents.includes(a)
+  )
 
   // Phase 1a: FixedRule activities, placed at their declared times.
   const fixedSet = hostPool.filter(hasFixed)
   const fixedOutcome = placeFixedSet(fixedSet, input.dayFrame, freezeBoundary)
   const occupiedAfterFixed: Interval[] = [
-    ...fixedOutcome.placements.values(),
-  ].map((p) => ({ start: p.start, end: p.end }))
+    ...baseOccupied,
+    ...[...fixedOutcome.placements.values()].map((p) => ({
+      start: p.start,
+      end: p.end,
+    })),
+  ]
 
   // Phase 1b: the remaining hard set — MandatoryRule without a FixedRule —
   // most-constrained first, with bounded backtracking.
@@ -272,7 +275,7 @@ export function solve(input: SolveInput): SolveResult {
     { freezeBoundary, lengthMinutes, grid, resolve }
   )
 
-  const instances = todaysCatalog.flatMap((activity) => {
+  const instances = activitiesToSolve.flatMap((activity) => {
     const chunksPlaced = greedyOutcome.chunks.get(activity.id)
     if (chunksPlaced) {
       return chunkedInstances(
@@ -313,9 +316,29 @@ export function solve(input: SolveInput): SolveResult {
     ]
   })
 
-  const diagnostics: Diagnostic[] = [...fixedOutcome.diagnostics]
-  let status: TimelineStatus =
-    fixedOutcome.diagnostics.length > 0 ? "DEGRADED" : "OK"
+  const { diagnostics: scanDiagnostics, status: scanStatus } =
+    buildDiagnostics(instances)
+  const diagnostics: Diagnostic[] = [
+    ...fixedOutcome.diagnostics,
+    ...scanDiagnostics,
+  ]
+  const status: TimelineStatus =
+    fixedOutcome.diagnostics.length > 0 ? "DEGRADED" : scanStatus
+
+  return { instances, diagnostics, status }
+}
+
+/**
+ * Per-instance advisory diagnostics (SPEC.md Section 8.8) — a pure function
+ * of the instance list, so it can be reused both for a freshly solved batch
+ * and for an unchanged TICK echo.
+ */
+function buildDiagnostics(instances: readonly TimelineActivity[]): {
+  diagnostics: Diagnostic[]
+  status: TimelineStatus
+} {
+  const diagnostics: Diagnostic[] = []
+  let status: TimelineStatus = "OK"
 
   for (const inst of instances) {
     if (
@@ -358,25 +381,176 @@ export function solve(input: SolveInput): SolveResult {
     }
   }
 
-  const cost = scheduleCost(instances, lengthMinutes, totalRanked, constants)
+  return { diagnostics, status }
+}
 
+function toResult(
+  input: SolveInput,
+  instances: readonly TimelineActivity[],
+  diagnostics: readonly Diagnostic[],
+  status: TimelineStatus,
+  constants: CostConstants,
+  totalRanked: number,
+  revision: number
+): SolveResult {
+  const cost = scheduleCost(
+    instances,
+    input.dayFrame.lengthMinutes,
+    totalRanked,
+    constants
+  )
   const timeline: Timeline = {
     dayFrame: input.dayFrame,
-    revision: 1,
-    instances,
-    diagnostics,
+    revision,
+    instances: [...instances],
+    diagnostics: [...diagnostics],
     cost,
     status,
     solvedAtOffset: input.now,
     finalised: false,
   }
-
   return {
     status,
     timeline,
     rejection: null,
-    diagnostics,
+    diagnostics: timeline.diagnostics,
     cost,
     trace: null,
   }
+}
+
+/**
+ * TICK (SPEC.md Section 9.2), the "null event": apply auto-start /
+ * auto-complete backdating to `existing`, then — only if something actually
+ * changed — re-solve everything not anchored by that backdating. An anchor
+ * is an existing instance whose *every* fragment (chunking aside — see
+ * below) already reached ACTIVE/COMPLETED/CARRIED_IN; its occupied time is
+ * fed into the pipeline as pre-existing occupancy and its instance is
+ * echoed back untouched. Calling TICK twice with the same `now` is a no-op:
+ * `changed` is false the second time, so the input timeline round-trips
+ * with its revision unchanged, exactly as Section 9.2 requires.
+ *
+ * A chunked activity (chunkGroupId set) is never treated as an anchor here:
+ * partial completion of a chunk plan across ticks is a cross-feature
+ * interaction no worked example exercises yet, so a chunked activity is
+ * always re-solved fresh from its template, ignoring any fragment that
+ * already ran. This mirrors the same kind of documented scope boundary
+ * used for chunked hosts in the sequence and overlap phases.
+ */
+function solveTick(
+  input: SolveInput,
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const { instances: backdated, changed } = applyBackdating(
+    input.existing,
+    input.now
+  )
+
+  if (!changed) {
+    const { diagnostics, status } = buildDiagnostics(backdated)
+    return toResult(
+      input,
+      backdated,
+      diagnostics,
+      status,
+      constants,
+      totalRanked,
+      input.revision ?? 0
+    )
+  }
+
+  const ANCHOR_STATES = new Set(["ACTIVE", "COMPLETED", "CARRIED_IN"])
+  const anchors = backdated.filter(
+    (inst) => inst.chunkGroupId === null && ANCHOR_STATES.has(inst.state)
+  )
+  const anchorActivityIds = new Set(
+    anchors.map((a) => a.activityId).filter((id): id is string => id !== null)
+  )
+  const baseOccupied: Interval[] = anchors
+    .filter((a) => !a.hostInstanceId)
+    .map((a) => ({
+      start: a.actualStart ?? a.plannedStart ?? 0,
+      end: a.actualEnd ?? a.plannedEnd ?? 0,
+    }))
+  const activitiesToSolve = todaysCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id)
+  )
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight
+  )
+
+  return toResult(
+    input,
+    [...anchors, ...solved],
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
+export function solve(input: SolveInput): SolveResult {
+  const constants = resolveConstants(input.constants)
+  const weekday = weekdayOf(input.dayFrame.date)
+  const totalRanked = input.catalog.length
+
+  const resolvedCache = new Map<string, ResolvedActivity>()
+  const resolve = (activity: Activity): ResolvedActivity => {
+    let resolved = resolvedCache.get(activity.id)
+    if (!resolved) {
+      resolved = resolveActivity(activity, input.dayFrame)
+      resolvedCache.set(activity.id, resolved)
+    }
+    return resolved
+  }
+  const weight = (activity: Activity): number =>
+    priorityWeight(activity.priorityRank, totalRanked)
+
+  const todaysCatalog = input.catalog.filter(
+    (a) => a.enabled && a.allowedDays.includes(weekday)
+  )
+
+  if (input.event.type === "TICK") {
+    return solveTick(
+      input,
+      constants,
+      todaysCatalog,
+      resolve,
+      weight,
+      totalRanked
+    )
+  }
+
+  const { instances, diagnostics, status } = runPipeline(
+    input,
+    constants,
+    todaysCatalog,
+    [],
+    resolve,
+    weight
+  )
+  return toResult(
+    input,
+    instances,
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    1
+  )
 }
