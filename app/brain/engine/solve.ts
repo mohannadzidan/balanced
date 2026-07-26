@@ -4,6 +4,7 @@ import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
 import { resolveActivity, type ResolvedActivity } from "./resolve"
+import { isDependent, placeSequenceChain } from "./sequence"
 import { weekdayOf } from "./time"
 import type {
   Activity,
@@ -104,8 +105,18 @@ export function solve(input: SolveInput): SolveResult {
     (a) => a.enabled && a.allowedDays.includes(weekday)
   )
 
+  // Sequence dependents (SPEC.md Section 5.6) are placed adjacent to their
+  // host out of priority order, so they sit outside the normal hard-set /
+  // discretionary partitioning below. A dependent that is itself Fixed keeps
+  // its declared time and is treated as an ordinary host instead — there is
+  // nothing left for the sequence relationship to solve for it.
+  const sequenceDependents = todaysCatalog.filter(
+    (a) => isDependent(a) && !hasFixed(a)
+  )
+  const hostPool = todaysCatalog.filter((a) => !sequenceDependents.includes(a))
+
   // Phase 1a: FixedRule activities, placed at their declared times.
-  const fixedSet = todaysCatalog.filter(hasFixed)
+  const fixedSet = hostPool.filter(hasFixed)
   const fixedOutcome = placeFixedSet(fixedSet, input.dayFrame, freezeBoundary)
   const occupiedAfterFixed: Interval[] = [
     ...fixedOutcome.placements.values(),
@@ -113,9 +124,7 @@ export function solve(input: SolveInput): SolveResult {
 
   // Phase 1b: the remaining hard set — MandatoryRule without a FixedRule —
   // most-constrained first, with bounded backtracking.
-  const mandatorySet = todaysCatalog.filter(
-    (a) => hasMandatory(a) && !hasFixed(a)
-  )
+  const mandatorySet = hostPool.filter((a) => hasMandatory(a) && !hasFixed(a))
   const hardOutcome = placeHardSet(mandatorySet, occupiedAfterFixed, {
     freezeBoundary,
     grid,
@@ -138,7 +147,7 @@ export function solve(input: SolveInput): SolveResult {
     ...fixedSet.map((a) => a.id),
     ...mandatorySet.map((a) => a.id),
   ])
-  const discretionary = todaysCatalog.filter((a) => !hardSetIds.has(a.id))
+  const discretionary = hostPool.filter((a) => !hardSetIds.has(a.id))
   const greedyOutcome = placeGreedy(discretionary, occupiedAfterHardSet, {
     freezeBoundary,
     grid,
@@ -147,19 +156,51 @@ export function solve(input: SolveInput): SolveResult {
     resolve,
     weight,
   })
+  const occupiedAfterGreedy: Interval[] = [
+    ...occupiedAfterHardSet,
+    ...[...greedyOutcome.placements.values()].map((p) => ({
+      start: p.start,
+      end: p.end,
+    })),
+  ]
+
+  // Phase 2.5: sequence dependents, adjacent to their already-placed host.
+  const hostResolutions = new Map<string, Placement | "SKIPPED">()
+  for (const activity of hostPool) {
+    const placement =
+      fixedOutcome.placements.get(activity.id) ??
+      hardOutcome.placements.get(activity.id) ??
+      greedyOutcome.placements.get(activity.id) ??
+      null
+    hostResolutions.set(activity.id, placement ?? "SKIPPED")
+  }
+  const sequenceOutcome = placeSequenceChain(
+    sequenceDependents,
+    hostResolutions,
+    occupiedAfterGreedy,
+    { freezeBoundary, lengthMinutes, grid, resolve }
+  )
 
   const instances = todaysCatalog.map((activity) => {
     const placement =
       fixedOutcome.placements.get(activity.id) ??
       hardOutcome.placements.get(activity.id) ??
       greedyOutcome.placements.get(activity.id) ??
+      sequenceOutcome.placements.get(activity.id) ??
       null
     const skipReason =
       fixedOutcome.skipped.get(activity.id) ??
       hardOutcome.skipped.get(activity.id) ??
       greedyOutcome.skipped.get(activity.id) ??
+      sequenceOutcome.skipped.get(activity.id) ??
       null
-    const relaxations = relaxationsFor(resolve(activity), placement)
+    const sequenceRelaxations = sequenceOutcome.relaxations.get(activity.id)
+    const relaxations = sequenceRelaxations
+      ? [
+          ...sequenceRelaxations,
+          ...relaxationsFor(resolve(activity), placement),
+        ]
+      : relaxationsFor(resolve(activity), placement)
     return freshInstance(
       activity,
       input.dayFrame,

@@ -1,4 +1,5 @@
 import { violatesDominance } from "./cost"
+import { sequenceRuleOf } from "./sequence"
 import type {
   Activity,
   CostConstants,
@@ -248,6 +249,70 @@ export function validateActivity(
   return issues
 }
 
+function checkSequenceMultiple(
+  activities: readonly Activity[],
+  issues: ValidationIssue[]
+): void {
+  const seen = new Map<string, Activity>() // key: `${hostId}:${role}`
+  for (const activity of activities) {
+    const rule = sequenceRuleOf(activity)
+    if (!rule) continue
+    const key = `${rule.linkedActivityId}:${rule.role}`
+    const existing = seen.get(key)
+    if (existing) {
+      issues.push(
+        issue(
+          "error",
+          "SEQUENCE_MULTIPLE",
+          activity.id,
+          `"${activity.name}" and "${existing.name}" are both a "${rule.role}" of the same host`
+        )
+      )
+    } else {
+      seen.set(key, activity)
+    }
+  }
+}
+
+function checkSequenceCycle(
+  activities: readonly Activity[],
+  issues: ValidationIssue[]
+): void {
+  const byId = new Map(activities.map((a) => [a.id, a]))
+  const flagged = new Set<string>()
+
+  for (const start of activities) {
+    if (flagged.has(start.id)) continue
+    const path: string[] = []
+    const onPath = new Set<string>()
+    let current: Activity | undefined = start
+    while (current) {
+      if (onPath.has(current.id)) {
+        for (const id of path.slice(path.indexOf(current.id))) flagged.add(id)
+        break
+      }
+      const rule = sequenceRuleOf(current)
+      if (!rule) break
+      path.push(current.id)
+      onPath.add(current.id)
+      current = byId.get(rule.linkedActivityId)
+    }
+  }
+
+  for (const id of flagged) {
+    const activity = byId.get(id)
+    if (!activity) continue
+    issues.push(
+      issue(
+        "error",
+        "SEQUENCE_CYCLE",
+        activity.id,
+        `"${activity.name}" is part of a sequence cycle`
+      )
+    )
+  }
+}
+
 /** Cross-activity checks over the whole catalogue (SPEC.md Section 10.1). */
 export function validateCatalog(
   activities: readonly Activity[]
@@ -270,6 +335,9 @@ export function validateCatalog(
       seenRanks.set(activity.priorityRank, activity)
     }
   }
+
+  checkSequenceMultiple(activities, issues)
+  checkSequenceCycle(activities, issues)
 
   return issues
 }

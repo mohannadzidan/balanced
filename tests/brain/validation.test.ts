@@ -156,4 +156,50 @@ describe("validateCatalog", () => {
     ]
     expect(codesOf(validateCatalog(catalog))).toContain("PRIORITY_DUPLICATE")
   })
+
+  it("flags SEQUENCE_MULTIPLE when two activities are both a pre of the same host", () => {
+    const catalog = [
+      activity("Work").rank(1).minutes(60).build(),
+      activity("A").rank(2).minutes(15).sequence("pre", "work").build(),
+      activity("B").rank(3).minutes(15).sequence("pre", "work").build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).toContain("SEQUENCE_MULTIPLE")
+  })
+
+  it("does not flag SEQUENCE_MULTIPLE for a distinct pre and post of the same host", () => {
+    const catalog = [
+      activity("Work").rank(1).minutes(60).build(),
+      activity("A").rank(2).minutes(15).sequence("pre", "work").build(),
+      activity("B").rank(3).minutes(15).sequence("post", "work").build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).not.toContain("SEQUENCE_MULTIPLE")
+  })
+
+  it("flags SEQUENCE_CYCLE for a direct cycle (A pre B, B pre A)", () => {
+    const catalog = [
+      activity("A").rank(1).minutes(15).sequence("pre", "b").build(),
+      activity("B").rank(2).minutes(15).sequence("pre", "a").build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).toContain("SEQUENCE_CYCLE")
+  })
+
+  it("flags SEQUENCE_CYCLE for a longer cycle (A pre B, B pre C, C pre A)", () => {
+    const catalog = [
+      activity("A").rank(1).minutes(15).sequence("pre", "b").build(),
+      activity("B").rank(2).minutes(15).sequence("pre", "c").build(),
+      activity("C").rank(3).minutes(15).sequence("pre", "a").build(),
+    ]
+    const issues = validateCatalog(catalog)
+    expect(codesOf(issues)).toContain("SEQUENCE_CYCLE")
+    expect(issues.filter((i) => i.code === "SEQUENCE_CYCLE")).toHaveLength(3)
+  })
+
+  it("does not flag SEQUENCE_CYCLE for a plain chain (A pre B, B pre C)", () => {
+    const catalog = [
+      activity("C").rank(1).minutes(60).build(),
+      activity("B").rank(2).minutes(15).sequence("pre", "c").build(),
+      activity("A").rank(3).minutes(15).sequence("pre", "b").build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).not.toContain("SEQUENCE_CYCLE")
+  })
 })

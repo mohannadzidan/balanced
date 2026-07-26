@@ -1,6 +1,11 @@
 import { resolveWallClock } from "./time"
 import type { Activity, DayFrame } from "./types"
 
+export interface CandidateVerdict {
+  readonly feasible: boolean
+  readonly driftMinutes: number
+}
+
 export interface ResolvedWindow {
   readonly start: number
   readonly end: number
@@ -41,4 +46,40 @@ export function resolveActivity(
         }
       : null,
   }
+}
+
+/**
+ * Window feasibility for one candidate (SPEC.md Section 8.6 step 3 and
+ * Section 5.3's drift table). A StrictWindowRule requires full containment;
+ * a FlexibleWindowRule allows drift up to its allowance. An activity with
+ * neither is unconstrained.
+ */
+export function evaluateCandidate(
+  resolved: ResolvedActivity,
+  start: number,
+  end: number
+): CandidateVerdict {
+  const { strictWindow, flexibleWindow } = resolved
+
+  if (strictWindow) {
+    return {
+      feasible: start >= strictWindow.start && end <= strictWindow.end,
+      driftMinutes: 0,
+    }
+  }
+
+  if (flexibleWindow) {
+    // Minutes of the activity before the window start, and after the window
+    // end — each capped against the other bound so a candidate entirely on
+    // one side isn't double-counted past its own duration.
+    const before = Math.max(0, Math.min(end, flexibleWindow.start) - start)
+    const after = Math.max(0, end - Math.max(start, flexibleWindow.end))
+    const driftMinutes = before + after
+    return {
+      feasible: driftMinutes <= flexibleWindow.maxDriftMinutes,
+      driftMinutes,
+    }
+  }
+
+  return { feasible: true, driftMinutes: 0 }
 }

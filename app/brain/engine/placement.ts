@@ -1,6 +1,10 @@
 import { placementCost, type CandidateEvaluation } from "./cost"
+import { evaluateCandidate } from "./resolve"
 import type { ResolvedActivity } from "./resolve"
 import type { CostConstants, Interval, Placement, SkipReason } from "./types"
+
+export { evaluateCandidate }
+export type { CandidateVerdict } from "./resolve"
 
 export interface PlacementContext {
   readonly freeIntervals: readonly Interval[]
@@ -14,11 +18,6 @@ export interface PlacementContext {
 export interface PlacementResult {
   readonly placement: Placement | null
   readonly skipReason: SkipReason | null
-}
-
-export interface CandidateVerdict {
-  readonly feasible: boolean
-  readonly driftMinutes: number
 }
 
 /** Every grid-aligned start inside `freeIntervals` that fits `durationMinutes`. */
@@ -35,42 +34,6 @@ export function enumerateCandidateStarts(
     }
   }
   return starts
-}
-
-/**
- * Window feasibility for one candidate (SPEC.md Section 8.6 step 3 and
- * Section 5.3's drift table). A StrictWindowRule requires full containment;
- * a FlexibleWindowRule allows drift up to its allowance. An activity with
- * neither is unconstrained.
- */
-export function evaluateCandidate(
-  resolved: ResolvedActivity,
-  start: number,
-  end: number
-): CandidateVerdict {
-  const { strictWindow, flexibleWindow } = resolved
-
-  if (strictWindow) {
-    return {
-      feasible: start >= strictWindow.start && end <= strictWindow.end,
-      driftMinutes: 0,
-    }
-  }
-
-  if (flexibleWindow) {
-    // Minutes of the activity before the window start, and after the window
-    // end — each capped against the other bound so a candidate entirely on
-    // one side isn't double-counted past its own duration.
-    const before = Math.max(0, Math.min(end, flexibleWindow.start) - start)
-    const after = Math.max(0, end - Math.max(start, flexibleWindow.end))
-    const driftMinutes = before + after
-    return {
-      feasible: driftMinutes <= flexibleWindow.maxDriftMinutes,
-      driftMinutes,
-    }
-  }
-
-  return { feasible: true, driftMinutes: 0 }
 }
 
 /**
