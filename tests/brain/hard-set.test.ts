@@ -43,6 +43,22 @@ describe("resolveFixedPlacement", () => {
       nestedIn: null,
     })
   })
+
+  it("resolves the spanning tail against tomorrow's own DST length, not today's (SPEC.md 11 case 12/DST)", () => {
+    // 2024-03-09 is an ordinary day; 2024-03-10 (tomorrow) is the
+    // spring-forward transition — the 2-3am hour is skipped, so "06:00"
+    // the next morning is only 5 real hours (300m) after midnight, not 6.
+    const preTransition = resolveDayFrame("2024-03-09", "America/New_York")
+    const rule: FixedRule = {
+      type: "fixed",
+      source: "template",
+      startWall: "22:00",
+      endWall: "06:00",
+    }
+    const placement = resolveFixedPlacement(rule, preTransition)
+    expect(placement.start).toBe(1320)
+    expect(placement.end - preTransition.lengthMinutes).toBe(300)
+  })
 })
 
 describe("placeFixedSet", () => {
@@ -85,6 +101,27 @@ describe("placeFixedSet", () => {
     ]
     const result = placeFixedSet(activities, dayFrame, 120)
     expect(result.skipped.get("early")).toBe("INFEASIBLE_HARD_CONSTRAINT")
+  })
+
+  it("marks a fixed activity infeasible when it collides with pre-existing anchor occupancy", () => {
+    // A carry-in block (or any other anchor) occupying [0, 360) is time a
+    // freshly-declared FixedRule can't simply search around — it was never
+    // subject to the free-interval search in the first place.
+    const activities = [
+      activity("Early Meeting")
+        .rank(1)
+        .minutes(60)
+        .fixed("00:00", "01:00")
+        .build(),
+    ]
+    const result = placeFixedSet(activities, dayFrame, 0, [
+      { start: 0, end: 360 },
+    ])
+    expect(result.placements.size).toBe(0)
+    expect(result.skipped.get("early-meeting")).toBe(
+      "INFEASIBLE_HARD_CONSTRAINT"
+    )
+    expect(result.diagnostics[0].code).toBe("FIXED_COLLISION")
   })
 })
 

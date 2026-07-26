@@ -633,6 +633,57 @@ function solveTick(
 }
 
 /**
+ * GENERATE_DAY (SPEC.md Section 8.3 step 4-5): the initial event for a day
+ * frame. `existing` is ordinarily empty, but a caller may seed it with
+ * yesterday's carry-in (SPEC.md Section 3.4) — any such anchor must be
+ * preserved verbatim and excluded from fresh candidate generation, exactly
+ * like every other event. Unlike TICK, there's no "nothing changed, echo
+ * back" short-circuit: backdating an empty `existing` trivially reports no
+ * change, but the day still needs its first real solve.
+ */
+function solveGenerate(
+  input: SolveInput,
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const { instances: backdated } = applyBackdating(input.existing, input.now)
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
+    extractAnchors(backdated)
+  const activitiesToSolve = todaysCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id)
+  )
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight,
+    input.now,
+    todaysCatalog,
+    anchorPlacements
+  )
+
+  return toResult(
+    input,
+    [...anchors, ...solved],
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    1
+  )
+}
+
+/**
  * The group key an event that targets one instance acts on: the whole
  * activity (all of a chunked plan's fragments) when it came from the
  * catalogue, or just that one instance's own id for an ad-hoc without an
@@ -851,6 +902,11 @@ function solveRestore(
  * harmless, but a sequence dependent bound to this instance's old span
  * could in principle lose its adjacency — `checkEventRejection` covers
  * that alongside every other event.
+ *
+ * Also legal against a `CARRIED_IN` block (SPEC.md 11 edge case 2): a
+ * midnight-spanning activity's overflow into today is just as finishable
+ * ahead of schedule as an ordinary ACTIVE one, and the same completion +
+ * re-solve logic applies unchanged once its state is treated as an anchor.
  */
 function solveFinishEarly(
   input: SolveInput & {
@@ -874,16 +930,18 @@ function solveFinishEarly(
       totalRanked
     )
   }
-  if (target.state !== "ACTIVE") {
+  if (target.state !== "ACTIVE" && target.state !== "CARRIED_IN") {
     return rejectionResult(
       input,
       "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ${target.state}, not ACTIVE — it can't be finished early.`,
+      `"${target.name}" is ${target.state}, not ACTIVE or CARRIED_IN — it can't be finished early.`,
       [target.id],
       constants,
       totalRanked
     )
   }
+  // A CARRIED_IN block (SPEC.md 11 edge case 2) has no actualStart of its
+  // own yet — it's been "running" since this day frame's own start.
   const actualStart = target.actualStart ?? target.plannedStart ?? at
   if (
     at < actualStart ||
@@ -1504,27 +1562,33 @@ function solveEditInstanceRules(
 /**
  * FINALISE_DAY (SPEC.md Section 9.8): backdate whatever residue is left,
  * snapshot it as today's closed record, and derive the carry-in list for
- * tomorrow's day frame from anything still PLANNED or ACTIVE — the engine's
- * only cross-day link; it holds no other state between days. Rejects
- * (INVALID_STATE_FOR_EVENT) if the day hasn't actually ended yet. Once this
- * succeeds, `solve()`'s `finalised` guard refuses every further event
- * against the same input. Carrying over a *partial* residue's remaining
- * duration (as opposed to its full original length) needs the
- * midnight-spanning arithmetic that's Step 12's job — this carries the
- * full activity over, which is the correct behavior for anything that
- * never started, and a documented simplification for anything ACTIVE but
- * unfinished at day's end.
+ * tomorrow's day frame — the engine's only cross-day link; it holds no
+ * other state between days. Rejects (INVALID_STATE_FOR_EVENT) if the day
+ * hasn't actually ended yet. Once this succeeds, `solve()`'s `finalised`
+ * guard refuses every further event against the same input.
+ *
+ * Only a residue whose stored `plannedEnd` genuinely overflows past
+ * `length_minutes` produces a carry-in (SPEC.md Section 3.4) — a
+ * midnight-spanning FixedRule (Section 5.1) or an EXTEND that pushed an
+ * ACTIVE instance's end past the boundary (edge case 10). Anything else
+ * still PLANNED/ACTIVE at this point is not "spanning", just unfinished,
+ * and is simply left as-is in today's own record; nothing carries forward
+ * for it. Today's own copy of a genuinely spanning instance is clamped to
+ * the day boundary ("placed to the day boundary" — edge case 1) and the
+ * overflow becomes a locked `CARRIED_IN` anchor occupying `[0, overflow)`
+ * on tomorrow's frame.
  */
 function solveFinaliseDay(
   input: SolveInput,
   constants: CostConstants,
   totalRanked: number
 ): SolveResult {
-  if (input.now < input.dayFrame.lengthMinutes) {
+  const lengthMinutes = input.dayFrame.lengthMinutes
+  if (input.now < lengthMinutes) {
     return rejectionResult(
       input,
       "INVALID_STATE_FOR_EVENT",
-      `The day can't be finalised before it ends (now=${input.now}, length=${input.dayFrame.lengthMinutes}).`,
+      `The day can't be finalised before it ends (now=${input.now}, length=${lengthMinutes}).`,
       [],
       constants,
       totalRanked
@@ -1532,34 +1596,45 @@ function solveFinaliseDay(
   }
 
   const { instances: backdated } = applyBackdating(input.existing, input.now)
-  const { diagnostics, status } = buildDiagnostics(backdated)
 
-  const carryIn: TimelineActivity[] = backdated
-    .filter((i) => i.state === "PLANNED" || i.state === "ACTIVE")
-    .map((i) => ({
-      ...i,
+  const today: TimelineActivity[] = []
+  const carryIn: TimelineActivity[] = []
+  for (const inst of backdated) {
+    const spanning =
+      (inst.state === "PLANNED" || inst.state === "ACTIVE") &&
+      inst.plannedEnd !== null &&
+      inst.plannedEnd > lengthMinutes
+    if (!spanning) {
+      today.push(inst)
+      continue
+    }
+    const overflow = (inst.plannedEnd as number) - lengthMinutes
+    today.push({
+      ...inst,
+      plannedEnd: lengthMinutes,
+      scheduledMinutes: lengthMinutes - (inst.plannedStart as number),
+    })
+    carryIn.push({
+      ...inst,
       state: "CARRIED_IN",
       completedSource: null,
-      plannedStart: null,
-      plannedEnd: null,
+      plannedStart: 0,
+      plannedEnd: overflow,
       actualStart: null,
       actualEnd: null,
-      scheduledMinutes: 0,
+      scheduledMinutes: overflow,
       spanningFromPreviousDay: true,
       locked: false,
       skipReason: null,
-    }))
+    })
+  }
 
-  const cost = scheduleCost(
-    backdated,
-    input.dayFrame.lengthMinutes,
-    totalRanked,
-    constants
-  )
+  const { diagnostics, status } = buildDiagnostics(today)
+  const cost = scheduleCost(today, lengthMinutes, totalRanked, constants)
   const timeline: Timeline = {
     dayFrame: input.dayFrame,
     revision: (input.revision ?? 0) + 1,
-    instances: backdated,
+    instances: today,
     diagnostics,
     cost,
     status,
@@ -1700,21 +1775,12 @@ export function solve(input: SolveInput): SolveResult {
     )
   }
 
-  const { instances, diagnostics, status } = runPipeline(
+  return solveGenerate(
     seededInput,
     constants,
     todaysCatalog,
-    [],
     resolve,
-    weight
-  )
-  return toResult(
-    seededInput,
-    instances,
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    1
+    weight,
+    totalRanked
   )
 }

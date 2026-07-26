@@ -93,6 +93,10 @@ describe("solve — FINALISE_DAY (SPEC.md 9.8)", () => {
       (i) => i.name === "Work"
     )!
     expect(stillActiveWork.state).toBe("ACTIVE")
+    // Placed to the day boundary (SPEC.md 11 edge case 1) — today's own
+    // record does not show the overflow past the frame's own length.
+    expect(stillActiveWork.plannedEnd).toBe(dayFrame.lengthMinutes)
+    expect(stillActiveWork.scheduledMinutes).toBe(dayFrame.lengthMinutes)
 
     const carriedWork = finalised.timeline.carryIn.find(
       (i) => i.name === "Work"
@@ -101,6 +105,12 @@ describe("solve — FINALISE_DAY (SPEC.md 9.8)", () => {
     expect(carriedWork?.state).toBe("CARRIED_IN")
     expect(carriedWork?.spanningFromPreviousDay).toBe(true)
     expect(carriedWork?.durationMinutes).toBe(60)
+    // Work was fixed 00:00-01:00 then extended by 1400 minutes: planned end
+    // 1460 on a 1440-minute day overflows by exactly 20 minutes, occupying
+    // [0, 20) on tomorrow's frame (SPEC.md Section 3.4).
+    expect(carriedWork?.plannedStart).toBe(0)
+    expect(carriedWork?.plannedEnd).toBe(20)
+    expect(carriedWork?.scheduledMinutes).toBe(20)
   })
 
   it("refuses every further event against an already-finalised input", () => {
