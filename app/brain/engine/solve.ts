@@ -843,6 +843,144 @@ function solveFinishEarly(
   )
 }
 
+/**
+ * A minimal, documented slice of the Section 10.2 rejection comparison:
+ * "comparison is against the input timeline, not against feasibility in
+ * the abstract" — a mandatory activity that was already skipped before the
+ * event doesn't trigger a rejection, only one the event itself pushed out.
+ * EXTEND is the first event that needs this; the full rejection layer
+ * (every code, every event) is Step 11 — this only covers
+ * MANDATORY_UNPLACEABLE, the one EXTEND's own worked examples exercise.
+ */
+function findNewlyUnplaceableMandatory(
+  catalog: readonly Activity[],
+  before: readonly TimelineActivity[],
+  after: readonly TimelineActivity[]
+): TimelineActivity | null {
+  const mandatoryIds = new Set(catalog.filter(hasMandatory).map((a) => a.id))
+  const priorStateByActivity = new Map(
+    before.map((i) => [i.activityId, i.state])
+  )
+  for (const inst of after) {
+    if (!inst.activityId || !mandatoryIds.has(inst.activityId)) continue
+    if (inst.state !== "SKIPPED") continue
+    const priorState = priorStateByActivity.get(inst.activityId)
+    if (priorState && priorState !== "SKIPPED") return inst
+  }
+  return null
+}
+
+/**
+ * EXTEND (SPEC.md Section 9.4): push an ACTIVE instance's planned end out
+ * by `minutes` (a positive multiple of GRID) and freeze it there, then
+ * re-solve the remainder at the ordinary `now` boundary. Unlike
+ * FINISH_EARLY, this can be rejected — if it would newly displace a
+ * mandatory activity that was placed before the event, the input timeline
+ * is returned unchanged with a MANDATORY_UNPLACEABLE rejection instead.
+ */
+function solveExtend(
+  input: SolveInput & {
+    readonly event: { type: "EXTEND"; instanceId: string; minutes: number }
+  },
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const { instanceId, minutes } = input.event
+  const target = input.existing.find((i) => i.id === instanceId)
+  if (!target) {
+    return rejectionResult(
+      input,
+      "UNKNOWN_INSTANCE",
+      `No instance "${instanceId}" in the current timeline.`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+  if (target.state !== "ACTIVE") {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" is ${target.state}, not ACTIVE — it can't be extended.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+  if (
+    minutes <= 0 ||
+    minutes % constants.GRID !== 0 ||
+    target.plannedEnd === null
+  ) {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `An extension must be a positive multiple of ${constants.GRID} minutes.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  const extended: TimelineActivity = {
+    ...target,
+    plannedEnd: target.plannedEnd + minutes,
+    scheduledMinutes: target.scheduledMinutes + minutes,
+  }
+  const workingExisting = input.existing.map((i) =>
+    i.id === target.id ? extended : i
+  )
+
+  const { anchors, anchorActivityIds, baseOccupied } =
+    extractAnchors(workingExisting)
+  const activitiesToSolve = todaysCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id)
+  )
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight
+  )
+
+  const candidateInstances = [...anchors, ...solved]
+  const regressed = findNewlyUnplaceableMandatory(
+    todaysCatalog,
+    input.existing,
+    candidateInstances
+  )
+  if (regressed) {
+    return rejectionResult(
+      input,
+      "MANDATORY_UNPLACEABLE",
+      `Extending "${target.name}" would leave "${regressed.name}" unplaceable.`,
+      [regressed.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  return toResult(
+    input,
+    candidateInstances,
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
 export function solve(input: SolveInput): SolveResult {
   const constants = resolveConstants(input.constants)
   const weekday = weekdayOf(input.dayFrame.date)
@@ -896,6 +1034,16 @@ export function solve(input: SolveInput): SolveResult {
   }
   if (input.event.type === "FINISH_EARLY") {
     return solveFinishEarly(
+      { ...input, event: input.event },
+      constants,
+      todaysCatalog,
+      resolve,
+      weight,
+      totalRanked
+    )
+  }
+  if (input.event.type === "EXTEND") {
+    return solveExtend(
       { ...input, event: input.event },
       constants,
       todaysCatalog,
