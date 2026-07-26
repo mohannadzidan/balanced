@@ -170,7 +170,7 @@ export function resolveWallClockToInstant(
   }
 }
 
-function addDaysToDateString(date: string, days: number): string {
+export function addDays(date: string, days: number): string {
   const [y, mo, d] = date.split("-").map(Number)
   return new Date(Date.UTC(y, mo - 1, d + days)).toISOString().slice(0, 10)
 }
@@ -179,7 +179,7 @@ function addDaysToDateString(date: string, days: number): string {
 export function resolveDayFrame(date: string, timezone: string): DayFrame {
   const [y, mo, d] = date.split("-").map(Number)
   const start = resolveWallClockToInstant(y, mo, d, 0, 0, timezone)
-  const nextDate = addDaysToDateString(date, 1)
+  const nextDate = addDays(date, 1)
   const [ny, nmo, nd] = nextDate.split("-").map(Number)
   const end = resolveWallClockToInstant(ny, nmo, nd, 0, 0, timezone)
   const lengthMinutes = Math.round((end.instant - start.instant) / 60_000)

@@ -1,8 +1,8 @@
-import { computeFreeIntervals } from "./intervals"
+import { computeFreeIntervals, intervalsOverlap } from "./intervals"
 import { overlapRuleOf, resolveAbsoluteExclusions } from "./overlap"
 import { enumerateFeasiblePlacementsAcrossLengths } from "./placement"
 import type { ResolvedActivity } from "./resolve"
-import { resolveWallClock } from "./time"
+import { addDays, resolveDayFrame, resolveWallClock } from "./time"
 import type {
   Activity,
   CostConstants,
@@ -26,8 +26,12 @@ function shrinkFloorOf(activity: Activity): number {
 
 /**
  * Resolves a FixedRule's wall-clock endpoints to offsets in `dayFrame`.
- * `end_wall <= start_wall` means the block spans midnight (Section 5.1);
- * DST-exact carry-in arithmetic is refined in the midnight-spanning step.
+ * `end_wall <= start_wall` means the block spans midnight (Section 5.1): its
+ * end belongs to the following calendar date, which may have a different
+ * DST length than today — resolving it against today's `dayFrame` plus
+ * today's own `lengthMinutes` would silently absorb or fabricate an hour on
+ * a transition night, so it's resolved against tomorrow's own DayFrame
+ * instead (Section 3.3/3.4).
  */
 export function resolveFixedPlacement(
   rule: FixedRule,
@@ -35,8 +39,11 @@ export function resolveFixedPlacement(
 ): Placement {
   const start = resolveWallClock(rule.startWall, dayFrame)
   const rawEnd = resolveWallClock(rule.endWall, dayFrame)
-  const end = rawEnd <= start ? rawEnd + dayFrame.lengthMinutes : rawEnd
-  return { start, end, nestedIn: null }
+  if (rawEnd > start) return { start, end: rawEnd, nestedIn: null }
+
+  const tomorrow = resolveDayFrame(addDays(dayFrame.date, 1), dayFrame.timezone)
+  const overflow = resolveWallClock(rule.endWall, tomorrow)
+  return { start, end: dayFrame.lengthMinutes + overflow, nestedIn: null }
 }
 
 export interface FixedSetOutcome {
@@ -49,12 +56,18 @@ export interface FixedSetOutcome {
  * Phase 1, sub-step 1 (SPEC.md Section 8.4): place every FixedRule activity
  * at its declared time. Two fixed blocks that overlap are a hard
  * configuration error — both are marked infeasible with a blocking
- * diagnostic rather than one arbitrarily winning.
+ * diagnostic rather than one arbitrarily winning. A fixed block colliding
+ * with time already spoken for by an anchor (most notably a carry-in block
+ * from yesterday — Section 3.4: "nothing may be scheduled before a carry-in
+ * block ends") is the same kind of hard error, since a declared exact time
+ * is never subject to the ordinary free-interval search that anchors
+ * normally clear out of.
  */
 export function placeFixedSet(
   activities: readonly Activity[],
   dayFrame: DayFrame,
-  freezeBoundary: number
+  freezeBoundary: number,
+  baseOccupied: readonly Interval[] = []
 ): FixedSetOutcome {
   const withFixed = activities
     .map((activity) => {
@@ -72,10 +85,15 @@ export function placeFixedSet(
     if (withFixed[i].placement.start < freezeBoundary) {
       conflicted.add(withFixed[i].activity.id)
     }
+    if (
+      baseOccupied.some((occ) => intervalsOverlap(withFixed[i].placement, occ))
+    ) {
+      conflicted.add(withFixed[i].activity.id)
+    }
     for (let j = i + 1; j < withFixed.length; j++) {
       const a = withFixed[i].placement
       const b = withFixed[j].placement
-      if (a.start < b.end && b.start < a.end) {
+      if (intervalsOverlap(a, b)) {
         conflicted.add(withFixed[i].activity.id)
         conflicted.add(withFixed[j].activity.id)
       }

@@ -189,7 +189,12 @@ function runPipeline(
 
   // Phase 1a: FixedRule activities, placed at their declared times.
   const fixedSet = hostPool.filter(hasFixed)
-  const fixedOutcome = placeFixedSet(fixedSet, input.dayFrame, freezeBoundary)
+  const fixedOutcome = placeFixedSet(
+    fixedSet,
+    input.dayFrame,
+    freezeBoundary,
+    baseOccupied
+  )
   const occupiedAfterFixed: Interval[] = [
     ...baseOccupied,
     ...[...fixedOutcome.placements.values()].map((p) => ({
