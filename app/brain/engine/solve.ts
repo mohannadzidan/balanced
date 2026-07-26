@@ -1591,12 +1591,28 @@ export function solve(input: SolveInput): SolveResult {
     return solveFinaliseDay(input, constants, totalRanked)
   }
 
-  const weekday = weekdayOf(input.dayFrame.date)
+  // SPEC.md Section 8.3 step 4 / 3.4: carry-in blocks from a prior day's
+  // FINALISE_DAY are anchors from this day's very first solve onward. The
+  // caller supplies them exactly once — typically alongside GENERATE_DAY —
+  // and every later event of the same day already carries them forward
+  // inside `existing` (the same convention `existing` itself already
+  // relies on for ACTIVE/COMPLETED anchors), so folding them in here is
+  // safe by calling convention rather than by de-duplication.
+  const seededInput: SolveInput =
+    input.carryIn.length > 0
+      ? {
+          ...input,
+          existing: [...input.carryIn, ...input.existing],
+          carryIn: [],
+        }
+      : input
+
+  const weekday = weekdayOf(seededInput.dayFrame.date)
   const resolvedCache = new Map<string, ResolvedActivity>()
   const resolve = (activity: Activity): ResolvedActivity => {
     let resolved = resolvedCache.get(activity.id)
     if (!resolved) {
-      resolved = resolveActivity(activity, input.dayFrame)
+      resolved = resolveActivity(activity, seededInput.dayFrame)
       resolvedCache.set(activity.id, resolved)
     }
     return resolved
@@ -1606,17 +1622,17 @@ export function solve(input: SolveInput): SolveResult {
 
   const todaysCatalog = applyInstanceRuleOverrides(
     [
-      ...input.catalog.filter(
+      ...seededInput.catalog.filter(
         (a) => a.enabled && a.allowedDays.includes(weekday)
       ),
-      ...adhocActivitiesFrom(input.existing, weekday),
+      ...adhocActivitiesFrom(seededInput.existing, weekday),
     ],
-    input.existing
+    seededInput.existing
   )
 
-  if (input.event.type === "TICK") {
+  if (seededInput.event.type === "TICK") {
     return solveTick(
-      input,
+      seededInput,
       constants,
       todaysCatalog,
       resolve,
@@ -1624,9 +1640,9 @@ export function solve(input: SolveInput): SolveResult {
       totalRanked
     )
   }
-  if (input.event.type === "SKIP") {
+  if (seededInput.event.type === "SKIP") {
     return solveSkip(
-      { ...input, event: input.event },
+      { ...seededInput, event: seededInput.event },
       constants,
       todaysCatalog,
       resolve,
@@ -1634,9 +1650,9 @@ export function solve(input: SolveInput): SolveResult {
       totalRanked
     )
   }
-  if (input.event.type === "RESTORE") {
+  if (seededInput.event.type === "RESTORE") {
     return solveRestore(
-      { ...input, event: input.event },
+      { ...seededInput, event: seededInput.event },
       constants,
       todaysCatalog,
       resolve,
@@ -1644,9 +1660,9 @@ export function solve(input: SolveInput): SolveResult {
       totalRanked
     )
   }
-  if (input.event.type === "FINISH_EARLY") {
+  if (seededInput.event.type === "FINISH_EARLY") {
     return solveFinishEarly(
-      { ...input, event: input.event },
+      { ...seededInput, event: seededInput.event },
       constants,
       todaysCatalog,
       resolve,
@@ -1654,9 +1670,9 @@ export function solve(input: SolveInput): SolveResult {
       totalRanked
     )
   }
-  if (input.event.type === "EXTEND") {
+  if (seededInput.event.type === "EXTEND") {
     return solveExtend(
-      { ...input, event: input.event },
+      { ...seededInput, event: seededInput.event },
       constants,
       todaysCatalog,
       resolve,
@@ -1664,18 +1680,18 @@ export function solve(input: SolveInput): SolveResult {
       totalRanked
     )
   }
-  if (input.event.type === "ADD_ADHOC") {
+  if (seededInput.event.type === "ADD_ADHOC") {
     return solveAddAdhoc(
-      { ...input, event: input.event },
+      { ...seededInput, event: seededInput.event },
       constants,
       todaysCatalog,
       resolve,
       totalRanked
     )
   }
-  if (input.event.type === "EDIT_INSTANCE_RULES") {
+  if (seededInput.event.type === "EDIT_INSTANCE_RULES") {
     return solveEditInstanceRules(
-      { ...input, event: input.event },
+      { ...seededInput, event: seededInput.event },
       constants,
       todaysCatalog,
       resolve,
@@ -1685,7 +1701,7 @@ export function solve(input: SolveInput): SolveResult {
   }
 
   const { instances, diagnostics, status } = runPipeline(
-    input,
+    seededInput,
     constants,
     todaysCatalog,
     [],
@@ -1693,7 +1709,7 @@ export function solve(input: SolveInput): SolveResult {
     weight
   )
   return toResult(
-    input,
+    seededInput,
     instances,
     diagnostics,
     status,
