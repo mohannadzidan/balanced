@@ -1,11 +1,21 @@
 import { computeFreeIntervals } from "./intervals"
 import { placeActivity } from "./placement"
-import type { Activity, Interval, Placement, SkipReason } from "./types"
+import type { ResolvedActivity } from "./resolve"
+import type {
+  Activity,
+  CostConstants,
+  Interval,
+  Placement,
+  SkipReason,
+} from "./types"
 
 export interface GreedyContext {
   readonly freezeBoundary: number
   readonly grid: number
   readonly lengthMinutes: number
+  readonly constants: CostConstants
+  readonly resolve: (activity: Activity) => ResolvedActivity
+  readonly weight: (activity: Activity) => number
 }
 
 export interface GreedyOutcome {
@@ -37,11 +47,13 @@ export function placeGreedy(
       ctx.freezeBoundary,
       ctx.lengthMinutes
     )
-    const result = placeActivity(activity, {
+    const result = placeActivity(ctx.resolve(activity), {
       freeIntervals,
       freezeBoundary: ctx.freezeBoundary,
       grid: ctx.grid,
       lengthMinutes: ctx.lengthMinutes,
+      weight: ctx.weight(activity),
+      constants: ctx.constants,
     })
     if (result.placement) {
       placements.set(activity.id, result.placement)

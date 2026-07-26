@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest"
 
+import { DEFAULT_COST_CONSTANTS } from "@/app/brain/engine/constants"
 import {
   placeFixedSet,
   placeHardSet,
   resolveFixedPlacement,
 } from "@/app/brain/engine/hard-set"
+import { resolveActivity } from "@/app/brain/engine/resolve"
 import { resolveDayFrame } from "@/app/brain/engine/time"
-import type { FixedRule } from "@/app/brain/engine/types"
+import type { Activity, FixedRule } from "@/app/brain/engine/types"
 import { activity } from "./support/fixtures"
 
 const dayFrame = resolveDayFrame("2024-06-17", "UTC")
+const resolve = (a: Activity) => resolveActivity(a, dayFrame)
+const weight = () => 1
 
 describe("resolveFixedPlacement", () => {
   it("resolves an ordinary same-day window", () => {
@@ -90,6 +94,9 @@ describe("placeHardSet", () => {
     grid: 5,
     lengthMinutes: 1440,
     nodeLimit: 5000,
+    constants: DEFAULT_COST_CONSTANTS,
+    resolve,
+    weight,
   }
 
   it("places a single mandatory activity in the first available slot", () => {

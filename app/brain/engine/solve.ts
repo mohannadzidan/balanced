@@ -1,14 +1,17 @@
-import { DEFAULT_COST_CONSTANTS } from "./constants"
+import { priorityWeight, scheduleCost } from "./cost"
+import { resolveConstants } from "./constants"
+import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
+import { resolveActivity, type ResolvedActivity } from "./resolve"
 import { weekdayOf } from "./time"
 import type {
   Activity,
-  CostBreakdown,
   DayFrame,
   Diagnostic,
   Interval,
   Placement,
+  Relaxation,
   SkipReason,
   SolveInput,
   SolveResult,
@@ -16,17 +19,6 @@ import type {
   TimelineActivity,
   TimelineStatus,
 } from "./types"
-
-const ZERO_COST: CostBreakdown = {
-  total: 0,
-  skip: 0,
-  shrink: 0,
-  chunk: 0,
-  drift: 0,
-  gap: 0,
-  idle: 0,
-  perInstance: {},
-}
 
 function hasFixed(activity: Activity): boolean {
   return activity.rules.some((r) => r.type === "fixed")
@@ -36,11 +28,23 @@ function hasMandatory(activity: Activity): boolean {
   return activity.rules.some((r) => r.type === "mandatory")
 }
 
+function relaxationsFor(
+  resolved: ResolvedActivity,
+  placement: Placement | null
+): Relaxation[] {
+  if (!placement) return []
+  const verdict = evaluateCandidate(resolved, placement.start, placement.end)
+  return verdict.driftMinutes > 0
+    ? [{ type: "drift", minutes: verdict.driftMinutes }]
+    : []
+}
+
 function freshInstance(
   activity: Activity,
   dayFrame: DayFrame,
   placement: Placement | null,
-  skipReason: SkipReason | null
+  skipReason: SkipReason | null,
+  relaxations: readonly Relaxation[]
 ): TimelineActivity {
   return {
     id: activity.id,
@@ -63,29 +67,38 @@ function freshInstance(
     hostInstanceId: placement?.nestedIn ?? null,
     isAdhoc: false,
     spanningFromPreviousDay: false,
-    relaxations: [],
+    relaxations,
     locked: false,
     skipReason,
   }
 }
 
 /**
- * Engine build step 5 (SPEC.md Section 16): the two-pass solver structure.
- * Phase 1 places the hard set (FixedRule, then MandatoryRule) before
- * anything discretionary is considered, so a low-priority mandatory
- * activity is never crowded out by higher-priority optional ones. Phase 2
- * greedily places the rest by priority rank. Window rules, shrink, sequence,
- * overlap, cost-based candidate selection, and events all land in later
- * build steps — `GENERATE_DAY` only, cost is still a zero placeholder.
+ * Engine build step 6 (SPEC.md Section 16): StrictWindowRule and
+ * FlexibleWindowRule feasibility, with cost-aware candidate selection now
+ * that drift has a price. Shrink, sequence, overlap, and events remain for
+ * later build steps — `GENERATE_DAY` only.
  */
 export function solve(input: SolveInput): SolveResult {
-  const grid = input.constants?.GRID ?? DEFAULT_COST_CONSTANTS.GRID
-  const nodeLimit =
-    input.constants?.HARD_SET_NODE_LIMIT ??
-    DEFAULT_COST_CONSTANTS.HARD_SET_NODE_LIMIT
+  const constants = resolveConstants(input.constants)
+  const grid = constants.GRID
+  const nodeLimit = constants.HARD_SET_NODE_LIMIT
   const freezeBoundary = input.now
   const lengthMinutes = input.dayFrame.lengthMinutes
   const weekday = weekdayOf(input.dayFrame.date)
+  const totalRanked = input.catalog.length
+
+  const resolvedCache = new Map<string, ResolvedActivity>()
+  const resolve = (activity: Activity): ResolvedActivity => {
+    let resolved = resolvedCache.get(activity.id)
+    if (!resolved) {
+      resolved = resolveActivity(activity, input.dayFrame)
+      resolvedCache.set(activity.id, resolved)
+    }
+    return resolved
+  }
+  const weight = (activity: Activity): number =>
+    priorityWeight(activity.priorityRank, totalRanked)
 
   const todaysCatalog = input.catalog.filter(
     (a) => a.enabled && a.allowedDays.includes(weekday)
@@ -108,6 +121,9 @@ export function solve(input: SolveInput): SolveResult {
     grid,
     lengthMinutes,
     nodeLimit,
+    constants,
+    resolve,
+    weight,
   })
   const occupiedAfterHardSet: Interval[] = [
     ...occupiedAfterFixed,
@@ -127,6 +143,9 @@ export function solve(input: SolveInput): SolveResult {
     freezeBoundary,
     grid,
     lengthMinutes,
+    constants,
+    resolve,
+    weight,
   })
 
   const instances = todaysCatalog.map((activity) => {
@@ -140,7 +159,14 @@ export function solve(input: SolveInput): SolveResult {
       hardOutcome.skipped.get(activity.id) ??
       greedyOutcome.skipped.get(activity.id) ??
       null
-    return freshInstance(activity, input.dayFrame, placement, skipReason)
+    const relaxations = relaxationsFor(resolve(activity), placement)
+    return freshInstance(
+      activity,
+      input.dayFrame,
+      placement,
+      skipReason,
+      relaxations
+    )
   })
 
   const diagnostics: Diagnostic[] = [...fixedOutcome.diagnostics]
@@ -164,12 +190,14 @@ export function solve(input: SolveInput): SolveResult {
     }
   }
 
+  const cost = scheduleCost(instances, lengthMinutes, totalRanked, constants)
+
   const timeline: Timeline = {
     dayFrame: input.dayFrame,
     revision: 1,
     instances,
     diagnostics,
-    cost: ZERO_COST,
+    cost,
     status,
     solvedAtOffset: input.now,
     finalised: false,
@@ -180,7 +208,7 @@ export function solve(input: SolveInput): SolveResult {
     timeline,
     rejection: null,
     diagnostics,
-    cost: ZERO_COST,
+    cost,
     trace: null,
   }
 }

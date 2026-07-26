@@ -1,8 +1,10 @@
 import { computeFreeIntervals } from "./intervals"
 import { enumerateFeasiblePlacements } from "./placement"
+import type { ResolvedActivity } from "./resolve"
 import { resolveWallClock } from "./time"
 import type {
   Activity,
+  CostConstants,
   DayFrame,
   Diagnostic,
   FixedRule,
@@ -107,6 +109,9 @@ export interface HardSetContext {
   readonly grid: number
   readonly lengthMinutes: number
   readonly nodeLimit: number
+  readonly constants: CostConstants
+  readonly resolve: (activity: Activity) => ResolvedActivity
+  readonly weight: (activity: Activity) => number
 }
 
 export interface HardSetOutcome {
@@ -125,11 +130,13 @@ function candidatesFor(
     ctx.freezeBoundary,
     ctx.lengthMinutes
   )
-  return enumerateFeasiblePlacements(activity, {
+  return enumerateFeasiblePlacements(ctx.resolve(activity), {
     freeIntervals,
     freezeBoundary: ctx.freezeBoundary,
     grid: ctx.grid,
     lengthMinutes: ctx.lengthMinutes,
+    weight: ctx.weight(activity),
+    constants: ctx.constants,
   })
 }
 

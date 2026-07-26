@@ -4,6 +4,6 @@ exports[`solve — v0 (duration and priority only) > renders a deterministic ASC
 "00:00 ├ Work  480m  00:00-08:00
 08:00 ├ Gym  60m  08:00-09:00
 
-cost: total 0 | skip 0 | shrink 0 | chunk 0 | drift 0 | gap 0 | idle 0
+cost: total 900 | skip 0 | shrink 0 | chunk 0 | drift 0 | gap 0 | idle 900
 status: OK"
 `;
