@@ -5,7 +5,7 @@ import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
 import { resolveActivity, type ResolvedActivity } from "./resolve"
-import { isDependent, placeSequenceChain } from "./sequence"
+import { isDependent, placeSequenceChain, sequenceRuleOf } from "./sequence"
 import { weekdayOf } from "./time"
 import { validateActivity, validateCatalog } from "./validation"
 import type {
@@ -453,7 +453,8 @@ function rejectionResult(
   message: string,
   conflictingInstanceIds: readonly string[],
   constants: CostConstants,
-  totalRanked: number
+  totalRanked: number,
+  bestEffortTimeline: Timeline | null = null
 ): SolveResult {
   const { diagnostics, status } = buildDiagnostics(input.existing)
   const cost = scheduleCost(
@@ -477,8 +478,8 @@ function rejectionResult(
     code,
     message,
     conflictingInstanceIds,
-    diagnostics,
-    bestEffortTimeline: null,
+    diagnostics: bestEffortTimeline?.diagnostics ?? diagnostics,
+    bestEffortTimeline,
   }
   return {
     status: "REJECTED",
@@ -712,7 +713,7 @@ function solveSkip(
     anchorPlacements
   )
 
-  return toResult(
+  const speculative = toResult(
     input,
     [...anchors, skippedInstance, ...solved],
     diagnostics,
@@ -721,6 +722,23 @@ function solveSkip(
     totalRanked,
     (input.revision ?? 0) + 1
   )
+  const violation = checkEventRejection(
+    todaysCatalog,
+    input.existing,
+    speculative.timeline.instances
+  )
+  if (violation) {
+    return rejectionResult(
+      input,
+      violation.code,
+      violation.message,
+      violation.instanceIds,
+      constants,
+      totalRanked,
+      speculative.timeline
+    )
+  }
+  return speculative
 }
 
 /**
@@ -729,10 +747,10 @@ function solveSkip(
  * before re-solving — since it's no longer `locked`, its activity is a
  * completely ordinary candidate again. If there's genuinely no room, it
  * comes back SKIPPED with whatever reason the pipeline finds this time,
- * not necessarily `USER_SKIPPED`. RESTORE can in principle be rejected per
- * SPEC.md Section 10.2 if it regresses another activity — that comparison
- * belongs to the Section 11 rejection layer and isn't implemented yet, so
- * RESTORE never rejects here beyond the unknown/wrong-state checks below.
+ * not necessarily `USER_SKIPPED` — that's not itself a rejection (the
+ * activity being restored was already SKIPPED beforehand, so
+ * `checkEventRejection` never blames this event for it), but restoring one
+ * activity can still legitimately displace and reject a *different* one.
  */
 function solveRestore(
   input: SolveInput & {
@@ -789,7 +807,7 @@ function solveRestore(
     anchorPlacements
   )
 
-  return toResult(
+  const speculative = toResult(
     input,
     [...anchors, ...solved],
     diagnostics,
@@ -798,6 +816,23 @@ function solveRestore(
     totalRanked,
     (input.revision ?? 0) + 1
   )
+  const violation = checkEventRejection(
+    todaysCatalog,
+    input.existing,
+    speculative.timeline.instances
+  )
+  if (violation) {
+    return rejectionResult(
+      input,
+      violation.code,
+      violation.message,
+      violation.instanceIds,
+      constants,
+      totalRanked,
+      speculative.timeline
+    )
+  }
+  return speculative
 }
 
 /**
@@ -807,8 +842,10 @@ function solveRestore(
  * and the old planned end is immediately available to the rest of the day.
  * There's no separate "reuse the freed time" step: a from-scratch re-solve
  * of everything not anchored naturally restores whatever a previously
- * shrunk or skipped activity can now fit. Never rejected beyond the
- * unknown/wrong-state/out-of-range checks below.
+ * shrunk or skipped activity can now fit. Freeing time is normally
+ * harmless, but a sequence dependent bound to this instance's old span
+ * could in principle lose its adjacency — `checkEventRejection` covers
+ * that alongside every other event.
  */
 function solveFinishEarly(
   input: SolveInput & {
@@ -891,7 +928,7 @@ function solveFinishEarly(
     anchorPlacements
   )
 
-  return toResult(
+  const speculative = toResult(
     input,
     [...anchors, ...solved],
     diagnostics,
@@ -900,42 +937,116 @@ function solveFinishEarly(
     totalRanked,
     (input.revision ?? 0) + 1
   )
+  const violation = checkEventRejection(
+    todaysCatalog,
+    input.existing,
+    speculative.timeline.instances
+  )
+  if (violation) {
+    return rejectionResult(
+      input,
+      violation.code,
+      violation.message,
+      violation.instanceIds,
+      constants,
+      totalRanked,
+      speculative.timeline
+    )
+  }
+  return speculative
+}
+
+interface EventRejection {
+  readonly code: RejectionCode
+  readonly message: string
+  readonly instanceIds: readonly string[]
 }
 
 /**
- * A minimal, documented slice of the Section 10.2 rejection comparison:
- * "comparison is against the input timeline, not against feasibility in
- * the abstract" — a mandatory activity that was already skipped before the
- * event doesn't trigger a rejection, only one the event itself pushed out.
- * EXTEND is the first event that needs this; the full rejection layer
- * (every code, every event) is Step 11 — this only covers
- * MANDATORY_UNPLACEABLE, the one EXTEND's own worked examples exercise.
+ * SPEC.md Section 10.2's event-time rejection comparison, generalized across
+ * every code that comparison covers: "comparison is against the input
+ * timeline, not against feasibility in the abstract" — an activity already
+ * skipped before the event doesn't trigger a rejection, only one the event
+ * itself pushed out. Every user-intent handler runs its speculative solve
+ * through this once, before committing to it. `SPANS_FROZEN_REGION` isn't
+ * checked here: anchors (COMPLETED/CARRIED_IN) are excluded from re-solving
+ * entirely, so the pipeline itself cannot alter one — that code only ever
+ * arises from the top-level finalised-day guard in `solve()`.
  */
-function findNewlyUnplaceableMandatory(
+function checkEventRejection(
   catalog: readonly Activity[],
   before: readonly TimelineActivity[],
   after: readonly TimelineActivity[]
-): TimelineActivity | null {
-  const mandatoryIds = new Set(catalog.filter(hasMandatory).map((a) => a.id))
-  const priorStateByActivity = new Map(
-    before.map((i) => [i.activityId, i.state])
-  )
-  for (const inst of after) {
-    if (!inst.activityId || !mandatoryIds.has(inst.activityId)) continue
-    if (inst.state !== "SKIPPED") continue
-    const priorState = priorStateByActivity.get(inst.activityId)
-    if (priorState && priorState !== "SKIPPED") return inst
+): EventRejection | null {
+  const byActivityId = new Map(catalog.map((a) => [a.id, a]))
+  const priorByActivity = new Map<string, TimelineActivity>()
+  for (const inst of before) {
+    if (inst.activityId) priorByActivity.set(inst.activityId, inst)
   }
+  const afterByActivity = new Map<string, TimelineActivity>()
+  for (const inst of after) {
+    if (inst.activityId) afterByActivity.set(inst.activityId, inst)
+  }
+
+  for (const inst of after) {
+    if (!inst.activityId || inst.state !== "SKIPPED") continue
+    const prior = priorByActivity.get(inst.activityId)
+    if (!prior || prior.state === "SKIPPED") continue
+    const activity = byActivityId.get(inst.activityId)
+    if (!activity) continue
+
+    if (inst.skipReason === "INFEASIBLE_HARD_CONSTRAINT") {
+      const code: RejectionCode = hasFixed(activity)
+        ? "FIXED_COLLISION"
+        : "MANDATORY_UNPLACEABLE"
+      const reason =
+        code === "FIXED_COLLISION"
+          ? "its fixed time now collides with another fixed activity"
+          : "it is mandatory but this action would leave it unplaceable"
+      return {
+        code,
+        message: `"${activity.name}" can't be placed: ${reason}.`,
+        instanceIds: [inst.id],
+      }
+    }
+
+    if (inst.skipReason === "WINDOW_UNSATISFIABLE") {
+      const wasGuest = prior.hostInstanceId !== null
+      return {
+        code: wasGuest ? "GUEST_WINDOW_VIOLATED" : "STRICT_WINDOW_VIOLATED",
+        message: wasGuest
+          ? `"${activity.name}" no longer fits within its own strict window now that its host has moved.`
+          : `"${activity.name}"'s strict window can no longer be satisfied.`,
+        instanceIds: [inst.id],
+      }
+    }
+
+    if (inst.skipReason === "NO_FREE_SPACE" && isDependent(activity)) {
+      const rule = sequenceRuleOf(activity)
+      const hostAfter = rule
+        ? afterByActivity.get(rule.linkedActivityId)
+        : undefined
+      if (!hostAfter || hostAfter.state !== "SKIPPED") {
+        return {
+          code: "SEQUENCE_UNSATISFIABLE",
+          message: `"${activity.name}" can no longer be placed adjacent to its host.`,
+          instanceIds: [inst.id],
+        }
+      }
+    }
+  }
+
   return null
 }
 
 /**
  * EXTEND (SPEC.md Section 9.4): push an ACTIVE instance's planned end out
  * by `minutes` (a positive multiple of GRID) and freeze it there, then
- * re-solve the remainder at the ordinary `now` boundary. Unlike
- * FINISH_EARLY, this can be rejected — if it would newly displace a
- * mandatory activity that was placed before the event, the input timeline
- * is returned unchanged with a MANDATORY_UNPLACEABLE rejection instead.
+ * re-solve the remainder at the ordinary `now` boundary. This is the event
+ * SPEC.md's own worked examples (14.2, 14.3) use to exercise rejection: if
+ * it newly displaces a mandatory activity that was placed before the event,
+ * the input timeline is returned unchanged with a rejection instead —
+ * `checkEventRejection` decides exactly which code.
  */
 function solveExtend(
   input: SolveInput & {
@@ -1015,32 +1126,32 @@ function solveExtend(
     anchorPlacements
   )
 
-  const candidateInstances = [...anchors, ...solved]
-  const regressed = findNewlyUnplaceableMandatory(
-    todaysCatalog,
-    input.existing,
-    candidateInstances
-  )
-  if (regressed) {
-    return rejectionResult(
-      input,
-      "MANDATORY_UNPLACEABLE",
-      `Extending "${target.name}" would leave "${regressed.name}" unplaceable.`,
-      [regressed.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  return toResult(
+  const speculative = toResult(
     input,
-    candidateInstances,
+    [...anchors, ...solved],
     diagnostics,
     status,
     constants,
     totalRanked,
     (input.revision ?? 0) + 1
   )
+  const violation = checkEventRejection(
+    todaysCatalog,
+    input.existing,
+    speculative.timeline.instances
+  )
+  if (violation) {
+    return rejectionResult(
+      input,
+      violation.code,
+      violation.message,
+      violation.instanceIds,
+      constants,
+      totalRanked,
+      speculative.timeline
+    )
+  }
+  return speculative
 }
 
 /**
@@ -1053,7 +1164,10 @@ function solveExtend(
  * reading a clock or a random source. Rejected (INVALID_STATE_FOR_EVENT)
  * if the payload fails the same catalogue validation a template would —
  * incompatible rules, off-grid values, a colliding priority rank, and so
- * on (SPEC.md Section 10.1).
+ * on (SPEC.md Section 10.1). An ad-hoc that outranks and displaces existing
+ * activities is legal (SPEC.md 11 edge case 16) — only a genuine regression
+ * of a previously-placed activity (worked example 14.4: a fixed ad-hoc
+ * squeezing out a mandatory Work) is rejected, via `checkEventRejection`.
  */
 function solveAddAdhoc(
   input: SolveInput & {
@@ -1125,7 +1239,7 @@ function solveAddAdhoc(
       : inst
   )
 
-  return toResult(
+  const speculative = toResult(
     input,
     finalInstances,
     diagnostics,
@@ -1134,6 +1248,23 @@ function solveAddAdhoc(
     newTotalRanked,
     (input.revision ?? 0) + 1
   )
+  const violation = checkEventRejection(
+    [...todaysCatalog, adhocActivity],
+    input.existing,
+    speculative.timeline.instances
+  )
+  if (violation) {
+    return rejectionResult(
+      input,
+      violation.code,
+      violation.message,
+      violation.instanceIds,
+      constants,
+      totalRanked,
+      speculative.timeline
+    )
+  }
+  return speculative
 }
 
 /**
@@ -1218,7 +1349,9 @@ function adhocActivitiesFrom(
  * and re-solved through the ordinary pipeline (`applyInstanceRuleOverrides`
  * at the top of `solve()` is what makes it durable across later events).
  * Scoped to catalogue-backed instances — an ad-hoc has no template to
- * override in the first place.
+ * override in the first place. An edit that leaves a previously-placed
+ * activity (possibly the edited one itself) newly unplaceable is rejected,
+ * via `checkEventRejection`.
  */
 function solveEditInstanceRules(
   input: SolveInput & {
@@ -1335,7 +1468,7 @@ function solveEditInstanceRules(
     anchorPlacements
   )
 
-  return toResult(
+  const speculative = toResult(
     input,
     [...anchors, ...solved],
     diagnostics,
@@ -1344,6 +1477,23 @@ function solveEditInstanceRules(
     totalRanked,
     (input.revision ?? 0) + 1
   )
+  const violation = checkEventRejection(
+    effectiveCatalog,
+    input.existing,
+    speculative.timeline.instances
+  )
+  if (violation) {
+    return rejectionResult(
+      input,
+      violation.code,
+      violation.message,
+      violation.instanceIds,
+      constants,
+      totalRanked,
+      speculative.timeline
+    )
+  }
+  return speculative
 }
 
 /**
