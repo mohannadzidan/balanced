@@ -139,4 +139,73 @@ describe("solve — remaining Section 11 edge cases", () => {
     const errand = result.timeline.instances.find((i) => i.name === "Errand")!
     expect(errand.plannedStart).toBe(120) // displaced further out in turn
   })
+
+  it("case 19: an activity longer than the whole day is skipped gracefully, not a crash", () => {
+    const catalog = [activity("Marathon").rank(1).minutes(2000).build()]
+    const result = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+
+    expect(result.status).toBe("OK")
+    const marathon = result.timeline.instances[0]
+    expect(marathon.state).toBe("SKIPPED")
+    expect(marathon.skipReason).toBe("NO_FREE_SPACE")
+  })
+
+  it("case 19: a mandatory over-long activity degrades the day instead of crashing", () => {
+    const catalog = [
+      activity("Marathon").rank(1).minutes(2000).mandatory().build(),
+    ]
+    const result = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+
+    expect(result.status).toBe("DEGRADED")
+    const marathon = result.timeline.instances[0]
+    expect(marathon.state).toBe("SKIPPED")
+    expect(marathon.skipReason).toBe("INFEASIBLE_HARD_CONSTRAINT")
+  })
+
+  // SPEC.md 11's case 19 says an over-long activity is "skipped at solve
+  // time with WINDOW_UNSATISFIABLE," but `inferSkipReason` (placement.ts)
+  // only ever reports WINDOW_UNSATISFIABLE when raw free space of the right
+  // duration exists somewhere and the window specifically excludes it —
+  // checked only after confirming raw space exists at all. An activity
+  // longer than the day has no raw candidate start anywhere regardless of
+  // any window (`s + d <= length_minutes` can never hold), so it is
+  // NO_FREE_SPACE unconditionally, with or without a strict window. Trusting
+  // that more precise distinction, per the same pattern as the 14.1/14.2
+  // findings above.
+  it("case 19: an over-long activity is NO_FREE_SPACE even with a strict window, since it can never fit regardless", () => {
+    const catalog = [
+      activity("Marathon")
+        .rank(1)
+        .minutes(1500)
+        .strict("00:00", "23:55")
+        .build(),
+    ]
+    const result = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+
+    expect(result.status).toBe("OK")
+    const marathon = result.timeline.instances[0]
+    expect(marathon.state).toBe("SKIPPED")
+    expect(marathon.skipReason).toBe("NO_FREE_SPACE")
+  })
 })
