@@ -141,7 +141,7 @@ describe("planChunks", () => {
     expect(plan).toBeNull()
   })
 
-  it("accepts a chunked plan that only partially completes the activity, as long as it still clears the shrink floor (SPEC.md 5.5: chunks may sum to less)", () => {
+  it("accepts a chunked plan that only partially completes the activity, as long as it still clears the shrink floor (SPEC.md 5.5 / 14.6b / edge case 23)", () => {
     const resolved = resolveActivity(
       activity("Deep Work")
         .rank(1)

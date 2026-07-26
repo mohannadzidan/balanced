@@ -148,7 +148,7 @@ describe("solve — ShrinkRule (chunking, SPEC.md 14.6)", () => {
     expect(diag?.message).toBe('"Deep Work" was split into 2 blocks.')
   })
 
-  it("partially completes a chunked activity when the day can't fit its full duration, instead of skipping it outright", () => {
+  it("partially completes a chunked activity when the day can't fit its full duration, instead of skipping it outright (SPEC.md 14.6b / edge case 23)", () => {
     // Deep Work: 120m, window 09:00-14:00 drift 0, shrink floor 90,
     // chunking allowed (min 45, max 3). Meeting A and Meeting B carve the
     // window down to exactly two 50-minute gaps (09:00-09:50, 13:00-13:50)
