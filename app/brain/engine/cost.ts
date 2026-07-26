@@ -79,6 +79,12 @@ function computeIdleMinutes(
  * Whole-timeline cost (SPEC.md Section 7.5): sum of placement costs, skip
  * costs, and idle. Derived entirely from the instances' own recorded
  * relaxations — no need for the originating Activity catalogue.
+ *
+ * A chunked activity spans several top-level instances sharing one
+ * `chunkGroupId`; its shrink/chunk/drift/gap terms are priced once for the
+ * whole group (SPEC.md Section 7.3 prices the activity's plan, not each
+ * fragment) rather than once per chunk, or a 2-chunk plan would be charged
+ * its chunk-count penalty and shrink shortfall twice over.
  */
 export function scheduleCost(
   instances: readonly TimelineActivity[],
@@ -93,25 +99,45 @@ export function scheduleCost(
   let gap = 0
   const perInstance: Record<string, number> = {}
 
+  const groups = new Map<string, TimelineActivity[]>()
   for (const inst of instances) {
-    const weight = priorityWeight(inst.priorityRank, totalRanked)
-    let instCost: number
+    const key = inst.chunkGroupId ?? inst.id
+    const group = groups.get(key)
+    if (group) group.push(inst)
+    else groups.set(key, [inst])
+  }
 
-    if (inst.state === "SKIPPED") {
-      const isMandatory = inst.rules.some((r) => r.type === "mandatory")
-      const isDependentSkip = inst.skipReason === "HOST_SKIPPED"
-      instCost = skipCost(weight, constants, { isMandatory, isDependentSkip })
-      skip += instCost
+  for (const group of groups.values()) {
+    group.sort((a, b) => a.chunkIndex - b.chunkIndex)
+    const [primary, ...rest] = group
+    const weight = priorityWeight(primary.priorityRank, totalRanked)
+    let groupCost: number
+
+    if (primary.state === "SKIPPED") {
+      const isMandatory = primary.rules.some((r) => r.type === "mandatory")
+      const isDependentSkip = primary.skipReason === "HOST_SKIPPED"
+      groupCost = skipCost(weight, constants, { isMandatory, isDependentSkip })
+      skip += groupCost
     } else {
+      const scheduledMinutes = group.reduce(
+        (sum, i) => sum + i.scheduledMinutes,
+        0
+      )
       const unscheduled = Math.max(
         0,
-        inst.durationMinutes - inst.scheduledMinutes
+        primary.durationMinutes - scheduledMinutes
       )
-      const driftMinutes = sumRelaxation(inst.relaxations, "drift")
-      const gapMinutes = sumRelaxation(inst.relaxations, "gap")
+      const driftMinutes = group.reduce(
+        (sum, i) => sum + sumRelaxation(i.relaxations, "drift"),
+        0
+      )
+      const gapMinutes = group.reduce(
+        (sum, i) => sum + sumRelaxation(i.relaxations, "gap"),
+        0
+      )
 
       const s = weight * constants.SHRINK * unscheduled
-      const c = weight * constants.CHUNK * Math.max(0, inst.chunkCount - 1)
+      const c = weight * constants.CHUNK * Math.max(0, group.length - 1)
       const d = weight * constants.DRIFT * driftMinutes
       const g = weight * constants.GAP * gapMinutes
 
@@ -119,10 +145,11 @@ export function scheduleCost(
       chunk += c
       drift += d
       gap += g
-      instCost = s + c + d + g
+      groupCost = s + c + d + g
     }
 
-    perInstance[inst.id] = instCost
+    perInstance[primary.id] = groupCost
+    for (const inst of rest) perInstance[inst.id] = 0
   }
 
   const idle = constants.IDLE * computeIdleMinutes(instances, lengthMinutes)

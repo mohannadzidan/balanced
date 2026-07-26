@@ -1,13 +1,20 @@
 import { computeFreeIntervals } from "./intervals"
-import { placeActivity } from "./placement"
+import { placeWithShrinkRule } from "./shrink"
 import type { ResolvedActivity } from "./resolve"
 import type {
   Activity,
   CostConstants,
   Interval,
   Placement,
+  ShrinkRule,
   SkipReason,
 } from "./types"
+
+function shrinkRuleOf(activity: Activity): ShrinkRule | null {
+  return (
+    activity.rules.find((r): r is ShrinkRule => r.type === "shrink") ?? null
+  )
+}
 
 export interface GreedyContext {
   readonly freezeBoundary: number
@@ -20,6 +27,7 @@ export interface GreedyContext {
 
 export interface GreedyOutcome {
   readonly placements: ReadonlyMap<string, Placement>
+  readonly chunks: ReadonlyMap<string, readonly Placement[]>
   readonly skipped: ReadonlyMap<string, SkipReason>
 }
 
@@ -35,6 +43,7 @@ export function placeGreedy(
   ctx: GreedyContext
 ): GreedyOutcome {
   const placements = new Map<string, Placement>()
+  const chunks = new Map<string, readonly Placement[]>()
   const skipped = new Map<string, SkipReason>()
   const occupied: Interval[] = [...baseOccupied]
 
@@ -47,15 +56,23 @@ export function placeGreedy(
       ctx.freezeBoundary,
       ctx.lengthMinutes
     )
-    const result = placeActivity(ctx.resolve(activity), {
-      freeIntervals,
-      freezeBoundary: ctx.freezeBoundary,
-      grid: ctx.grid,
-      lengthMinutes: ctx.lengthMinutes,
-      weight: ctx.weight(activity),
-      constants: ctx.constants,
-    })
-    if (result.placement) {
+    const result = placeWithShrinkRule(
+      ctx.resolve(activity),
+      shrinkRuleOf(activity),
+      {
+        freeIntervals,
+        freezeBoundary: ctx.freezeBoundary,
+        grid: ctx.grid,
+        lengthMinutes: ctx.lengthMinutes,
+        weight: ctx.weight(activity),
+        constants: ctx.constants,
+      }
+    )
+    if (result.chunks) {
+      chunks.set(activity.id, result.chunks)
+      for (const c of result.chunks)
+        occupied.push({ start: c.start, end: c.end })
+    } else if (result.placement) {
       placements.set(activity.id, result.placement)
       occupied.push({
         start: result.placement.start,
@@ -66,5 +83,5 @@ export function placeGreedy(
     }
   }
 
-  return { placements, skipped }
+  return { placements, chunks, skipped }
 }

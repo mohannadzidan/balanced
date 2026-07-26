@@ -20,6 +20,11 @@ export interface PlacementResult {
   readonly skipReason: SkipReason | null
 }
 
+export interface ShrinkPlacementResult extends PlacementResult {
+  readonly scheduledMinutes: number
+  readonly cost: number
+}
+
 /** Every grid-aligned start inside `freeIntervals` that fits `durationMinutes`. */
 export function enumerateCandidateStarts(
   durationMinutes: number,
@@ -37,29 +42,32 @@ export function enumerateCandidateStarts(
 }
 
 /**
- * Every legal placement of `activity` inside `context`, cheapest first, per
- * the Section 7.6 tie-break chain (earliest start is still the only
- * meaningful tie-break until shrink/chunk exist).
+ * Every legal placement of `activity` at a given `length` inside `context`,
+ * cheapest first, per the Section 7.6 tie-break chain. `length` may be less
+ * than the activity's full duration when searching a ShrinkRule's ladder —
+ * the returned cost is priced against the full duration (SPEC.md Section
+ * 7.3's shrink term), not `length`.
  */
-export function enumerateFeasiblePlacements(
+export function enumerateFeasiblePlacementsForLength(
   resolved: ResolvedActivity,
+  length: number,
   context: PlacementContext
-): Placement[] {
+): { placement: Placement; cost: number }[] {
   const { activity } = resolved
   const starts = enumerateCandidateStarts(
-    activity.durationMinutes,
+    length,
     context.freeIntervals,
     context.grid
   ).filter((s) => s >= context.freezeBoundary)
 
   const ranked: { placement: Placement; cost: number }[] = []
   for (const start of starts) {
-    const end = start + activity.durationMinutes
+    const end = start + length
     const verdict = evaluateCandidate(resolved, start, end)
     if (!verdict.feasible) continue
 
     const evaluation: CandidateEvaluation = {
-      scheduledMinutes: activity.durationMinutes,
+      scheduledMinutes: length,
       chunkCount: 1,
       driftMinutes: verdict.driftMinutes,
       gapMinutes: 0,
@@ -78,7 +86,80 @@ export function enumerateFeasiblePlacements(
     return a.placement.start - b.placement.start
   })
 
+  return ranked
+}
+
+/**
+ * Every legal placement of `activity` inside `context`, cheapest first, per
+ * the Section 7.6 tie-break chain (earliest start is still the only
+ * meaningful tie-break until shrink/chunk exist).
+ */
+export function enumerateFeasiblePlacements(
+  resolved: ResolvedActivity,
+  context: PlacementContext
+): Placement[] {
+  return enumerateFeasiblePlacementsForLength(
+    resolved,
+    resolved.activity.durationMinutes,
+    context
+  ).map((r) => r.placement)
+}
+
+/**
+ * Every legal placement across a ShrinkRule's ladder (full duration down to
+ * `floorMinutes`), cheapest first. Used where a full candidate list — not
+ * just the single best — is needed, e.g. hard-set backtracking. With no
+ * ShrinkRule, `floorMinutes` equals the full duration and this is identical
+ * to `enumerateFeasiblePlacements`.
+ */
+export function enumerateFeasiblePlacementsAcrossLengths(
+  resolved: ResolvedActivity,
+  floorMinutes: number,
+  context: PlacementContext
+): Placement[] {
+  const fullLength = resolved.activity.durationMinutes
+  const ranked: {
+    placement: Placement
+    cost: number
+    scheduledMinutes: number
+  }[] = []
+  for (
+    let length = fullLength;
+    length >= floorMinutes;
+    length -= context.grid
+  ) {
+    for (const r of enumerateFeasiblePlacementsForLength(
+      resolved,
+      length,
+      context
+    )) {
+      ranked.push({ ...r, scheduledMinutes: length })
+    }
+  }
+  ranked.sort((a, b) => {
+    if (a.cost !== b.cost) return a.cost - b.cost
+    if (a.scheduledMinutes !== b.scheduledMinutes) {
+      return b.scheduledMinutes - a.scheduledMinutes
+    }
+    return a.placement.start - b.placement.start
+  })
   return ranked.map((r) => r.placement)
+}
+
+function inferSkipReason(
+  resolved: ResolvedActivity,
+  floorMinutes: number,
+  context: PlacementContext
+): SkipReason {
+  const rawStarts = enumerateCandidateStarts(
+    floorMinutes,
+    context.freeIntervals,
+    context.grid
+  ).filter((s) => s >= context.freezeBoundary)
+  if (rawStarts.length === 0) return "NO_FREE_SPACE"
+  if (resolved.flexibleWindow) return "DRIFT_EXCEEDED"
+  if (resolved.strictWindow) return "WINDOW_UNSATISFIABLE"
+  return "NO_FREE_SPACE"
 }
 
 /** Single-activity placement search (SPEC.md Section 8.6): the cheapest candidate. */
@@ -86,25 +167,67 @@ export function placeActivity(
   resolved: ResolvedActivity,
   context: PlacementContext
 ): PlacementResult {
-  const rawStarts = enumerateCandidateStarts(
+  const { placement, skipReason } = placeActivityWithFloor(
+    resolved,
     resolved.activity.durationMinutes,
-    context.freeIntervals,
-    context.grid
-  ).filter((s) => s >= context.freezeBoundary)
+    context
+  )
+  return { placement, skipReason }
+}
 
-  if (rawStarts.length === 0) {
-    return { placement: null, skipReason: "NO_FREE_SPACE" }
+/**
+ * Single-block placement search across a ShrinkRule's ladder (SPEC.md
+ * Section 8.6 steps 2 and 4): tries every length from the full duration down
+ * to `floorMinutes` in `GRID` steps and returns the globally cheapest
+ * candidate. With no ShrinkRule, `floorMinutes` equals the full duration and
+ * this is identical to `placeActivity`.
+ */
+export function placeActivityWithFloor(
+  resolved: ResolvedActivity,
+  floorMinutes: number,
+  context: PlacementContext
+): ShrinkPlacementResult {
+  const fullLength = resolved.activity.durationMinutes
+  let best: {
+    placement: Placement
+    cost: number
+    scheduledMinutes: number
+  } | null = null
+
+  for (
+    let length = fullLength;
+    length >= floorMinutes;
+    length -= context.grid
+  ) {
+    const ranked = enumerateFeasiblePlacementsForLength(
+      resolved,
+      length,
+      context
+    )
+    if (ranked.length === 0) continue
+    const top = ranked[0]
+    if (!best || top.cost < best.cost) {
+      best = {
+        placement: top.placement,
+        cost: top.cost,
+        scheduledMinutes: length,
+      }
+    }
   }
 
-  const candidates = enumerateFeasiblePlacements(resolved, context)
-  if (candidates.length === 0) {
-    const reason: SkipReason = resolved.flexibleWindow
-      ? "DRIFT_EXCEEDED"
-      : resolved.strictWindow
-        ? "WINDOW_UNSATISFIABLE"
-        : "NO_FREE_SPACE"
-    return { placement: null, skipReason: reason }
+  if (best) {
+    return {
+      placement: best.placement,
+      skipReason: null,
+      scheduledMinutes: best.scheduledMinutes,
+      cost: best.cost,
+    }
   }
 
-  return { placement: candidates[0], skipReason: null }
+  return {
+    placement: null,
+    skipReason: inferSkipReason(resolved, floorMinutes, context),
+    scheduledMinutes: 0,
+    cost: Number.POSITIVE_INFINITY,
+  }
 }

@@ -5,6 +5,7 @@ import {
   enumerateCandidateStarts,
   evaluateCandidate,
   placeActivity,
+  placeActivityWithFloor,
   type PlacementContext,
 } from "@/app/brain/engine/placement"
 import { resolveActivity } from "@/app/brain/engine/resolve"
@@ -164,5 +165,57 @@ describe("placeActivity — window rules", () => {
     )
     const result = placeActivity(resolved, baseContext({ weight: 1 }))
     expect(result.placement).toEqual({ start: 1080, end: 1140, nestedIn: null })
+  })
+})
+
+describe("placeActivityWithFloor — ShrinkRule ladder", () => {
+  it("is identical to placeActivity when the floor equals the full duration", () => {
+    const resolved = resolveActivity(
+      activity("Work").rank(1).minutes(60).build(),
+      dayFrame
+    )
+    const result = placeActivityWithFloor(resolved, 60, baseContext())
+    expect(result.placement).toEqual({ start: 0, end: 60, nestedIn: null })
+    expect(result.scheduledMinutes).toBe(60)
+  })
+
+  it("prefers the full duration when it fits, even with a lower floor available", () => {
+    const resolved = resolveActivity(
+      activity("Work").rank(1).minutes(60).build(),
+      dayFrame
+    )
+    const result = placeActivityWithFloor(resolved, 30, baseContext())
+    expect(result.scheduledMinutes).toBe(60)
+    expect(result.placement).toEqual({ start: 0, end: 60, nestedIn: null })
+  })
+
+  it("shrinks to the largest length that fits when the full duration cannot", () => {
+    // Only a 45-minute free interval is available; duration 60, floor 30.
+    const resolved = resolveActivity(
+      activity("Work").rank(1).minutes(60).build(),
+      dayFrame
+    )
+    const result = placeActivityWithFloor(
+      resolved,
+      30,
+      baseContext({ freeIntervals: [{ start: 0, end: 45 }] })
+    )
+    expect(result.placement).toEqual({ start: 0, end: 45, nestedIn: null })
+    expect(result.scheduledMinutes).toBe(45)
+  })
+
+  it("skips when nothing fits even at the floor", () => {
+    const resolved = resolveActivity(
+      activity("Work").rank(1).minutes(60).build(),
+      dayFrame
+    )
+    const result = placeActivityWithFloor(
+      resolved,
+      30,
+      baseContext({ freeIntervals: [{ start: 0, end: 20 }] })
+    )
+    expect(result.placement).toBeNull()
+    expect(result.skipReason).toBe("NO_FREE_SPACE")
+    expect(result.scheduledMinutes).toBe(0)
   })
 })

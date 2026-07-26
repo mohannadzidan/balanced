@@ -1,5 +1,5 @@
 import { computeFreeIntervals } from "./intervals"
-import { enumerateFeasiblePlacements } from "./placement"
+import { enumerateFeasiblePlacementsAcrossLengths } from "./placement"
 import type { ResolvedActivity } from "./resolve"
 import { resolveWallClock } from "./time"
 import type {
@@ -10,11 +10,17 @@ import type {
   FixedRule,
   Interval,
   Placement,
+  ShrinkRule,
   SkipReason,
 } from "./types"
 
 function fixedRuleOf(activity: Activity): FixedRule | undefined {
   return activity.rules.find((r): r is FixedRule => r.type === "fixed")
+}
+
+function shrinkFloorOf(activity: Activity): number {
+  const rule = activity.rules.find((r): r is ShrinkRule => r.type === "shrink")
+  return rule ? rule.minDurationMinutes : activity.durationMinutes
 }
 
 /**
@@ -130,14 +136,18 @@ function candidatesFor(
     ctx.freezeBoundary,
     ctx.lengthMinutes
   )
-  return enumerateFeasiblePlacements(ctx.resolve(activity), {
-    freeIntervals,
-    freezeBoundary: ctx.freezeBoundary,
-    grid: ctx.grid,
-    lengthMinutes: ctx.lengthMinutes,
-    weight: ctx.weight(activity),
-    constants: ctx.constants,
-  })
+  return enumerateFeasiblePlacementsAcrossLengths(
+    ctx.resolve(activity),
+    shrinkFloorOf(activity),
+    {
+      freeIntervals,
+      freezeBoundary: ctx.freezeBoundary,
+      grid: ctx.grid,
+      lengthMinutes: ctx.lengthMinutes,
+      weight: ctx.weight(activity),
+      constants: ctx.constants,
+    }
+  )
 }
 
 /**

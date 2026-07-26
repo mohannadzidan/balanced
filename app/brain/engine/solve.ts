@@ -34,10 +34,18 @@ function relaxationsFor(
   placement: Placement | null
 ): Relaxation[] {
   if (!placement) return []
+  const relaxations: Relaxation[] = []
+
+  const scheduledMinutes = placement.end - placement.start
+  const shrunkBy = resolved.activity.durationMinutes - scheduledMinutes
+  if (shrunkBy > 0) relaxations.push({ type: "shrink", minutes: shrunkBy })
+
   const verdict = evaluateCandidate(resolved, placement.start, placement.end)
-  return verdict.driftMinutes > 0
-    ? [{ type: "drift", minutes: verdict.driftMinutes }]
-    : []
+  if (verdict.driftMinutes > 0) {
+    relaxations.push({ type: "drift", minutes: verdict.driftMinutes })
+  }
+
+  return relaxations
 }
 
 function freshInstance(
@@ -72,6 +80,63 @@ function freshInstance(
     locked: false,
     skipReason,
   }
+}
+
+/**
+ * A chunked activity's plan (SPEC.md Section 8.6 step 5) becomes several
+ * top-level instances sharing one `chunkGroupId`. The whole plan's shrink
+ * and chunk-count relaxations are recorded once, on the first chunk, so
+ * they aren't double-counted when read back out of the instance list.
+ */
+function chunkedInstances(
+  activity: Activity,
+  dayFrame: DayFrame,
+  resolved: ResolvedActivity,
+  chunkPlacements: readonly Placement[]
+): TimelineActivity[] {
+  const sorted = [...chunkPlacements].sort((a, b) => a.start - b.start)
+  const totalScheduled = sorted.reduce((sum, c) => sum + (c.end - c.start), 0)
+  const shrunkBy = activity.durationMinutes - totalScheduled
+
+  return sorted.map((placement, index) => {
+    const relaxations: Relaxation[] = []
+    if (index === 0) {
+      if (shrunkBy > 0) relaxations.push({ type: "shrink", minutes: shrunkBy })
+      if (sorted.length > 1) {
+        relaxations.push({ type: "chunk", minutes: sorted.length - 1 })
+      }
+    }
+    const verdict = evaluateCandidate(resolved, placement.start, placement.end)
+    if (verdict.driftMinutes > 0) {
+      relaxations.push({ type: "drift", minutes: verdict.driftMinutes })
+    }
+
+    return {
+      id: `${activity.id}#${index + 1}`,
+      activityId: activity.id,
+      date: dayFrame.date,
+      name: activity.name,
+      durationMinutes: activity.durationMinutes,
+      priorityRank: activity.priorityRank,
+      rules: activity.rules,
+      state: "PLANNED",
+      completedSource: null,
+      plannedStart: placement.start,
+      plannedEnd: placement.end,
+      actualStart: null,
+      actualEnd: null,
+      scheduledMinutes: placement.end - placement.start,
+      chunkIndex: index + 1,
+      chunkCount: sorted.length,
+      chunkGroupId: activity.id,
+      hostInstanceId: placement.nestedIn,
+      isAdhoc: false,
+      spanningFromPreviousDay: false,
+      relaxations,
+      locked: false,
+      skipReason: null,
+    }
+  })
 }
 
 /**
@@ -156,17 +221,35 @@ export function solve(input: SolveInput): SolveResult {
     resolve,
     weight,
   })
+  const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
+    (chunks) => chunks.map((c) => ({ start: c.start, end: c.end }))
+  )
   const occupiedAfterGreedy: Interval[] = [
     ...occupiedAfterHardSet,
     ...[...greedyOutcome.placements.values()].map((p) => ({
       start: p.start,
       end: p.end,
     })),
+    ...chunksFlat,
   ]
 
   // Phase 2.5: sequence dependents, adjacent to their already-placed host.
+  // A chunked host binds dependents to its outer span (SPEC.md Section 5.6
+  // more precisely binds pre/post to the first/last chunk individually —
+  // deferred until a worked example exercises Sequence+Shrink together).
   const hostResolutions = new Map<string, Placement | "SKIPPED">()
   for (const activity of hostPool) {
+    const chunksPlaced = greedyOutcome.chunks.get(activity.id)
+    if (chunksPlaced) {
+      const starts = chunksPlaced.map((c) => c.start)
+      const ends = chunksPlaced.map((c) => c.end)
+      hostResolutions.set(activity.id, {
+        start: Math.min(...starts),
+        end: Math.max(...ends),
+        nestedIn: null,
+      })
+      continue
+    }
     const placement =
       fixedOutcome.placements.get(activity.id) ??
       hardOutcome.placements.get(activity.id) ??
@@ -181,7 +264,17 @@ export function solve(input: SolveInput): SolveResult {
     { freezeBoundary, lengthMinutes, grid, resolve }
   )
 
-  const instances = todaysCatalog.map((activity) => {
+  const instances = todaysCatalog.flatMap((activity) => {
+    const chunksPlaced = greedyOutcome.chunks.get(activity.id)
+    if (chunksPlaced) {
+      return chunkedInstances(
+        activity,
+        input.dayFrame,
+        resolve(activity),
+        chunksPlaced
+      )
+    }
+
     const placement =
       fixedOutcome.placements.get(activity.id) ??
       hardOutcome.placements.get(activity.id) ??
@@ -201,13 +294,15 @@ export function solve(input: SolveInput): SolveResult {
           ...relaxationsFor(resolve(activity), placement),
         ]
       : relaxationsFor(resolve(activity), placement)
-    return freshInstance(
-      activity,
-      input.dayFrame,
-      placement,
-      skipReason,
-      relaxations
-    )
+    return [
+      freshInstance(
+        activity,
+        input.dayFrame,
+        placement,
+        skipReason,
+        relaxations
+      ),
+    ]
   })
 
   const diagnostics: Diagnostic[] = [...fixedOutcome.diagnostics]
@@ -227,6 +322,30 @@ export function solve(input: SolveInput): SolveResult {
         message: `"${inst.name}" is mandatory but could not be placed today.`,
         suggestedFix:
           "Free up time elsewhere, widen its window, or add a ShrinkRule.",
+      })
+    }
+
+    if (inst.chunkIndex !== 1) continue // avoid double-reporting a chunked plan
+
+    const shrink = inst.relaxations.find((r) => r.type === "shrink")
+    if (shrink && inst.chunkCount === 1) {
+      diagnostics.push({
+        severity: "info",
+        code: "SHRUNK",
+        instanceIds: [inst.id],
+        message: `"${inst.name}" shortened from ${inst.durationMinutes} to ${inst.scheduledMinutes} minutes.`,
+        suggestedFix: null,
+      })
+    }
+
+    const chunked = inst.relaxations.find((r) => r.type === "chunk")
+    if (chunked) {
+      diagnostics.push({
+        severity: "info",
+        code: "CHUNKED",
+        instanceIds: [inst.id],
+        message: `"${inst.name}" was split into ${inst.chunkCount} blocks.`,
+        suggestedFix: null,
       })
     }
   }
