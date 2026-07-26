@@ -471,6 +471,7 @@ function rejectionResult(
     status,
     solvedAtOffset: input.now,
     finalised: false,
+    carryIn: [],
   }
   const rejection: RejectionError = {
     code,
@@ -536,6 +537,7 @@ function toResult(
     status,
     solvedAtOffset: input.now,
     finalised: false,
+    carryIn: [],
   }
   return {
     status,
@@ -1344,11 +1346,97 @@ function solveEditInstanceRules(
   )
 }
 
+/**
+ * FINALISE_DAY (SPEC.md Section 9.8): backdate whatever residue is left,
+ * snapshot it as today's closed record, and derive the carry-in list for
+ * tomorrow's day frame from anything still PLANNED or ACTIVE — the engine's
+ * only cross-day link; it holds no other state between days. Rejects
+ * (INVALID_STATE_FOR_EVENT) if the day hasn't actually ended yet. Once this
+ * succeeds, `solve()`'s `finalised` guard refuses every further event
+ * against the same input. Carrying over a *partial* residue's remaining
+ * duration (as opposed to its full original length) needs the
+ * midnight-spanning arithmetic that's Step 12's job — this carries the
+ * full activity over, which is the correct behavior for anything that
+ * never started, and a documented simplification for anything ACTIVE but
+ * unfinished at day's end.
+ */
+function solveFinaliseDay(
+  input: SolveInput,
+  constants: CostConstants,
+  totalRanked: number
+): SolveResult {
+  if (input.now < input.dayFrame.lengthMinutes) {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `The day can't be finalised before it ends (now=${input.now}, length=${input.dayFrame.lengthMinutes}).`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+
+  const { instances: backdated } = applyBackdating(input.existing, input.now)
+  const { diagnostics, status } = buildDiagnostics(backdated)
+
+  const carryIn: TimelineActivity[] = backdated
+    .filter((i) => i.state === "PLANNED" || i.state === "ACTIVE")
+    .map((i) => ({
+      ...i,
+      state: "CARRIED_IN",
+      completedSource: null,
+      plannedStart: null,
+      plannedEnd: null,
+      actualStart: null,
+      actualEnd: null,
+      scheduledMinutes: 0,
+      spanningFromPreviousDay: true,
+      locked: false,
+      skipReason: null,
+    }))
+
+  const cost = scheduleCost(
+    backdated,
+    input.dayFrame.lengthMinutes,
+    totalRanked,
+    constants
+  )
+  const timeline: Timeline = {
+    dayFrame: input.dayFrame,
+    revision: (input.revision ?? 0) + 1,
+    instances: backdated,
+    diagnostics,
+    cost,
+    status,
+    solvedAtOffset: input.now,
+    finalised: true,
+    carryIn,
+  }
+
+  return { status, timeline, rejection: null, diagnostics, cost, trace: null }
+}
+
 export function solve(input: SolveInput): SolveResult {
   const constants = resolveConstants(input.constants)
-  const weekday = weekdayOf(input.dayFrame.date)
   const totalRanked = input.catalog.length
 
+  // SPEC.md Section 9.8: a finalised day refuses every further event.
+  if (input.finalised) {
+    return rejectionResult(
+      input,
+      "SPANS_FROZEN_REGION",
+      "This day has already been finalised.",
+      [],
+      constants,
+      totalRanked
+    )
+  }
+
+  if (input.event.type === "FINALISE_DAY") {
+    return solveFinaliseDay(input, constants, totalRanked)
+  }
+
+  const weekday = weekdayOf(input.dayFrame.date)
   const resolvedCache = new Map<string, ResolvedActivity>()
   const resolve = (activity: Activity): ResolvedActivity => {
     let resolved = resolvedCache.get(activity.id)

@@ -77,6 +77,7 @@ describe("renderAscii", () => {
       status: "OK",
       solvedAtOffset: 0,
       finalised: false,
+      carryIn: [],
     }
 
     expect(renderAscii(timeline)).toBe(
@@ -111,6 +112,7 @@ describe("renderAscii", () => {
       status: "OK",
       solvedAtOffset: 0,
       finalised: false,
+      carryIn: [],
     }
     expect(renderAscii(timeline)).toBe(renderAscii(timeline))
   })

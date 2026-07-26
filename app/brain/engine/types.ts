@@ -203,6 +203,8 @@ export interface Timeline {
   readonly status: TimelineStatus
   readonly solvedAtOffset: number
   readonly finalised: boolean
+  /** Residue for tomorrow's day frame (SPEC.md Section 9.8); empty until finalised. */
+  readonly carryIn: readonly TimelineActivity[]
 }
 
 // --- Events --------------------------------------------------------------------
@@ -255,6 +257,8 @@ export interface SolveInput {
   readonly options?: SolveOptions
   /** The revision of `existing`, echoed back unchanged by a no-op TICK. */
   readonly revision?: number
+  /** True once a prior FINALISE_DAY closed this day frame (SPEC.md 9.8). */
+  readonly finalised?: boolean
 }
 
 export type RejectionCode =
