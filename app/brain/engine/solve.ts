@@ -15,6 +15,8 @@ import type {
   Interval,
   Placement,
   Relaxation,
+  RejectionCode,
+  RejectionError,
   SkipReason,
   SolveInput,
   SolveResult,
@@ -384,6 +386,85 @@ function buildDiagnostics(instances: readonly TimelineActivity[]): {
   return { diagnostics, status }
 }
 
+interface AnchorSet {
+  readonly anchors: TimelineActivity[]
+  readonly anchorActivityIds: Set<string>
+  readonly baseOccupied: Interval[]
+}
+
+/**
+ * An anchor is an existing instance the next solve must leave untouched:
+ * either it's already consumed real time (ACTIVE/COMPLETED/CARRIED_IN) or a
+ * prior event pinned it explicitly (`locked`, e.g. a user SKIP — SPEC.md
+ * Section 9.7). Chunked activities (chunkGroupId set) never anchor here —
+ * see the note on `solveTick`. A locked instance without planned times
+ * (a SKIPPED one) contributes no occupied interval, just an excluded
+ * activity id.
+ */
+function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
+  const ANCHOR_STATES = new Set(["ACTIVE", "COMPLETED", "CARRIED_IN"])
+  const anchors = existing.filter(
+    (inst) =>
+      inst.chunkGroupId === null &&
+      (inst.locked || ANCHOR_STATES.has(inst.state))
+  )
+  const anchorActivityIds = new Set(
+    anchors.map((a) => a.activityId).filter((id): id is string => id !== null)
+  )
+  const baseOccupied: Interval[] = anchors
+    .filter(
+      (a) =>
+        !a.hostInstanceId && a.plannedStart !== null && a.plannedEnd !== null
+    )
+    .map((a) => ({
+      start: a.actualStart ?? (a.plannedStart as number),
+      end: a.actualEnd ?? (a.plannedEnd as number),
+    }))
+  return { anchors, anchorActivityIds, baseOccupied }
+}
+
+function rejectionResult(
+  input: SolveInput,
+  code: RejectionCode,
+  message: string,
+  conflictingInstanceIds: readonly string[],
+  constants: CostConstants,
+  totalRanked: number
+): SolveResult {
+  const { diagnostics, status } = buildDiagnostics(input.existing)
+  const cost = scheduleCost(
+    input.existing,
+    input.dayFrame.lengthMinutes,
+    totalRanked,
+    constants
+  )
+  const timeline: Timeline = {
+    dayFrame: input.dayFrame,
+    revision: input.revision ?? 0,
+    instances: [...input.existing],
+    diagnostics,
+    cost,
+    status,
+    solvedAtOffset: input.now,
+    finalised: false,
+  }
+  const rejection: RejectionError = {
+    code,
+    message,
+    conflictingInstanceIds,
+    diagnostics,
+    bestEffortTimeline: null,
+  }
+  return {
+    status: "REJECTED",
+    timeline,
+    rejection,
+    diagnostics,
+    cost,
+    trace: null,
+  }
+}
+
 function toResult(
   input: SolveInput,
   instances: readonly TimelineActivity[],
@@ -463,19 +544,177 @@ function solveTick(
     )
   }
 
-  const ANCHOR_STATES = new Set(["ACTIVE", "COMPLETED", "CARRIED_IN"])
-  const anchors = backdated.filter(
-    (inst) => inst.chunkGroupId === null && ANCHOR_STATES.has(inst.state)
+  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(backdated)
+  const activitiesToSolve = todaysCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id)
   )
-  const anchorActivityIds = new Set(
-    anchors.map((a) => a.activityId).filter((id): id is string => id !== null)
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight
   )
-  const baseOccupied: Interval[] = anchors
-    .filter((a) => !a.hostInstanceId)
-    .map((a) => ({
-      start: a.actualStart ?? a.plannedStart ?? 0,
-      end: a.actualEnd ?? a.plannedEnd ?? 0,
-    }))
+
+  return toResult(
+    input,
+    [...anchors, ...solved],
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
+/**
+ * The group key an event that targets one instance acts on: the whole
+ * activity (all of a chunked plan's fragments) when it came from the
+ * catalogue, or just that one instance's own id for an ad-hoc without an
+ * `activityId` (SPEC.md Section 9.5 — not yet produced by any event this
+ * engine implements, but the fallback is cheap to have in place).
+ */
+function groupKeyOf(inst: TimelineActivity): string {
+  return inst.activityId ?? inst.id
+}
+
+/**
+ * SKIP (SPEC.md Section 9.7): mark a PLANNED instance user-skipped and
+ * re-solve everything else. Never rejected except for a malformed request
+ * (unknown instance, or one not currently PLANNED). The skip is recorded
+ * with `locked: true` so it survives future re-solves (TICK and so on)
+ * until a matching RESTORE lifts it — see `extractAnchors`.
+ */
+function solveSkip(
+  input: SolveInput & { readonly event: { type: "SKIP"; instanceId: string } },
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const target = input.existing.find((i) => i.id === input.event.instanceId)
+  if (!target) {
+    return rejectionResult(
+      input,
+      "UNKNOWN_INSTANCE",
+      `No instance "${input.event.instanceId}" in the current timeline.`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+  if (target.state !== "PLANNED") {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" is ${target.state}, not PLANNED — it can't be skipped.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  const groupKey = groupKeyOf(target)
+  const skippedInstance: TimelineActivity = {
+    ...target,
+    state: "SKIPPED",
+    skipReason: "USER_SKIPPED",
+    plannedStart: null,
+    plannedEnd: null,
+    scheduledMinutes: 0,
+    chunkIndex: 1,
+    chunkCount: 1,
+    chunkGroupId: null,
+    hostInstanceId: null,
+    relaxations: [],
+    locked: true,
+  }
+
+  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(
+    input.existing.filter((i) => groupKeyOf(i) !== groupKey)
+  )
+  const activitiesToSolve = todaysCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id) && a.id !== groupKey
+  )
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight
+  )
+
+  return toResult(
+    input,
+    [...anchors, skippedInstance, ...solved],
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
+/**
+ * RESTORE (SPEC.md Section 9.7): lift a user skip and re-solve. Lifting the
+ * mark is just excluding the old skipped instance from the anchor set
+ * before re-solving — since it's no longer `locked`, its activity is a
+ * completely ordinary candidate again. If there's genuinely no room, it
+ * comes back SKIPPED with whatever reason the pipeline finds this time,
+ * not necessarily `USER_SKIPPED`. RESTORE can in principle be rejected per
+ * SPEC.md Section 10.2 if it regresses another activity — that comparison
+ * belongs to the Section 11 rejection layer and isn't implemented yet, so
+ * RESTORE never rejects here beyond the unknown/wrong-state checks below.
+ */
+function solveRestore(
+  input: SolveInput & {
+    readonly event: { type: "RESTORE"; instanceId: string }
+  },
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const target = input.existing.find((i) => i.id === input.event.instanceId)
+  if (!target) {
+    return rejectionResult(
+      input,
+      "UNKNOWN_INSTANCE",
+      `No instance "${input.event.instanceId}" in the current timeline.`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+  if (target.state !== "SKIPPED") {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" is ${target.state}, not SKIPPED — there's nothing to restore.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  const groupKey = groupKeyOf(target)
+  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(
+    input.existing.filter((i) => groupKeyOf(i) !== groupKey)
+  )
   const activitiesToSolve = todaysCatalog.filter(
     (a) => !anchorActivityIds.has(a.id)
   )
@@ -528,6 +767,26 @@ export function solve(input: SolveInput): SolveResult {
   if (input.event.type === "TICK") {
     return solveTick(
       input,
+      constants,
+      todaysCatalog,
+      resolve,
+      weight,
+      totalRanked
+    )
+  }
+  if (input.event.type === "SKIP") {
+    return solveSkip(
+      { ...input, event: input.event },
+      constants,
+      todaysCatalog,
+      resolve,
+      weight,
+      totalRanked
+    )
+  }
+  if (input.event.type === "RESTORE") {
+    return solveRestore(
+      { ...input, event: input.event },
       constants,
       todaysCatalog,
       resolve,
