@@ -7,8 +7,10 @@ import { placeFixedSet, placeHardSet } from "./hard-set"
 import { resolveActivity, type ResolvedActivity } from "./resolve"
 import { isDependent, placeSequenceChain } from "./sequence"
 import { weekdayOf } from "./time"
+import { validateActivity, validateCatalog } from "./validation"
 import type {
   Activity,
+  AdhocPayload,
   CostConstants,
   DayFrame,
   Diagnostic,
@@ -981,6 +983,97 @@ function solveExtend(
   )
 }
 
+/**
+ * ADD_ADHOC (SPEC.md Section 9.5): create a one-off TimelineActivity that
+ * was never part of the catalogue — `activity_id: null`, `is_adhoc: true` —
+ * and let it compete for placement on equal footing, full rule vocabulary
+ * included. The catalogue itself is never touched (the pure-function
+ * guarantee). Its id is derived purely from how many ad-hoc instances
+ * already exist in `existing`, keeping the engine deterministic without
+ * reading a clock or a random source. Rejected (INVALID_STATE_FOR_EVENT)
+ * if the payload fails the same catalogue validation a template would —
+ * incompatible rules, off-grid values, a colliding priority rank, and so
+ * on (SPEC.md Section 10.1).
+ */
+function solveAddAdhoc(
+  input: SolveInput & {
+    readonly event: { type: "ADD_ADHOC"; payload: AdhocPayload }
+  },
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  totalRanked: number
+): SolveResult {
+  const { payload } = input.event
+  const weekday = weekdayOf(input.dayFrame.date)
+  const adhocId = `adhoc-${input.existing.filter((i) => i.isAdhoc).length + 1}`
+  const adhocActivity: Activity = {
+    id: adhocId,
+    name: payload.name,
+    durationMinutes: payload.durationMinutes,
+    priorityRank: payload.priorityRank,
+    allowedDays: [weekday],
+    enabled: true,
+    rules: payload.rules,
+  }
+
+  const errors = [
+    ...validateActivity(adhocActivity, constants),
+    ...validateCatalog([...todaysCatalog, adhocActivity]),
+  ].filter((i) => i.severity === "error")
+  if (errors.length > 0) {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${payload.name}" can't be added: ${errors.map((e) => e.message).join("; ")}`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+
+  const newTotalRanked = totalRanked + 1
+  const adhocWeight = (activity: Activity): number =>
+    priorityWeight(activity.priorityRank, newTotalRanked)
+
+  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(
+    input.existing
+  )
+  const activitiesToSolve = [
+    ...todaysCatalog.filter((a) => !anchorActivityIds.has(a.id)),
+    adhocActivity,
+  ]
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    adhocWeight
+  )
+
+  const finalInstances = [...anchors, ...solved].map((inst) =>
+    inst.activityId === adhocId
+      ? { ...inst, activityId: null, isAdhoc: true }
+      : inst
+  )
+
+  return toResult(
+    input,
+    finalInstances,
+    diagnostics,
+    status,
+    constants,
+    newTotalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
 export function solve(input: SolveInput): SolveResult {
   const constants = resolveConstants(input.constants)
   const weekday = weekdayOf(input.dayFrame.date)
@@ -1049,6 +1142,15 @@ export function solve(input: SolveInput): SolveResult {
       todaysCatalog,
       resolve,
       weight,
+      totalRanked
+    )
+  }
+  if (input.event.type === "ADD_ADHOC") {
+    return solveAddAdhoc(
+      { ...input, event: input.event },
+      constants,
+      todaysCatalog,
+      resolve,
       totalRanked
     )
   }
