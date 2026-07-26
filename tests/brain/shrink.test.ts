@@ -140,6 +140,73 @@ describe("planChunks", () => {
     )
     expect(plan).toBeNull()
   })
+
+  it("accepts a chunked plan that only partially completes the activity, as long as it still clears the shrink floor (SPEC.md 5.5: chunks may sum to less)", () => {
+    const resolved = resolveActivity(
+      activity("Deep Work")
+        .rank(1)
+        .minutes(120)
+        .flexible("09:00", "17:00", { drift: 0 })
+        .build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 90,
+      chunkingAllowed: true,
+      minChunkMinutes: 45,
+      maxChunks: 3,
+    }
+    // Two 50-minute gaps: 100 minutes total, short of the full 120-minute
+    // duration but past the 90-minute floor.
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({
+        freeIntervals: [
+          { start: 540, end: 590 },
+          { start: 780, end: 830 },
+        ],
+      })
+    )
+    expect(plan).not.toBeNull()
+    expect(plan!.scheduledMinutes).toBe(100)
+    expect(plan!.chunks).toHaveLength(2)
+    for (const chunk of plan!.chunks) {
+      expect(chunk.end - chunk.start).toBeGreaterThanOrEqual(45)
+    }
+  })
+
+  it("still returns null when even the best partial chunked total falls short of the shrink floor", () => {
+    const resolved = resolveActivity(
+      activity("Deep Work")
+        .rank(1)
+        .minutes(120)
+        .flexible("09:00", "17:00", { drift: 0 })
+        .build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 110, // the same two gaps only total 100
+      chunkingAllowed: true,
+      minChunkMinutes: 45,
+      maxChunks: 3,
+    }
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({
+        freeIntervals: [
+          { start: 540, end: 590 },
+          { start: 780, end: 830 },
+        ],
+      })
+    )
+    expect(plan).toBeNull()
+  })
 })
 
 describe("placeWithShrinkRule", () => {

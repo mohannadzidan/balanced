@@ -87,7 +87,11 @@ function clipToWindowBounds(
  * One chunk plan for a specific chunk count `k` (SPEC.md Section 8.6 step
  * 5): rank free intervals by their cheapest (lowest-drift) candidate, then
  * greedily fill the `k` cheapest with segments of at least `minChunk`,
- * largest region first, until `target` total minutes is reached.
+ * largest region first, until `target` total minutes is reached or the
+ * selected regions run out. SPEC.md Section 5.5: "chunks may sum to the
+ * full duration ... or to less" — reaching less than `target` is a valid
+ * outcome here; it's the caller's job (`planChunks`) to reject a total that
+ * falls short of the shrink floor.
  */
 function fillChunks(
   resolved: ResolvedActivity,
@@ -137,19 +141,23 @@ function fillChunks(
     const regionsAfter = selected.length - i - 1
     const cap = remaining - minChunk * regionsAfter
     const length = Math.min(region.usable, cap)
-    if (length < minChunk) return null
+    // A region this reservation can't fit at least `minChunk` into just
+    // doesn't participate — that no longer fails the whole plan the way it
+    // used to, since falling short of `target` is now an acceptable
+    // (partial) outcome rather than an automatic rejection.
+    if (length < minChunk) continue
     const placed = bestChunkInInterval(
       resolved,
       region.interval,
       length,
       context
     )
-    if (!placed) return null
+    if (!placed) continue
     chunks.push(placed.placement)
     totalDrift += placed.driftMinutes
     remaining -= length
   }
-  if (remaining > 0 || chunks.length === 0) return null
+  if (chunks.length === 0) return null
 
   const scheduledMinutes = chunks.reduce((s, c) => s + (c.end - c.start), 0)
   const cost = placementCost(
@@ -168,8 +176,13 @@ function fillChunks(
 
 /**
  * Best chunked alternative across chunk counts 2..max_chunks (SPEC.md
- * Section 8.6 step 5). `null` if chunking is not allowed or no chunk count
- * can reach the full duration.
+ * Section 8.6 step 5, Section 5.5). `null` if chunking is not allowed, or no
+ * chunk count reaches at least the shrink floor — reaching the full
+ * duration is preferred (and always cheaper) but not required; a chunked
+ * plan that only partially completes the activity is accepted as long as
+ * its total still clears the same floor a single shrunk block would need
+ * (SPEC.md Section 4.5 invariant 6: "if scheduled at all, scheduled_minutes
+ * ≥ shrink floor").
  */
 export function planChunks(
   resolved: ResolvedActivity,
@@ -178,6 +191,7 @@ export function planChunks(
 ): ChunkPlan | null {
   if (!shrinkRule.chunkingAllowed) return null
   const target = resolved.activity.durationMinutes
+  const floor = shrinkRule.minDurationMinutes
   const searchIntervals = clipToWindowBounds(context.freeIntervals, resolved)
 
   let best: ChunkPlan | null = null
@@ -190,7 +204,13 @@ export function planChunks(
       shrinkRule.minChunkMinutes,
       context
     )
-    if (plan && (!best || plan.cost < best.cost)) best = plan
+    if (
+      plan &&
+      plan.scheduledMinutes >= floor &&
+      (!best || plan.cost < best.cost)
+    ) {
+      best = plan
+    }
   }
   return best
 }

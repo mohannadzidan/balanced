@@ -147,4 +147,43 @@ describe("solve — ShrinkRule (chunking, SPEC.md 14.6)", () => {
     const diag = result.diagnostics.find((d) => d.code === "CHUNKED")
     expect(diag?.message).toBe('"Deep Work" was split into 2 blocks.')
   })
+
+  it("partially completes a chunked activity when the day can't fit its full duration, instead of skipping it outright", () => {
+    // Deep Work: 120m, window 09:00-14:00 drift 0, shrink floor 90,
+    // chunking allowed (min 45, max 3). Meeting A and Meeting B carve the
+    // window down to exactly two 50-minute gaps (09:00-09:50, 13:00-13:50)
+    // — 100 minutes total, short of the full 120 but past the 90-minute
+    // floor, and no single contiguous span reaches 90 at all.
+    const result = generate([
+      activity("Meeting A").rank(1).minutes(190).fixed("09:50", "13:00"),
+      activity("Meeting B").rank(2).minutes(250).fixed("13:50", "18:00"),
+      activity("Deep Work")
+        .rank(3)
+        .minutes(120)
+        .flexible("09:00", "14:00", { drift: 0 })
+        .shrink({ floor: 90, chunking: true, minChunk: 45, maxChunks: 3 }),
+    ])
+
+    const chunks = result.timeline.instances
+      .filter((i) => i.name === "Deep Work")
+      .sort((a, b) => (a.plannedStart ?? 0) - (b.plannedStart ?? 0))
+
+    expect(chunks).toHaveLength(2)
+    expect(chunks.every((c) => c.state === "PLANNED")).toBe(true)
+    expect(chunks[0].plannedStart).toBe(540) // 09:00
+    expect(chunks[0].plannedEnd).toBe(590) // 09:50
+    expect(chunks[1].plannedStart).toBe(780) // 13:00
+    expect(chunks[1].plannedEnd).toBe(830) // 13:50
+
+    const totalScheduled = chunks.reduce((s, c) => s + c.scheduledMinutes, 0)
+    expect(totalScheduled).toBe(100)
+    // Recorded once, on the first chunk: shrunk by 20 (120 -> 100) and one
+    // extra chunk, same as any other relaxed chunk plan.
+    expect(chunks[0].relaxations).toEqual(
+      expect.arrayContaining([
+        { type: "shrink", minutes: 20 },
+        { type: "chunk", minutes: 1 },
+      ])
+    )
+  })
 })
