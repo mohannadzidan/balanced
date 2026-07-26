@@ -1,0 +1,159 @@
+import { describe, expect, it } from "vitest"
+
+import { DEFAULT_COST_CONSTANTS } from "@/app/brain/engine/constants"
+import {
+  validateActivity,
+  validateCatalog,
+} from "@/app/brain/engine/validation"
+import { activity } from "./support/fixtures"
+
+const C = DEFAULT_COST_CONSTANTS
+
+function codesOf(issues: ReturnType<typeof validateActivity>): string[] {
+  return issues.map((i) => i.code)
+}
+
+describe("validateActivity", () => {
+  it("passes a well-formed activity with no issues", () => {
+    const gym = activity("Gym")
+      .rank(1)
+      .minutes(60)
+      .flexible("18:00", "20:00", { drift: 30 })
+      .shrink({ floor: 45 })
+      .build()
+    expect(validateActivity(gym, C)).toEqual([])
+  })
+
+  it.each([
+    [
+      "fixed + strictWindow",
+      (a: ReturnType<typeof activity>) =>
+        a.fixed("09:00", "10:00").strict("09:00", "10:00"),
+    ],
+    [
+      "fixed + flexibleWindow",
+      (a: ReturnType<typeof activity>) =>
+        a.fixed("09:00", "10:00").flexible("09:00", "10:00"),
+    ],
+    [
+      "strictWindow + flexibleWindow",
+      (a: ReturnType<typeof activity>) =>
+        a.strict("09:00", "10:00").flexible("09:00", "10:00"),
+    ],
+    [
+      "fixed + shrink",
+      (a: ReturnType<typeof activity>) =>
+        a.fixed("09:00", "10:00").shrink({ floor: 30 }),
+    ],
+    [
+      "duplicate mandatory",
+      (a: ReturnType<typeof activity>) => a.mandatory().mandatory(),
+    ],
+  ])("flags RULE_INCOMPATIBLE for %s", (_label, configure) => {
+    const built = configure(activity("Bad").rank(1).minutes(60)).build()
+    expect(codesOf(validateActivity(built, C))).toContain("RULE_INCOMPATIBLE")
+  })
+
+  it("flags DURATION_NOT_ON_GRID for an off-grid duration", () => {
+    const bad = activity("Bad").rank(1).minutes(37).build()
+    expect(codesOf(validateActivity(bad, C))).toContain("DURATION_NOT_ON_GRID")
+  })
+
+  it("flags DURATION_NOT_ON_GRID for an off-grid window boundary", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(60)
+      .strict("09:03", "10:00")
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("DURATION_NOT_ON_GRID")
+  })
+
+  it("flags SHRINK_FLOOR_INVALID when the floor exceeds the duration", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(60)
+      .shrink({ floor: 90 })
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("SHRINK_FLOOR_INVALID")
+  })
+
+  it("flags SHRINK_FLOOR_INVALID when the min chunk exceeds the floor", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(60)
+      .shrink({ floor: 30, chunking: true, minChunk: 45 })
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("SHRINK_FLOOR_INVALID")
+  })
+
+  it("flags WINDOW_INVERTED when a strict window ends before it starts", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(30)
+      .strict("10:00", "09:00")
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("WINDOW_INVERTED")
+  })
+
+  it("flags WINDOW_TOO_SHORT when a strict window can't fit the duration and there's no shrink", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(90)
+      .strict("09:00", "10:00")
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("WINDOW_TOO_SHORT")
+  })
+
+  it("does not flag WINDOW_TOO_SHORT when a ShrinkRule is present", () => {
+    const ok = activity("Ok")
+      .rank(1)
+      .minutes(90)
+      .strict("09:00", "10:00")
+      .shrink({ floor: 30 })
+      .build()
+    expect(codesOf(validateActivity(ok, C))).not.toContain("WINDOW_TOO_SHORT")
+  })
+
+  it("flags DRIFT_UNAVOIDABLE when the window is too short for the allowed drift", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(90)
+      .flexible("18:00", "19:00", { drift: 10 })
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("DRIFT_UNAVOIDABLE")
+  })
+
+  it("flags NO_ALLOWED_DAYS when the activity can never be generated", () => {
+    const bad = activity("Bad").rank(1).minutes(30).days().build()
+    expect(codesOf(validateActivity(bad, C))).toContain("NO_ALLOWED_DAYS")
+  })
+
+  it("flags DOMINANCE_VIOLATION for a deliberately broken activity", () => {
+    const broken = activity("Broken")
+      .rank(1)
+      .minutes(1000)
+      .shrink({ floor: 0 })
+      .build()
+    expect(codesOf(validateActivity(broken, C))).toContain(
+      "DOMINANCE_VIOLATION"
+    )
+  })
+})
+
+describe("validateCatalog", () => {
+  it("passes a catalogue with unique ranks", () => {
+    const catalog = [
+      activity("A").rank(1).minutes(30).build(),
+      activity("B").rank(2).minutes(30).build(),
+    ]
+    expect(validateCatalog(catalog)).toEqual([])
+  })
+
+  it("flags PRIORITY_DUPLICATE when two activities share a rank", () => {
+    const catalog = [
+      activity("A").rank(1).minutes(30).build(),
+      activity("B").rank(1).minutes(30).build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).toContain("PRIORITY_DUPLICATE")
+  })
+})
