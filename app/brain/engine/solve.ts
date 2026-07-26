@@ -162,11 +162,11 @@ function runPipeline(
   activitiesToSolve: readonly Activity[],
   baseOccupied: readonly Interval[],
   resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number
+  weight: (activity: Activity) => number,
+  freezeBoundary: number = input.now
 ): PipelineOutcome {
   const grid = constants.GRID
   const nodeLimit = constants.HARD_SET_NODE_LIMIT
-  const freezeBoundary = input.now
   const lengthMinutes = input.dayFrame.lengthMinutes
 
   // Sequence dependents (SPEC.md Section 5.6) are placed adjacent to their
@@ -743,6 +743,106 @@ function solveRestore(
   )
 }
 
+/**
+ * FINISH_EARLY (SPEC.md Section 9.3): complete an ACTIVE instance ahead of
+ * its planned end and re-solve the remainder against a freeze boundary
+ * moved back to `at` — not `input.now` — so the reclaimed time between `at`
+ * and the old planned end is immediately available to the rest of the day.
+ * There's no separate "reuse the freed time" step: a from-scratch re-solve
+ * of everything not anchored naturally restores whatever a previously
+ * shrunk or skipped activity can now fit. Never rejected beyond the
+ * unknown/wrong-state/out-of-range checks below.
+ */
+function solveFinishEarly(
+  input: SolveInput & {
+    readonly event: { type: "FINISH_EARLY"; instanceId: string; at: number }
+  },
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const { instanceId, at } = input.event
+  const target = input.existing.find((i) => i.id === instanceId)
+  if (!target) {
+    return rejectionResult(
+      input,
+      "UNKNOWN_INSTANCE",
+      `No instance "${instanceId}" in the current timeline.`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+  if (target.state !== "ACTIVE") {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" is ${target.state}, not ACTIVE — it can't be finished early.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+  const actualStart = target.actualStart ?? target.plannedStart ?? at
+  if (
+    at < actualStart ||
+    target.plannedEnd === null ||
+    at > target.plannedEnd
+  ) {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" can only finish early between its actual start and its planned end.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  const finished: TimelineActivity = {
+    ...target,
+    state: "COMPLETED",
+    completedSource: "user",
+    actualStart,
+    actualEnd: at,
+  }
+  const workingExisting = input.existing.map((i) =>
+    i.id === target.id ? finished : i
+  )
+
+  const { anchors, anchorActivityIds, baseOccupied } =
+    extractAnchors(workingExisting)
+  const activitiesToSolve = todaysCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id)
+  )
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight,
+    at
+  )
+
+  return toResult(
+    input,
+    [...anchors, ...solved],
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
 export function solve(input: SolveInput): SolveResult {
   const constants = resolveConstants(input.constants)
   const weekday = weekdayOf(input.dayFrame.date)
@@ -786,6 +886,16 @@ export function solve(input: SolveInput): SolveResult {
   }
   if (input.event.type === "RESTORE") {
     return solveRestore(
+      { ...input, event: input.event },
+      constants,
+      todaysCatalog,
+      resolve,
+      weight,
+      totalRanked
+    )
+  }
+  if (input.event.type === "FINISH_EARLY") {
+    return solveFinishEarly(
       { ...input, event: input.event },
       constants,
       todaysCatalog,
