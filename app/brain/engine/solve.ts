@@ -19,6 +19,7 @@ import type {
   Relaxation,
   RejectionCode,
   RejectionError,
+  Rule,
   SkipReason,
   SolveInput,
   SolveResult,
@@ -165,7 +166,9 @@ function runPipeline(
   baseOccupied: readonly Interval[],
   resolve: (activity: Activity) => ResolvedActivity,
   weight: (activity: Activity) => number,
-  freezeBoundary: number = input.now
+  freezeBoundary: number = input.now,
+  fullCatalog: readonly Activity[] = activitiesToSolve,
+  anchorPlacements: ReadonlyMap<string, Placement> = new Map()
 ): PipelineOutcome {
   const grid = constants.GRID
   const nodeLimit = constants.HARD_SET_NODE_LIMIT
@@ -222,6 +225,7 @@ function runPipeline(
   ])
   const discretionary = hostPool.filter((a) => !hardSetIds.has(a.id))
   const initialHostPlacements = new Map<string, Placement>([
+    ...anchorPlacements,
     ...fixedOutcome.placements,
     ...hardOutcome.placements,
   ])
@@ -233,7 +237,11 @@ function runPipeline(
     resolve,
     weight,
     dayFrame: input.dayFrame,
-    allActivities: hostPool,
+    // The full catalogue, not just hostPool, so a guest can still nest into
+    // a host that's already anchored (SPEC.md Section 9.6's canonical case:
+    // editing an ACTIVE Work's OverlapRule to admit a new guest) even though
+    // that host isn't itself up for re-solving this round.
+    allActivities: fullCatalog,
     initialHostPlacements,
   })
   const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
@@ -392,6 +400,8 @@ interface AnchorSet {
   readonly anchors: TimelineActivity[]
   readonly anchorActivityIds: Set<string>
   readonly baseOccupied: Interval[]
+  /** Anchor placements keyed by activityId, for guest-nesting lookups. */
+  readonly anchorPlacements: ReadonlyMap<string, Placement>
 }
 
 /**
@@ -413,16 +423,30 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
   const anchorActivityIds = new Set(
     anchors.map((a) => a.activityId).filter((id): id is string => id !== null)
   )
-  const baseOccupied: Interval[] = anchors
-    .filter(
-      (a) =>
-        !a.hostInstanceId && a.plannedStart !== null && a.plannedEnd !== null
-    )
+  const placedAnchors = anchors.filter(
+    (a) => a.plannedStart !== null && a.plannedEnd !== null
+  )
+  const baseOccupied: Interval[] = placedAnchors
+    .filter((a) => !a.hostInstanceId)
     .map((a) => ({
       start: a.actualStart ?? (a.plannedStart as number),
       end: a.actualEnd ?? (a.plannedEnd as number),
     }))
-  return { anchors, anchorActivityIds, baseOccupied }
+  const anchorPlacements = new Map<string, Placement>(
+    placedAnchors
+      .filter((a): a is TimelineActivity & { activityId: string } =>
+        Boolean(a.activityId)
+      )
+      .map((a) => [
+        a.activityId,
+        {
+          start: a.plannedStart as number,
+          end: a.plannedEnd as number,
+          nestedIn: a.hostInstanceId,
+        },
+      ])
+  )
+  return { anchors, anchorActivityIds, baseOccupied, anchorPlacements }
 }
 
 function rejectionResult(
@@ -546,7 +570,8 @@ function solveTick(
     )
   }
 
-  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(backdated)
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
+    extractAnchors(backdated)
   const activitiesToSolve = todaysCatalog.filter(
     (a) => !anchorActivityIds.has(a.id)
   )
@@ -561,7 +586,10 @@ function solveTick(
     activitiesToSolve,
     baseOccupied,
     resolve,
-    weight
+    weight,
+    input.now,
+    todaysCatalog,
+    anchorPlacements
   )
 
   return toResult(
@@ -639,9 +667,8 @@ function solveSkip(
     locked: true,
   }
 
-  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(
-    input.existing.filter((i) => groupKeyOf(i) !== groupKey)
-  )
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
+    extractAnchors(input.existing.filter((i) => groupKeyOf(i) !== groupKey))
   const activitiesToSolve = todaysCatalog.filter(
     (a) => !anchorActivityIds.has(a.id) && a.id !== groupKey
   )
@@ -656,7 +683,10 @@ function solveSkip(
     activitiesToSolve,
     baseOccupied,
     resolve,
-    weight
+    weight,
+    input.now,
+    todaysCatalog,
+    anchorPlacements
   )
 
   return toResult(
@@ -714,9 +744,8 @@ function solveRestore(
   }
 
   const groupKey = groupKeyOf(target)
-  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(
-    input.existing.filter((i) => groupKeyOf(i) !== groupKey)
-  )
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
+    extractAnchors(input.existing.filter((i) => groupKeyOf(i) !== groupKey))
   const activitiesToSolve = todaysCatalog.filter(
     (a) => !anchorActivityIds.has(a.id)
   )
@@ -731,7 +760,10 @@ function solveRestore(
     activitiesToSolve,
     baseOccupied,
     resolve,
-    weight
+    weight,
+    input.now,
+    todaysCatalog,
+    anchorPlacements
   )
 
   return toResult(
@@ -814,7 +846,7 @@ function solveFinishEarly(
     i.id === target.id ? finished : i
   )
 
-  const { anchors, anchorActivityIds, baseOccupied } =
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
     extractAnchors(workingExisting)
   const activitiesToSolve = todaysCatalog.filter(
     (a) => !anchorActivityIds.has(a.id)
@@ -831,7 +863,9 @@ function solveFinishEarly(
     baseOccupied,
     resolve,
     weight,
-    at
+    at,
+    todaysCatalog,
+    anchorPlacements
   )
 
   return toResult(
@@ -936,7 +970,7 @@ function solveExtend(
     i.id === target.id ? extended : i
   )
 
-  const { anchors, anchorActivityIds, baseOccupied } =
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
     extractAnchors(workingExisting)
   const activitiesToSolve = todaysCatalog.filter(
     (a) => !anchorActivityIds.has(a.id)
@@ -952,7 +986,10 @@ function solveExtend(
     activitiesToSolve,
     baseOccupied,
     resolve,
-    weight
+    weight,
+    input.now,
+    todaysCatalog,
+    anchorPlacements
   )
 
   const candidateInstances = [...anchors, ...solved]
@@ -1036,9 +1073,8 @@ function solveAddAdhoc(
   const adhocWeight = (activity: Activity): number =>
     priorityWeight(activity.priorityRank, newTotalRanked)
 
-  const { anchors, anchorActivityIds, baseOccupied } = extractAnchors(
-    input.existing
-  )
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
+    extractAnchors(input.existing)
   const activitiesToSolve = [
     ...todaysCatalog.filter((a) => !anchorActivityIds.has(a.id)),
     adhocActivity,
@@ -1054,7 +1090,10 @@ function solveAddAdhoc(
     activitiesToSolve,
     baseOccupied,
     resolve,
-    adhocWeight
+    adhocWeight,
+    input.now,
+    [...todaysCatalog, adhocActivity],
+    anchorPlacements
   )
 
   const finalInstances = [...anchors, ...solved].map((inst) =>
@@ -1070,6 +1109,183 @@ function solveAddAdhoc(
     status,
     constants,
     newTotalRanked,
+    (input.revision ?? 0) + 1
+  )
+}
+
+/**
+ * SPEC.md Section 9.6's durability rule — "the single most commonly broken
+ * behaviour in this spec": an EDIT_INSTANCE_RULES override lives on the
+ * instance, not the template, and must be carried forward on every
+ * subsequent solve (TICK, SKIP, anything) without the caller replaying the
+ * edit event. Since every solve rebuilds today's activities fresh from
+ * `input.catalog`, that durability has to be re-applied here, once, before
+ * any event-specific handling: any rule tagged `source: "instance"` on an
+ * existing instance replaces the template's rule of that type for this
+ * solve (or is added, if the template had none of that type).
+ */
+function applyInstanceRuleOverrides(
+  todaysCatalog: readonly Activity[],
+  existing: readonly TimelineActivity[]
+): Activity[] {
+  const overridesByActivity = new Map<string, Map<string, Rule>>()
+  for (const inst of existing) {
+    if (!inst.activityId) continue
+    for (const rule of inst.rules) {
+      if (rule.source !== "instance") continue
+      const overrides = overridesByActivity.get(inst.activityId) ?? new Map()
+      overrides.set(rule.type, rule)
+      overridesByActivity.set(inst.activityId, overrides)
+    }
+  }
+  if (overridesByActivity.size === 0) return [...todaysCatalog]
+
+  return todaysCatalog.map((activity) => {
+    const overrides = overridesByActivity.get(activity.id)
+    if (!overrides) return activity
+    const overriddenTypes = new Set(overrides.keys())
+    return {
+      ...activity,
+      rules: [
+        ...activity.rules.filter((r) => !overriddenTypes.has(r.type)),
+        ...overrides.values(),
+      ],
+    }
+  })
+}
+
+/**
+ * EDIT_INSTANCE_RULES (SPEC.md Section 9.6): replace one or more of an
+ * instance's rules for today only, without touching the template — the
+ * canonical case is adding an ad-hoc's id to today's Work OverlapRule. The
+ * override is written onto the resulting instance with `source: "instance"`
+ * and re-solved through the ordinary pipeline (`applyInstanceRuleOverrides`
+ * at the top of `solve()` is what makes it durable across later events).
+ * Scoped to catalogue-backed instances — an ad-hoc has no template to
+ * override in the first place.
+ */
+function solveEditInstanceRules(
+  input: SolveInput & {
+    readonly event: {
+      type: "EDIT_INSTANCE_RULES"
+      instanceId: string
+      rules: readonly Rule[]
+    }
+  },
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): SolveResult {
+  const { instanceId, rules } = input.event
+  const target = input.existing.find((i) => i.id === instanceId)
+  if (!target) {
+    return rejectionResult(
+      input,
+      "UNKNOWN_INSTANCE",
+      `No instance "${instanceId}" in the current timeline.`,
+      [],
+      constants,
+      totalRanked
+    )
+  }
+  if (!target.activityId) {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" is ad-hoc and has no template rule to override.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+  if (target.state === "COMPLETED" || target.state === "CARRIED_IN") {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}" is ${target.state} — its rules can no longer be edited.`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  const templateActivity = todaysCatalog.find(
+    (a) => a.id === target.activityId
+  ) as Activity
+  const overriddenTypes = new Set(rules.map((r) => r.type))
+  const overrideRules: Rule[] = rules.map((r) => ({
+    ...r,
+    source: "instance" as const,
+  }))
+  const overriddenActivity: Activity = {
+    ...templateActivity,
+    rules: [
+      ...templateActivity.rules.filter((r) => !overriddenTypes.has(r.type)),
+      ...overrideRules,
+    ],
+  }
+
+  const errors = validateActivity(overriddenActivity, constants).filter(
+    (i) => i.severity === "error"
+  )
+  if (errors.length > 0) {
+    return rejectionResult(
+      input,
+      "INVALID_STATE_FOR_EVENT",
+      `"${target.name}"'s rules can't be edited that way: ${errors.map((e) => e.message).join("; ")}`,
+      [target.id],
+      constants,
+      totalRanked
+    )
+  }
+
+  const effectiveCatalog = todaysCatalog.map((a) =>
+    a.id === overriddenActivity.id ? overriddenActivity : a
+  )
+  const {
+    anchors: rawAnchors,
+    anchorActivityIds,
+    baseOccupied,
+    anchorPlacements,
+  } = extractAnchors(input.existing)
+  // If the edited activity is itself anchored (e.g. an ACTIVE Work), its own
+  // instance's `rules` must carry the override too — that's what makes the
+  // durability mechanism (applyInstanceRuleOverrides) see it on the *next*
+  // solve. Anchors that aren't the target pass through untouched.
+  const anchors = rawAnchors.map((a) =>
+    a.activityId === overriddenActivity.id
+      ? { ...a, rules: overriddenActivity.rules }
+      : a
+  )
+  const activitiesToSolve = effectiveCatalog.filter(
+    (a) => !anchorActivityIds.has(a.id)
+  )
+
+  const {
+    instances: solved,
+    diagnostics,
+    status,
+  } = runPipeline(
+    input,
+    constants,
+    activitiesToSolve,
+    baseOccupied,
+    resolve,
+    weight,
+    input.now,
+    effectiveCatalog,
+    anchorPlacements
+  )
+
+  return toResult(
+    input,
+    [...anchors, ...solved],
+    diagnostics,
+    status,
+    constants,
+    totalRanked,
     (input.revision ?? 0) + 1
   )
 }
@@ -1091,8 +1307,9 @@ export function solve(input: SolveInput): SolveResult {
   const weight = (activity: Activity): number =>
     priorityWeight(activity.priorityRank, totalRanked)
 
-  const todaysCatalog = input.catalog.filter(
-    (a) => a.enabled && a.allowedDays.includes(weekday)
+  const todaysCatalog = applyInstanceRuleOverrides(
+    input.catalog.filter((a) => a.enabled && a.allowedDays.includes(weekday)),
+    input.existing
   )
 
   if (input.event.type === "TICK") {
@@ -1151,6 +1368,16 @@ export function solve(input: SolveInput): SolveResult {
       constants,
       todaysCatalog,
       resolve,
+      totalRanked
+    )
+  }
+  if (input.event.type === "EDIT_INSTANCE_RULES") {
+    return solveEditInstanceRules(
+      { ...input, event: input.event },
+      constants,
+      todaysCatalog,
+      resolve,
+      weight,
       totalRanked
     )
   }
