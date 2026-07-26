@@ -80,6 +80,46 @@ describe("planChunks", () => {
     expect(plan!.cost).toBe(C.CHUNK)
   })
 
+  it("finds a valid split across unequal-sized regions instead of greedily stranding the smaller one (regression)", () => {
+    // A naive "fill the largest region first, up to the full target" would
+    // give the 90-minute region 90 minutes, leaving only 30 for the
+    // 60-minute region — below the 45-minute floor, wrongly reporting no
+    // plan exists even though 60 + 60 (or any 45..90/30..60 split) legally
+    // reaches the 120-minute target.
+    const resolved = resolveActivity(
+      activity("Deep Work")
+        .rank(1)
+        .minutes(120)
+        .flexible("09:00", "17:30", { drift: 0 })
+        .build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 60,
+      chunkingAllowed: true,
+      minChunkMinutes: 45,
+      maxChunks: 3,
+    }
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({
+        freeIntervals: [
+          { start: 540, end: 600 }, // 60-minute region
+          { start: 840, end: 930 }, // 90-minute region
+        ],
+      })
+    )
+    expect(plan).not.toBeNull()
+    expect(plan!.scheduledMinutes).toBe(120)
+    expect(plan!.chunks).toHaveLength(2)
+    for (const chunk of plan!.chunks) {
+      expect(chunk.end - chunk.start).toBeGreaterThanOrEqual(45)
+    }
+  })
+
   it("returns null when the free regions cannot reach the target even chunked", () => {
     const resolved = resolveActivity(
       activity("Deep Work").rank(1).minutes(120).build(),

@@ -126,9 +126,17 @@ function fillChunks(
   let remaining = target
   const chunks: Placement[] = []
   let totalDrift = 0
-  for (const region of selected) {
+  for (let i = 0; i < selected.length; i++) {
+    const region = selected[i]
     if (remaining <= 0) break
-    const length = Math.min(remaining, region.usable)
+    // Reserve at least `minChunk` for each region still to come, so an
+    // early, larger region doesn't greedily take so much that a later one
+    // can't meet the floor — a split that would otherwise exist (e.g. two
+    // 60-minute regions for a 120-minute target) must not be missed just
+    // because this region alone could hold the whole target.
+    const regionsAfter = selected.length - i - 1
+    const cap = remaining - minChunk * regionsAfter
+    const length = Math.min(region.usable, cap)
     if (length < minChunk) return null
     const placed = bestChunkInInterval(
       resolved,
