@@ -13,6 +13,21 @@ export interface PlacementContext {
   readonly lengthMinutes: number
   readonly weight: number
   readonly constants: CostConstants
+  /**
+   * Absolute-anchored OverlapRule exclusion windows on this activity, if it
+   * is a host (SPEC.md Section 5.7): a hard constraint that each candidate
+   * must fully contain every one of these windows.
+   */
+  readonly absoluteExclusions?: readonly Interval[]
+}
+
+function containsAllExclusions(
+  exclusions: readonly Interval[] | undefined,
+  start: number,
+  end: number
+): boolean {
+  if (!exclusions) return true
+  return exclusions.every((w) => w.start >= start && w.end <= end)
 }
 
 export interface PlacementResult {
@@ -65,6 +80,7 @@ export function enumerateFeasiblePlacementsForLength(
     const end = start + length
     const verdict = evaluateCandidate(resolved, start, end)
     if (!verdict.feasible) continue
+    if (!containsAllExclusions(context.absoluteExclusions, start, end)) continue
 
     const evaluation: CandidateEvaluation = {
       scheduledMinutes: length,

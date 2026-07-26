@@ -1,4 +1,5 @@
 import { computeFreeIntervals } from "./intervals"
+import { overlapRuleOf, resolveAbsoluteExclusions } from "./overlap"
 import { enumerateFeasiblePlacementsAcrossLengths } from "./placement"
 import type { ResolvedActivity } from "./resolve"
 import { resolveWallClock } from "./time"
@@ -118,6 +119,7 @@ export interface HardSetContext {
   readonly constants: CostConstants
   readonly resolve: (activity: Activity) => ResolvedActivity
   readonly weight: (activity: Activity) => number
+  readonly dayFrame: DayFrame
 }
 
 export interface HardSetOutcome {
@@ -146,6 +148,10 @@ function candidatesFor(
       lengthMinutes: ctx.lengthMinutes,
       weight: ctx.weight(activity),
       constants: ctx.constants,
+      absoluteExclusions: resolveAbsoluteExclusions(
+        overlapRuleOf(activity),
+        ctx.dayFrame
+      ),
     }
   )
 }

@@ -192,6 +192,7 @@ export interface ShrinkOutcome {
   readonly chunks: readonly Placement[] | null
   readonly scheduledMinutes: number
   readonly skipReason: SkipReason | null
+  readonly cost: number
 }
 
 /**
@@ -220,6 +221,7 @@ export function placeWithShrinkRule(
       chunks: chunkPlan.chunks,
       scheduledMinutes: chunkPlan.scheduledMinutes,
       skipReason: null,
+      cost: chunkPlan.cost,
     }
   }
   if (single.placement) {
@@ -228,6 +230,7 @@ export function placeWithShrinkRule(
       chunks: null,
       scheduledMinutes: single.scheduledMinutes,
       skipReason: null,
+      cost: single.cost,
     }
   }
   return {
@@ -235,5 +238,6 @@ export function placeWithShrinkRule(
     chunks: null,
     scheduledMinutes: 0,
     skipReason: single.skipReason,
+    cost: Number.POSITIVE_INFINITY,
   }
 }

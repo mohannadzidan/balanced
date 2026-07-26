@@ -1,4 +1,5 @@
 import { violatesDominance } from "./cost"
+import { overlapRuleOf } from "./overlap"
 import { sequenceRuleOf } from "./sequence"
 import type {
   Activity,
@@ -313,6 +314,30 @@ function checkSequenceCycle(
   }
 }
 
+function checkGuestOutranksHost(
+  activities: readonly Activity[],
+  issues: ValidationIssue[]
+): void {
+  const byId = new Map(activities.map((a) => [a.id, a]))
+  for (const host of activities) {
+    const rule = overlapRuleOf(host)
+    if (!rule) continue
+    for (const guestId of rule.allowedGuestIds) {
+      const guest = byId.get(guestId)
+      if (guest && guest.priorityRank < host.priorityRank) {
+        issues.push(
+          issue(
+            "warning",
+            "GUEST_OUTRANKS_HOST",
+            guest.id,
+            `"${guest.name}" outranks its host "${host.name}" — it will be placed before the host and nesting will never be considered`
+          )
+        )
+      }
+    }
+  }
+}
+
 /** Cross-activity checks over the whole catalogue (SPEC.md Section 10.1). */
 export function validateCatalog(
   activities: readonly Activity[]
@@ -338,6 +363,7 @@ export function validateCatalog(
 
   checkSequenceMultiple(activities, issues)
   checkSequenceCycle(activities, issues)
+  checkGuestOutranksHost(activities, issues)
 
   return issues
 }

@@ -198,6 +198,7 @@ export function solve(input: SolveInput): SolveResult {
     constants,
     resolve,
     weight,
+    dayFrame: input.dayFrame,
   })
   const occupiedAfterHardSet: Interval[] = [
     ...occupiedAfterFixed,
@@ -213,6 +214,10 @@ export function solve(input: SolveInput): SolveResult {
     ...mandatorySet.map((a) => a.id),
   ])
   const discretionary = hostPool.filter((a) => !hardSetIds.has(a.id))
+  const initialHostPlacements = new Map<string, Placement>([
+    ...fixedOutcome.placements,
+    ...hardOutcome.placements,
+  ])
   const greedyOutcome = placeGreedy(discretionary, occupiedAfterHardSet, {
     freezeBoundary,
     grid,
@@ -220,6 +225,9 @@ export function solve(input: SolveInput): SolveResult {
     constants,
     resolve,
     weight,
+    dayFrame: input.dayFrame,
+    allActivities: hostPool,
+    initialHostPlacements,
   })
   const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
     (chunks) => chunks.map((c) => ({ start: c.start, end: c.end }))

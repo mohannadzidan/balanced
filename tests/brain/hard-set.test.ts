@@ -97,6 +97,7 @@ describe("placeHardSet", () => {
     constants: DEFAULT_COST_CONSTANTS,
     resolve,
     weight,
+    dayFrame,
   }
 
   it("places a single mandatory activity in the first available slot", () => {

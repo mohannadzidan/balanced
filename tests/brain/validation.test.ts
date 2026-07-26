@@ -202,4 +202,30 @@ describe("validateCatalog", () => {
     ]
     expect(codesOf(validateCatalog(catalog))).not.toContain("SEQUENCE_CYCLE")
   })
+
+  it("flags GUEST_OUTRANKS_HOST when a guest is ranked ahead of its host", () => {
+    const catalog = [
+      activity("Email").id("email").rank(1).minutes(30).build(),
+      activity("Work")
+        .rank(2)
+        .minutes(480)
+        .overlap({ budget: 60, guests: ["email"] })
+        .build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).toContain("GUEST_OUTRANKS_HOST")
+  })
+
+  it("does not flag GUEST_OUTRANKS_HOST when the host outranks its guest", () => {
+    const catalog = [
+      activity("Work")
+        .rank(1)
+        .minutes(480)
+        .overlap({ budget: 60, guests: ["email"] })
+        .build(),
+      activity("Email").id("email").rank(2).minutes(30).build(),
+    ]
+    expect(codesOf(validateCatalog(catalog))).not.toContain(
+      "GUEST_OUTRANKS_HOST"
+    )
+  })
 })
