@@ -29,31 +29,35 @@ export function enumerateCandidateStarts(
 }
 
 /**
- * Single-activity placement search (SPEC.md Section 8.6), v0: duration and
- * priority only — no rule-specific feasibility or cost yet. Picks the
- * earliest legal start, per the Section 7.6 tie-break chain.
+ * Every legal placement of `activity` inside `context`, earliest first
+ * (Section 7.6 tie-break #1). Duration and priority only so far — window,
+ * shrink, and overlap feasibility land with their own rule types.
  */
-export function placeActivity(
+export function enumerateFeasiblePlacements(
   activity: Activity,
   context: PlacementContext
-): PlacementResult {
+): Placement[] {
   const starts = enumerateCandidateStarts(
     activity.durationMinutes,
     context.freeIntervals,
     context.grid
   ).filter((s) => s >= context.freezeBoundary)
 
-  if (starts.length === 0) {
+  return starts.map((start) => ({
+    start,
+    end: start + activity.durationMinutes,
+    nestedIn: null,
+  }))
+}
+
+/** Single-activity placement search (SPEC.md Section 8.6): the cheapest candidate. */
+export function placeActivity(
+  activity: Activity,
+  context: PlacementContext
+): PlacementResult {
+  const candidates = enumerateFeasiblePlacements(activity, context)
+  if (candidates.length === 0) {
     return { placement: null, skipReason: "NO_FREE_SPACE" }
   }
-
-  const start = starts[0]
-  return {
-    placement: {
-      start,
-      end: start + activity.durationMinutes,
-      nestedIn: null,
-    },
-    skipReason: null,
-  }
+  return { placement: candidates[0], skipReason: null }
 }
