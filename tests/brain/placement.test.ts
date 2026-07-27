@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import { DEFAULT_COST_CONSTANTS } from "@/app/brain/engine/constants"
 import {
   enumerateCandidateStarts,
+  enumerateFeasiblePlacements,
+  enumerateFeasiblePlacementsForLength,
   evaluateCandidate,
   placeActivity,
   placeActivityWithFloor,
@@ -79,6 +81,21 @@ describe("placeActivity — duration and priority only (no window rules)", () =>
       baseContext({ freeIntervals: [{ start: 0, end: 30 }] })
     )
     expect(result).toEqual({ placement: null, skipReason: "NO_FREE_SPACE" })
+  })
+})
+
+describe("enumerateFeasiblePlacements", () => {
+  it("matches enumerateFeasiblePlacementsForLength at the activity's full duration", () => {
+    const resolved = resolveActivity(
+      activity("Work").rank(1).minutes(60).build(),
+      dayFrame
+    )
+    const context = baseContext({ freeIntervals: [{ start: 0, end: 120 }] })
+    expect(enumerateFeasiblePlacements(resolved, context)).toEqual(
+      enumerateFeasiblePlacementsForLength(resolved, 60, context).map(
+        (r) => r.placement
+      )
+    )
   })
 })
 
@@ -217,5 +234,26 @@ describe("placeActivityWithFloor — ShrinkRule ladder", () => {
     expect(result.placement).toBeNull()
     expect(result.skipReason).toBe("NO_FREE_SPACE")
     expect(result.scheduledMinutes).toBe(0)
+  })
+
+  it("reports NO_FREE_SPACE for a plain (no window rule) activity blocked only by an unsatisfiable absolute exclusion", () => {
+    // Raw grid starts exist (the floor fits fine inside the free interval),
+    // but every one of them fails to contain an exclusion window far outside
+    // it — the activity has no window rule of its own, so inferSkipReason
+    // falls through both window checks to its plain NO_FREE_SPACE default.
+    const resolved = resolveActivity(
+      activity("Work").rank(1).minutes(30).build(),
+      dayFrame
+    )
+    const result = placeActivityWithFloor(
+      resolved,
+      30,
+      baseContext({
+        freeIntervals: [{ start: 0, end: 100 }],
+        absoluteExclusions: [{ start: 200, end: 300 }],
+      })
+    )
+    expect(result.placement).toBeNull()
+    expect(result.skipReason).toBe("NO_FREE_SPACE")
   })
 })
