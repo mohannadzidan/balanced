@@ -11,6 +11,8 @@ export const activityTable = sqliteTable("activity", {
   allowedDays: text("allowed_days", { mode: "json" }).$type<string[]>().notNull().default([]),
   /** True for activities that only ever appear as a Sequence Rule's pre/post transition (e.g. Commute) — the generator never schedules them standalone. */
   isTransitionOnly: integer("is_transition_only", { mode: "boolean" }).notNull().default(false),
+  /** Fixed duration in minutes for transition-only activities. Used to anchor pre/post transitions to the main activity. */
+  transitionDurationMin: integer("transition_duration_min"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(strftime('%s', 'now'))`),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().default(sql`(strftime('%s', 'now'))`),
 });

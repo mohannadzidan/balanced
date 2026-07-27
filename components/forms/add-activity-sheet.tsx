@@ -25,6 +25,7 @@ export function AddActivitySheet() {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [windowKind, setWindowKind] = useState<"strict" | "flexible">("flexible")
+  const [isTransitionOnly, setIsTransitionOnly] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   function handleSubmit(formData: FormData) {
@@ -34,6 +35,7 @@ export function AddActivitySheet() {
         formRef.current?.reset()
         setError(null)
         setOpen(false)
+        setIsTransitionOnly(false)
       } else {
         setError(result.error)
       }
@@ -103,7 +105,7 @@ export function AddActivitySheet() {
               <Input id="activity-window-end" name="windowEndMin" type="time" defaultValue="10:00" required />
             </div>
           </div>
-          {windowKind === "flexible" && (
+          {windowKind === "flexible" && !isTransitionOnly && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="activity-window-duration">Duration (hours)</Label>
               <Input
@@ -121,7 +123,12 @@ export function AddActivitySheet() {
             </div>
           )}
           <label className="flex items-start gap-1.5 text-sm text-foreground">
-            <Checkbox name="isTransitionOnly" className="mt-0.5" />
+            <Checkbox
+              name="isTransitionOnly"
+              className="mt-0.5"
+              checked={isTransitionOnly}
+              onChange={(e) => setIsTransitionOnly(e.target.checked)}
+            />
             <span>
               Transition only
               <span className="block text-xs text-muted-foreground">
@@ -130,6 +137,24 @@ export function AddActivitySheet() {
               </span>
             </span>
           </label>
+          {isTransitionOnly && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="transition-duration">Duration (minutes)</Label>
+              <Input
+                id="transition-duration"
+                name="transitionDurationMin"
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={30}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Fixed duration in minutes. The transition will start this many minutes before (pre)
+                or after (post) the main activity it&apos;s attached to.
+              </p>
+            </div>
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <SheetFooter>
             <Button type="submit" disabled={pending}>

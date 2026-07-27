@@ -28,6 +28,16 @@ const durationHoursField = z.string().transform((raw, ctx) => {
   return Math.round(hours * 60)
 })
 
+/** Minutes (whole number) from a form field for transition duration. */
+const transitionDurationField = z.string().transform((raw, ctx) => {
+  const minutes = Number(raw.trim())
+  if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isInteger(minutes)) {
+    ctx.addIssue({ code: "custom", message: "Enter a positive whole number of minutes." })
+    return z.NEVER
+  }
+  return minutes
+})
+
 // `endMin <= startMin` is a window that spans midnight (e.g. Sleep, 22:00 to
 // 06:00) — only equal start/end is rejected, as an empty, ambiguous window.
 // Strict windows are a fixed placement (their own span is the length);
@@ -37,6 +47,7 @@ const createActivitySchema = z
     name: z.string().trim().min(1, "Name is required."),
     allowedDays: z.array(z.enum(WEEKDAYS)).min(1, "Select at least one day."),
     isTransitionOnly: z.literal("on").optional(),
+    transitionDurationMin: z.string().optional(),
   })
   .and(
     z.discriminatedUnion("windowKind", [
@@ -58,6 +69,16 @@ const createActivitySchema = z
       data.windowKind !== "flexible" || data.windowDurationMin <= windowSpanMin(data.windowStartMin, data.windowEndMin),
     { message: "Duration can't exceed the window's span.", path: ["windowDurationMin"] }
   )
+  .refine(
+    (data) => {
+      if (data.isTransitionOnly === "on") {
+        const duration = Number(data.transitionDurationMin?.trim() ?? "")
+        return Number.isInteger(duration) && duration > 0
+      }
+      return true
+    },
+    { message: "Transition duration must be a positive whole number of minutes.", path: ["transitionDurationMin"] }
+  )
 
 export type ActivityFormState =
   | { ok: true }
@@ -67,25 +88,45 @@ export async function createActivityAction(
   _prevState: ActivityFormState,
   formData: FormData
 ): Promise<ActivityFormState> {
-  const parsed = createActivitySchema.safeParse({
+  const isTransitionOnly = formData.get("isTransitionOnly") === "on"
+  const windowKind = formData.get("windowKind") as "strict" | "flexible"
+
+  const baseData = {
     name: formData.get("name"),
     allowedDays: formData.getAll("allowedDays"),
     isTransitionOnly: formData.get("isTransitionOnly") ?? undefined,
-    windowKind: formData.get("windowKind"),
+    windowKind,
     windowStartMin: formData.get("windowStartMin"),
     windowEndMin: formData.get("windowEndMin"),
     windowDurationMin: formData.get("windowDurationHours"),
-  })
+    transitionDurationMin: formData.get("transitionDurationMin"),
+  }
+
+  const parsed = createActivitySchema.safeParse(baseData)
 
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
   }
 
+  const transitionDurationMin = isTransitionOnly
+    ? transitionDurationField.parse(formData.get("transitionDurationMin"))
+    : undefined
+
   const activity = await createActivity({
     name: parsed.data.name,
     allowedDays: parsed.data.allowedDays,
     isTransitionOnly: parsed.data.isTransitionOnly === "on",
+    transitionDurationMin,
   })
+
+  // If it's a transition-only activity, we don't create a window rule
+  // The transition duration is stored on the activity itself
+  if (isTransitionOnly) {
+    await regenerateForwardTimeline(todayISO())
+    revalidatePath("/")
+    return { ok: true }
+  }
+
   await upsertWindowRule(
     activity.id,
     parsed.data.windowKind === "strict"

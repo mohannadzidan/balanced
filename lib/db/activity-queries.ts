@@ -9,6 +9,7 @@ export type ActivitySummary = {
   name: string
   allowedDays: string[]
   isTransitionOnly: boolean
+  transitionDurationMin: number | null
 }
 
 export async function listActivities(): Promise<ActivitySummary[]> {
@@ -18,6 +19,7 @@ export async function listActivities(): Promise<ActivitySummary[]> {
       name: activityTable.name,
       allowedDays: activityTable.allowedDays,
       isTransitionOnly: activityTable.isTransitionOnly,
+      transitionDurationMin: activityTable.transitionDurationMin,
     })
     .from(activityTable)
     .orderBy(asc(activityTable.createdAt))
@@ -27,6 +29,7 @@ export async function createActivity(input: {
   name: string
   allowedDays: Weekday[]
   isTransitionOnly: boolean
+  transitionDurationMin?: number
 }): Promise<{ id: string }> {
   const [row] = await db
     .insert(activityTable)
@@ -34,6 +37,7 @@ export async function createActivity(input: {
       name: input.name,
       allowedDays: input.allowedDays,
       isTransitionOnly: input.isTransitionOnly,
+      transitionDurationMin: input.transitionDurationMin ?? null,
     })
     .returning({ id: activityTable.id })
   return row

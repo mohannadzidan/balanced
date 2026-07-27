@@ -1,0 +1,1 @@
+ALTER TABLE `activity` ADD `transition_duration_min` integer;
