@@ -138,6 +138,53 @@ describe("findDependentPlacement", () => {
     expect(found).toBeNull()
   })
 
+  it("skips a candidate gap that starts before the freeze boundary, and widens until one clears it", () => {
+    // Post dependent: g=0 would start exactly at the host's end (600), which
+    // is still frozen; g=5 (605) clears the freeze boundary.
+    const commute = activity("Commute").rank(1).minutes(30).build()
+    const rule: SequenceRule = {
+      type: "sequence",
+      source: "template",
+      role: "post",
+      linkedActivityId: "work",
+      maxGapMinutes: 15,
+    }
+    const found = findDependentPlacement(
+      resolve(commute),
+      rule,
+      { start: 540, end: 600 },
+      free,
+      602,
+      1440,
+      5
+    )
+    expect(found).toEqual({
+      placement: { start: 605, end: 635, nestedIn: null },
+      gapMinutes: 5,
+    })
+  })
+
+  it("returns null when every candidate gap would spill past the end of the day", () => {
+    const commute = activity("Commute").rank(1).minutes(30).build()
+    const rule: SequenceRule = {
+      type: "sequence",
+      source: "template",
+      role: "post",
+      linkedActivityId: "work",
+      maxGapMinutes: 15,
+    }
+    const found = findDependentPlacement(
+      resolve(commute),
+      rule,
+      { start: 1400, end: 1430 },
+      free,
+      0,
+      1440,
+      5
+    )
+    expect(found).toBeNull()
+  })
+
   it("respects the dependent's own window rules", () => {
     // Post dependent wants 600-630, but its own strict window is 06:00-10:00
     // (360-600), so the zero-gap slot is infeasible and there is no other.
@@ -239,5 +286,18 @@ describe("placeSequenceChain", () => {
     )
     expect(outcome.placements.size).toBe(0)
     expect(outcome.skipped.get("commute")).toBe("NO_FREE_SPACE")
+  })
+
+  it("defensively skips a mutual cycle of dependents whose hosts never resolve", () => {
+    // A pre B, B pre A: neither is ever a key in hostResolutions, so neither
+    // round makes progress. validateCatalog's SEQUENCE_CYCLE check should
+    // normally prevent this from reaching solve() at all — this exercises
+    // the function's own fallback directly.
+    const a = activity("A").rank(1).minutes(10).sequence("pre", "b").build()
+    const b = activity("B").rank(2).minutes(10).sequence("pre", "a").build()
+    const outcome = placeSequenceChain([a, b], new Map(), [], ctx)
+    expect(outcome.placements.size).toBe(0)
+    expect(outcome.skipped.get("a")).toBe("NO_FREE_SPACE")
+    expect(outcome.skipped.get("b")).toBe("NO_FREE_SPACE")
   })
 })

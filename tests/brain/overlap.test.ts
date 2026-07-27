@@ -63,6 +63,30 @@ describe("resolveExclusionWindow", () => {
     })
   })
 
+  it("defaults a relative window's missing offsets to zero", () => {
+    const window: ExclusionWindow = {
+      id: "focus",
+      name: "Focus Hour",
+      anchor: "relative",
+    }
+    expect(resolveExclusionWindow(window, { start: 540 }, dayFrame)).toEqual({
+      start: 540,
+      end: 540,
+    })
+  })
+
+  it("defaults an absolute window's missing wall-clock times to midnight", () => {
+    const window: ExclusionWindow = {
+      id: "call",
+      name: "Customer Call",
+      anchor: "absolute",
+    }
+    expect(resolveExclusionWindow(window, { start: 999 }, dayFrame)).toEqual({
+      start: 0,
+      end: 0,
+    })
+  })
+
   it("resolves an absolute window to wall-clock offsets regardless of the host", () => {
     const window: ExclusionWindow = {
       id: "call",
@@ -230,6 +254,24 @@ describe("findBestNestedPlacement", () => {
       baseContext()
     )
     expect(found?.scheduledMinutes).toBe(30)
+  })
+
+  it("returns null when the remaining budget can't even cover the shrink floor", () => {
+    const email = resolveActivity(
+      activity("Email").id("email").rank(5).minutes(30).build(),
+      dayFrame
+    )
+    const existingGuests = [{ start: 540, end: 590, nestedIn: "work" }] // 50m used, 10m left
+    const found = findBestNestedPlacement(
+      email,
+      20, // shrink floor: bigger than the 10m of budget left
+      { start: 540, end: 1020 },
+      rule,
+      existingGuests,
+      dayFrame,
+      baseContext()
+    )
+    expect(found).toBeNull()
   })
 
   it("returns null when no region satisfies the guest's own window", () => {
