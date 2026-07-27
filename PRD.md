@@ -1,95 +1,81 @@
-## 1. Problem Statement
-Users struggle to balance strict full-time work, freelance goals, learning, and personal time. Static calendars break when reality hits—delays, early finishes, and urgent tasks cause cascading failures in a daily schedule. Existing tools do not dynamically recover missed time or respect complex constraints like commute transitions, interruptible work blocks, and minimum focus sessions. Users need a system that automatically plans their day based on rolling deficits, dynamically adjusts in real-time when reality diverges from the plan, and ensures goals are met without manual schedule micromanagement.
+## Problem Statement
+Users struggle to balance strict full-time work, freelance goals, learning, and personal time. Static calendars break when reality hits—delays, early finishes, and urgent tasks cause cascading failures in a daily schedule. Existing tools do not dynamically recover missed time or respect complex constraints like commute transitions, interruptible work blocks, and un-interruptible focus sessions. Users need a system that automatically plans their day based on fixed durations and priorities, dynamically adjusts in real-time when reality diverges from the plan, and ensures time is accounted for without manual schedule micromanagement.
 
-## 2. Solution Overview
-A dynamic scheduling application where every activity is a reusable global definition governed by typed rules. The server acts as the source of truth and houses the scheduling engine. It automatically generates daily plans, prioritizes activities based on rolling deficits, and reactively recalculates the schedule when activities finish early, run late, or get displaced. 
+## Solution
+A dynamic scheduling application where every activity is a reusable global definition governed by typed rules. The server acts as the source of truth and houses the scheduling engine. It automatically generates daily plans, prioritizes activities based on explicit ranks, and reactively recalculates the schedule when activities finish early, run late, or get displaced. 
 
-The engine uses an Iterative Constraint Relaxation solver to shrink, nudge, or displace lower-priority blocks to make room for reality, ensuring time is always accounted for and optimized.
+The engine uses an Iterative Constraint Relaxation solver to nudge, shrink, or displace lower-priority blocks to build a schedule. All schedule caluculations happen on the server.
 
-## 3. Core Architecture & Concepts
-
-### 3.1 Template vs. Execution Separation
-The system strictly separates the *definition* of an activity from its *execution* on a given day.
-*   **Activity (Template):** A global, recurring definition created by the user (e.g., "Office Work", "Freelance Project"). It contains base properties, an `allowed_days` schedule, and serves as the anchor for rules.
-*   **Timeline (Execution):** A concrete instance of a day. When the server generates a timeline, it clones relevant Activity templates into `TimelineActivities`. This ensures historical schedules remain frozen and immutable, even if the user updates the global template tomorrow. Users can also create on-demand, one-off `TimelineActivities` directly on the timeline that have no parent template.
-
-### 3.2 The Rules System
-Constraints are not hardcoded boolean flags. They are polymorphic, typed rules attached to an Activity. An Activity can have multiple rules, but only **one rule per type**. Rule types include:
-1.  **Overlap Rule:** Defines an overlap budget (in minutes) and permits a set of other activities (guests) to overlap the host activity. (e.g., An 8h "Office Work" host may be overlapped by "Lunch" for up to 60 minutes).
-2.  **Window Rule:** Defines a strict or flexible time window (`start_time`, `end_time`). If strict, the activity cannot leave this boundary. If flexible, the solver may relax the window under pressure.
-3.  **Sequence Rule:** Defines pre- or post-activities. This replaces traditional "transitions." For example, a "Commute" activity can be linked as a pre-sequence to "Office Work". Because the commute is its own activity, it can carry its own `Overlap Rule` (e.g., allowing a "Learning Podcast" to overlap the commute).
-4.  **Tracking Rule:** Defines a daily target goal (in minutes) and whether carry-over is enabled.
-
-### 3.3 Tracking & Carry-Over Logic
-*   **Tracking Ledger:** A single, mutating record attached to an Activity Template that stores `rolling_target_minutes` and `rolling_achieved_minutes`.
-*   **Lazy Evaluation:** Carry-over is not calculated by a midnight cron job. When the user opens the app on a new day, the server lazily evaluates yesterday's `TimelineActivities`. If a tracked activity missed its target, the deficit is added to the `TrackingLedger` and increases today's target before the new timeline is generated.
-*   **Caps & Proration:** Daily targets can be capped to prevent snowballing impossible workloads. Vacation days prorate targets to zero without creating deficits.
-
-### 3.4 Implicit Free Time & Transient State
-*   **Free Time:** The system does not generate "Free Time" blocks. Free time is implicitly calculated by the UI as the gaps between explicit `TimelineActivities`.
-*   **Spare Time Bank:** When a user finishes an overlapping guest activity early (e.g., finishes lunch in 20 minutes instead of 40), the remaining 20 minutes is a transient solver state. The server holds this in memory to prompt the user with quick-task options, but it is not persisted as a database entity unless the user explicitly selects an activity to fill it.
-
-## 4. System Architecture
-
-*   **Backend & Solver:** The scheduling engine runs on the server. It is a pure function that takes a timeline state and an event (e.g., "Finish Early", "Add Strict Block") and returns the new timeline state. The server handles all constraint resolution, cascade logic, and timeline generation.
-*   **Database:** A flat relational database schema (PostgreSQL or Turso/SQLite). UUIDs are used for all primary keys to allow the client to optimistically update the UI before server confirmation.
-*   **Client:** A frontend application (Next.js/React) that renders the timeline, handles user interactions, and communicates with the server for state recalculations.
-
-## 5. User Stories
+## User Stories
 
 ### Activity & Rule Configuration
-1.  As a user, I want to author global Activity templates (e.g., "Work", "Gym") and define which days of the week they are allowed to occur on.
-2.  As a user, I want to attach a Window Rule to an activity, defining a strict or flexible time window so the solver knows when to place it.
-3.  As a user, I want to attach an Overlap Rule to a host activity, setting a budget in minutes and designating specific guest activities that are allowed to interrupt it.
-4.  As a user, I want to link activities together using a Sequence Rule (e.g., linking "Commute" as a pre-activity to "Work") so they are scheduled adjacently.
-5.  As a user, I want to attach a Tracking Rule to an activity to set a daily target goal in minutes and enable rolling carry-over for deficits.
+1. As a user, I want to author global Activity templates (e.g., "Work", "Gym") and define which days of the week they are allowed to occur on, so that my schedule reflects my recurring availability.
+2. As a user, I want to assign a priority rank to an Activity template, where i can drag and drop activtities list to rank them, so that the solver knows which activities take precedence when competing for the same time slots.
+3. As a user, I want to attach a Strict Window/Flexible Window rule to an activity (mutually exclusive, only one of them allowed on same activity) , defining a strict or flexible time window, so that the solver knows when to place it. strict means that the activity MUST be placed within that window, a  flexible window is like preferred window, the activity can overflow the window or start early a little bit if the schedule is crowded when other activities kick the activitiy of flexible window out of its flexible window, but the flexible window have maximum drift
+4. As a user, I want to define a `max_drift_minutes` (maximum number of minutes of the activity that are actually outside of the defined window) property on a flexible Window Rule, so that the solver cannot push the activity into unreasonable hours.
+5. As a user, I want to attach an Overlap Rule to a host activity, setting a shared budget in minutes and designating specific guest activities that are allowed to interrupt it, so that overlapping tasks do not overrun my day.
+6. As a user, I want to define named Exclusion Windows within an Overlap Rule (e.g., "Focus Hour", "Customer Meeting"), so that the solver treats those specific time slices as un-interruptible by overlapping guests.
+7. As a user, I want to link activities together using a Sequence Rule (e.g., linking "Commute" as a pre-activity to "Work"), so they are scheduled adjacently.
+8. As a user, I want to attach a Shrink Rule to an activity, defining the minimum duration it can shrink down to, so that the solver respects my need for focused, non-fragmented work blocks. so instead of completly dismissing an activity, we can squize part of an activity, however the resolver might use this to try to cover the activity duration in the system, so it can create multiple TimelineActivity with smaller amounts to cover the whole duration in smaller chunks, however having full durations instead of chunking is always preferred
+9. As a user i want to be abble to attach Mandatory Rule to an activity, so that the solver respects my need that this activity is very important and cannot be skipped
+10. As a user i want to be able to attach Fixed Rule to an activity, so that the solver respects my need that this activity have fixed start/end time that is not negotiable (mutually exclusive with Strict Window, Flexible Window rules)
 
-### Daily Generation & Carry-Over
-6.  As a user, I want the server to automatically generate my daily timeline when I open the app, placing strict blocks first and filling gaps with flexible, tracked activities based on priority.
-7.  As a user, I want the server to lazily evaluate yesterday's completed timeline when I open the app, rolling any missed time forward to increase today's target.
-8.  As a user, I want my daily target capped by a maximum limit so that rolling deficits cannot snowball into impossible daily loads.
-9.  As a user, I want to mark a future date as a vacation day for a specific activity so its target is prorated to zero and it is excluded from the timeline.
-
-### Execution & Reality Divergence
-10. As a user, I want to create a one-off, on-demand activity directly on the timeline that does not affect my global templates.
-11. As a user, I want to press "Finish Early" on an active activity so the server logs my actual time and recalculates the forward schedule.
-12. As a user, I want the server to automatically fill the freed gap with another tracked activity that has an outstanding deficit.
-13. As a user, I want the server to respect minimum block sizes when attempting to fill freed gaps so my schedule isn't fragmented.
-14. As a user, I want to click "Extend +15m" during an active activity so the server validates it against subsequent blocks and nudges lower-priority blocks forward if necessary.
-15. As a user, I want to toggle a "Pin Block" setting on a scheduled flexible activity so the solver treats it as an immovable hard constraint.
+### Daily Generation & Execution
+9. As a user, I want the server to automatically generate my daily timeline, it always figure out the best possible schedule based on the defined rules
+10. As a user, I want the server to backdate and mark activities prior to the current time as "Completed" if I open the app late, so that the schedule advances forward without requiring manual starts for missed time.
+11. As a user, I want the server to automatically transition activities to an "Active" state at their scheduled start times, so that the schedule advances even if I forget to open the app.
+12. As a user, I want to see an "Active" state UI showing a large countdown timer for the currently running activity, so that I can track my progress without distractions. with actions like "Finish Early", Extend +5m" to extend it
+13. As a user, I want to press "Finish Early" on an active activity, so that the server logs my actual time and checks if i can use this free time for something useful based on the activites and rules if possible, otherwise it should keep it as implecitly free gaps in the schedule (no special free block needed, just a time wthout any blocks)
+14. As a user, I want to click "Extend +5m" during an active activity, so that the server validates it against subsequent blocks and nudges lower-priority blocks forward if necessary.
+15. As a user, I want the server to reschedule the rest of the day when i extend an activity or finish early, so i at all times have a very optimized schedule
 
 ### Overlaps & Spare Time
-16. As a user, I want the timeline to visually render nested blocks inside their parent host container so I can clearly see my schedule hierarchy.
-17. As a user, I want the server to automatically detect when I finish an interrupting guest activity early and bank the spare time.
-18. As a user, I want a UI prompt to appear when spare time is banked, offering quick allowed-interrupters whose minimum block size fits the spare time.
-19. As a user, I want to select a quick activity from the prompt so it immediately enters Focus Mode, or discard the spare time to just rest.
+23. As a user, I want Exclusion Windows to act as sub-activities within the host duration, so that marking time as un-interruptible does not consume or extend the host's overall duration or overlap budget.
 
-### Manual Scheduling
-20. As a user, I want to manually schedule a block of a flexible activity into a specific time slot, so that I can place it myself rather than relying on the solver.
-21. As a user, I want to manually place an allowed guest activity inside a host's Overlap Rule budget, so that I can dictate exactly when my interrupter (like Lunch) occurs.
+### Manual Scheduling & Ad-hoc Changes
+24. As a user, I want to create a one-off, ad-hoc activity directly on the timeline, so that I can handle sudden tasks without mutating my global templates.
+25. As a user, I want to apply the same complex rule to ad-hoc activities at creation time, so that they participate fully in the solver's constraint logic.
+26. As a user, I want to explicitly edit a host TimelineActivity's Overlap Rule instance to permit an ad-hoc activity as a guest, so that I can dictate overlaps for a single day without affecting the global template.
 
-### Validation & Warning States
-22. As a user, I want to see a warning badge on a flexible activity when its daily target cannot be fully scheduled, so that I know my daily goal is at risk.
-23. As a user, I want the server to reject saving a strict activity if it overlaps an immovable block, so that I am forced to resolve the conflict manually.
+### Validation & Reality Divergence
+28. As a user, I want the server to reject saving a strict activity if it overlaps another strict activity and cannot be resolved, so that I am forced to resolve hard conflicts manually.
+29. As a user, I want the server to skip the pre-activity if the host activity is displaced entirely, so that the system does not schedule a commute to a skipped location.
+30. As a user, I want the server to mark an activity as "Skipped" for today if it cannot fit within its constraints, so that it disappears from the timeline and notifies me rather than snowballing.
+31. As a user, I want to finish a midnight-spanning activity early, so that the system records my actual time and frees the remaining gap as implicit Free Time.
+32. As a user, I want to see a lock icon and "Spanning from yesterday" label on overnight activities, so that I can visually distinguish them as fixed anchors in the new day's timeline.
 
-### Midnight Spanning
-24. As a user, I want the system to detect activities that span midnight and freeze their remainder as a fixed anchor in the new day's timeline, so that the overnight schedule generator cannot displace them.
-25. As a user, I want to see a lock icon and "Spanning from yesterday" label on overnight activities, so that I can visually distinguish them.
-26. As a user, I want to finish a spanning activity early from Focus Mode, so that the system records my actual wake time and frees the remaining gap.
+## Implementation Decisions
 
-### Notifications & Auto-Start
-27. As a user, I want to receive an FCM push notification 5 minutes before an activity starts, so that I can mentally prepare.
-28. As a user, I want the app to automatically transition an activity to "In Progress" and start its countdown timer at the scheduled start time, so that the schedule advances even if I forget.
-29. As a user, I want the system to send a reality-check FCM notification if I have not interacted with the app 15 minutes after an activity auto-starts, so that the solver's data does not drift.
-30. As a user, I want to tap "Delayed 15m" or "Skip" directly from the notification tray, so that I can adjust the schedule without opening the full app.
+### Architecture & Client/Server Boundary
+*   **No Optimistic UI Updates:** The client must wait for the server's calculated timeline state before rendering changes. A local loading/skeleton state is shown on modified blocks while waiting for the API response.
+*   **Pure Solver Function:** The scheduling engine runs on the server as a pure function. It takes a timeline state and an event (e.g., "Finish Early", "Add Strict Block") and returns the new timeline state.
+*   **Auto-Start Assumptions:** If an activity auto-starts and finishes without user interaction, the server assumes perfect completion. No reality-check notifications exist to correct this.
 
-### Focus Mode UI
-31. As a user, I want to press "Start" on an upcoming activity to enter a "Focus Mode", so that I can see a large countdown timer without distractions.
-32. As a user, I want selecting a quick activity from a spare-time prompt to immediately enter Focus Mode for that activity, so that I can begin without additional clicks.
-33. As a user, I want the system to automatically return me to the parent container's Focus Mode timer when a spare-time activity ends, so that I seamlessly resume my main work.
+### Data Model & Rules System
+*   **Template vs. Execution:** `Activity` templates are global definitions. `TimelineActivity` instances are cloned for a specific day. Historical schedules remain immutable.
+*   **Priority-Based Scheduling:** Activities are prioritized by an explicit `priority` integer. The solver schedules based purely on fixed `duration` and `priority`. There are no tracking ledgers, goals, or rolling deficits.
+*   **Rule Instances:** Rules can be mutated on the `TimelineActivity` instance for a specific day. These mutations override global template rules and are respected by all subsequent solver recalculations.
+*   **Exclusion Windows:** Named sub-activities inside a host activity. They do not affect the host's total duration. They define un-interruptible regions where no overlapping guest activities can be placed.
+*   **Overlap Budgets:** Allowed guest activities share a single pool of overlap time defined on the host (e.g., 60 minutes total for all guests combined).
+*   **Sequence Binding:** The Sequence Rule binds the end time of a pre-activity to the start time of a host activity. If the host is displaced (skipped), the pre-activity is also skipped.
+*   **Shrink Floors:** The `Shrink Rule` defines a hard minimum duration. The solver cannot shrink an activity below this floor.
 
-## 6. Out of Scope
-*   **Client-side generation:** The client does not calculate schedules; all solver logic is server-side.
-*   **Complex RRULE scheduling:** (e.g., "Every 3rd Tuesday of the month"). Only simple `allowed_days` arrays are supported.
-*   **Multi-user collaboration:** Schedules are single-tenant.
-*   **Automated external time-tracking:** Time logged must be triggered by user action (e.g., pressing "Finish Early" or auto-starting at the scheduled time).
+### Solver Constraint Resolution Hierarchy
+When the schedule is under pressure (e.g., a strict block runs late and pushes into a flexible block), the solver uses the following strict order of relaxation:
+1.  **Nudge:** Delay lower-priority blocks forward.
+2.  **Shrink:** Reduce duration of lower-priority blocks down to their `Shrink Rule` floor.
+3.  **Displace:** Skip lower-priority blocks entirely, marking them as "Skipped" for the day.
+
+### Strict Rule Rejections
+The server returns hard validation errors (rejecting the operation) under the following conditions:
+*   Two strict activities overlap.
+*   Extending an active activity pushes a subsequent activity outside its strict Window Rule.
+*   Extending a pre-activity pushes the host outside its strict Window Rule.
+*   Moving a host with a nested guest causes the guest to violate its strict Window Rule.
+
+## Testing Decisions
+All testing for this feature will be conducted manually by the developer. Focus manual testing on the following external behaviors:
+*   **Solver Constraint Resolution:** Verify the solver correctly applies the Nudge -> Shrink -> Displace hierarchy when schedule conflicts arise.
+*   **Rule Rejections:** Verify the server rejects operations that violate strict Window Rules (e.g., overlapping two strict blocks, extending an activity past a strict window).
+*   **Instance Mutations:** Verify that mutating a rule on a `TimelineActivity` instance persists through subsequent solver recalculations without reverting to the template.
+*   **Client/Server Sync:** Verify the client renders the loading state and does not optimistically update the UI while waiting for the server's response.
