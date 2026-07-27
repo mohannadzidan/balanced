@@ -216,6 +216,21 @@ describe("violatesDominance", () => {
     expect(violatesDominance(plain, C)).toBe(false)
   })
 
+  it("fires from a sequence rule's max gap alone, with no shrink or drift involved", () => {
+    // GAP * 2001 = 10,005 > SKIP (10,000), on its own.
+    const dependent = activity("Dependent")
+      .rank(1)
+      .minutes(200)
+      .sequence("post", "host", { maxGap: 2001 })
+      .build()
+    expect(violatesDominance(dependent, C)).toBe(true)
+
+    // The same activity without the sequence rule holds, confirming the gap
+    // term — not some other relaxation — was what tipped it over.
+    const withoutSequence = activity("Dependent").rank(1).minutes(200).build()
+    expect(violatesDominance(withoutSequence, C)).toBe(false)
+  })
+
   it("fires for a deliberately broken activity whose shrink alone outprices skipping", () => {
     // duration 1000, shrink floor 0: SHRINK * 1000 = 20 * 1000 = 20,000 > SKIP (10,000)
     const broken = activity("Broken")

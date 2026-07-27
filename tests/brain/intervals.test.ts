@@ -61,6 +61,17 @@ describe("computeFreeIntervals", () => {
   it("returns nothing for an inverted range", () => {
     expect(computeFreeIntervals([], 100, 50)).toEqual([])
   })
+
+  it("breaks a same-start sort tie by the earlier end (merge order shouldn't depend on input order)", () => {
+    const occupied = [
+      { start: 100, end: 300 },
+      { start: 100, end: 150 },
+    ]
+    expect(computeFreeIntervals(occupied, 0, 400)).toEqual([
+      { start: 0, end: 100 },
+      { start: 300, end: 400 },
+    ])
+  })
 })
 
 describe("intervalsOverlap", () => {

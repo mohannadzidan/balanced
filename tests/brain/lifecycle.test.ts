@@ -112,6 +112,16 @@ describe("applyBackdating", () => {
     expect(second.instances).toEqual(first.instances)
   })
 
+  it("leaves a PLANNED or ACTIVE instance untouched when it has no planned span yet", () => {
+    // Shouldn't happen in practice (a placed instance always has both), but
+    // the guard exists — exercise it directly rather than trust it blindly.
+    const planned = instance({ id: "p", plannedStart: null })
+    const active = instance({ id: "a", state: "ACTIVE", plannedEnd: null })
+    const result = applyBackdating([planned, active], 10_000)
+    expect(result.changed).toBe(false)
+    expect(result.instances).toEqual([planned, active])
+  })
+
   it("only changes the affected instance, leaving others in the list untouched", () => {
     const untouched = instance({
       id: "future",
