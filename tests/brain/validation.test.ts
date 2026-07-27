@@ -68,6 +68,24 @@ describe("validateActivity", () => {
     expect(codesOf(validateActivity(bad, C))).toContain("DURATION_NOT_ON_GRID")
   })
 
+  it("flags DURATION_NOT_ON_GRID for an off-grid shrink floor", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(60)
+      .shrink({ floor: 47 })
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("DURATION_NOT_ON_GRID")
+  })
+
+  it("flags DURATION_NOT_ON_GRID for an off-grid minimum chunk", () => {
+    const bad = activity("Bad")
+      .rank(1)
+      .minutes(60)
+      .shrink({ floor: 30, chunking: true, minChunk: 22 })
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("DURATION_NOT_ON_GRID")
+  })
+
   it("flags SHRINK_FLOOR_INVALID when the floor exceeds the duration", () => {
     const bad = activity("Bad")
       .rank(1)

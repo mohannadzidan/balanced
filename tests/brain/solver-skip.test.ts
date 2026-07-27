@@ -185,6 +185,66 @@ describe("solve — RESTORE (SPEC.md 9.7)", () => {
     expect(restored.timeline.revision).toBe(skipped.timeline.revision + 1)
   })
 
+  it("can displace and reject a different, previously-fine sequence dependent (SPEC.md 9.7's hedge)", () => {
+    // Work (unconstrained, greedy) and Filler (fixed 02:00-02:30) leave a
+    // gap at [01:30, 02:00) that Report (sequence-post of Work, max_gap 0)
+    // claims — as long as Work lands at [00:30, 01:30). Restricted starts
+    // there only by the freeze boundary at generate time (now=30), Restore
+    // (mandatory, strict 00:00-01:00) starts out infeasible and auto-
+    // skipped, unrelated to Work or Report. Restoring it at now=0 lets it
+    // finally claim [0, 60) — pushing Work's cheapest slot from [30, 90) to
+    // [60, 120), which collides with Filler's [120, 150) start... no room
+    // left for Report to reattach at zero gap.
+    const catalog = [
+      activity("Work").rank(1).minutes(60).build(),
+      activity("Report")
+        .rank(2)
+        .minutes(30)
+        .sequence("post", "work", { maxGap: 0 })
+        .build(),
+      activity("Restore")
+        .rank(3)
+        .minutes(60)
+        .mandatory()
+        .strict("00:00", "01:00")
+        .build(),
+      activity("Filler").rank(4).minutes(30).fixed("02:00", "02:30").build(),
+    ]
+    const generated = solve({
+      dayFrame,
+      now: 30,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const work = generated.timeline.instances.find((i) => i.name === "Work")!
+    const report = generated.timeline.instances.find(
+      (i) => i.name === "Report"
+    )!
+    const restore = generated.timeline.instances.find(
+      (i) => i.name === "Restore"
+    )!
+    expect(work.plannedStart).toBe(30)
+    expect(report.plannedStart).toBe(90)
+    expect(restore.state).toBe("SKIPPED")
+    expect(restore.skipReason).toBe("INFEASIBLE_HARD_CONSTRAINT")
+
+    const result = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: generated.timeline.instances,
+      carryIn: [],
+      event: { type: "RESTORE", instanceId: restore.id },
+      revision: generated.timeline.revision,
+    })
+
+    expect(result.status).toBe("REJECTED")
+    expect(result.rejection?.code).toBe("SEQUENCE_UNSATISFIABLE")
+    expect(result.timeline.instances).toEqual(generated.timeline.instances)
+  })
+
   it("rejects with UNKNOWN_INSTANCE for an id that isn't in the timeline", () => {
     const result = solve({
       dayFrame,

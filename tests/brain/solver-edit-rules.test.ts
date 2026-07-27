@@ -192,6 +192,97 @@ describe("solve — EDIT_INSTANCE_RULES (SPEC.md 9.6)", () => {
     expect(overlap.allowedGuestIds).toEqual(["someone"])
   })
 
+  it("rejects with INVALID_STATE_FOR_EVENT for a COMPLETED instance", () => {
+    const catalog = [activity("Work").rank(1).minutes(60).build()]
+    const generated = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const work = generated.timeline.instances.find((i) => i.name === "Work")!
+
+    const ticked = solve({
+      dayFrame,
+      now: 100, // past Work's 00:00-01:00 span — backdated to COMPLETED
+      catalog,
+      existing: generated.timeline.instances,
+      carryIn: [],
+      event: { type: "TICK" },
+      revision: generated.timeline.revision,
+    })
+    const completedWork = ticked.timeline.instances.find(
+      (i) => i.name === "Work"
+    )!
+    expect(completedWork.state).toBe("COMPLETED")
+
+    const result = solve({
+      dayFrame,
+      now: 100,
+      catalog,
+      existing: ticked.timeline.instances,
+      carryIn: [],
+      event: { type: "EDIT_INSTANCE_RULES", instanceId: work.id, rules: [] },
+      revision: ticked.timeline.revision,
+    })
+    expect(result.status).toBe("REJECTED")
+    expect(result.rejection?.code).toBe("INVALID_STATE_FOR_EVENT")
+  })
+
+  it("leaves an unrelated catalog activity's rules untouched by another activity's override", () => {
+    const catalog = [
+      activity("Work")
+        .rank(1)
+        .minutes(480)
+        .mandatory()
+        .strict("09:00", "17:00")
+        .overlap({ budget: 60, guests: [] })
+        .build(),
+      activity("Gym").rank(2).minutes(60).build(),
+    ]
+    const generated = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const work = generated.timeline.instances.find((i) => i.name === "Work")!
+    const gymBefore = generated.timeline.instances.find(
+      (i) => i.name === "Gym"
+    )!
+
+    const edited = solve({
+      dayFrame,
+      now: 0,
+      catalog,
+      existing: generated.timeline.instances,
+      carryIn: [],
+      event: {
+        type: "EDIT_INSTANCE_RULES",
+        instanceId: work.id,
+        rules: [
+          {
+            type: "overlap",
+            source: "instance",
+            budgetMinutes: 90,
+            allowedGuestIds: ["someone"],
+            exclusionWindows: [],
+          },
+        ],
+      },
+      revision: generated.timeline.revision,
+    })
+
+    const gymAfter = edited.timeline.instances.find((i) => i.name === "Gym")!
+    expect(gymAfter.plannedStart).toBe(gymBefore.plannedStart)
+    expect(gymAfter.plannedEnd).toBe(gymBefore.plannedEnd)
+    expect(gymAfter.rules).toEqual(gymBefore.rules)
+  })
+
   it("rejects with UNKNOWN_INSTANCE for an id that isn't in the timeline", () => {
     const result = solve({
       dayFrame,

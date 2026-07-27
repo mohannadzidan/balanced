@@ -141,6 +141,130 @@ describe("planChunks", () => {
     expect(plan).toBeNull()
   })
 
+  it("returns null when every free region is individually smaller than the minimum chunk", () => {
+    const resolved = resolveActivity(
+      activity("Deep Work").rank(1).minutes(120).build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 60,
+      chunkingAllowed: true,
+      minChunkMinutes: 45,
+      maxChunks: 3,
+    }
+    // 10 minutes total, all in one region — never even reaches one chunk.
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({ freeIntervals: [{ start: 0, end: 10 }] })
+    )
+    expect(plan).toBeNull()
+  })
+
+  it("returns null when a region's grid-aligned starts are entirely before the freeze boundary", () => {
+    const resolved = resolveActivity(
+      activity("Deep Work").rank(1).minutes(60).build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 30,
+      chunkingAllowed: true,
+      minChunkMinutes: 30,
+      maxChunks: 2,
+    }
+    // Large enough on paper (100m, well over the 30m minimum chunk), but
+    // every grid-aligned start inside it is frozen out.
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({
+        freeIntervals: [{ start: 0, end: 100 }],
+        freezeBoundary: 150,
+      })
+    )
+    expect(plan).toBeNull()
+  })
+
+  it("skips a region the reservation for later regions can't leave a full minimum chunk in", () => {
+    // Three equal 40m regions, target 90: with all three selected (k=3),
+    // reserving 40m for each of the two regions still to come caps the
+    // first one at only 10m — below the 40m minimum — so it's skipped
+    // entirely rather than taking a partial share (an internal detail of
+    // the k=3 search; k=2 ties it on cost and wins for being tried first).
+    const resolved = resolveActivity(
+      activity("Deep Work")
+        .rank(1)
+        .minutes(90)
+        .flexible("09:00", "17:00", { drift: 0 })
+        .build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 80,
+      chunkingAllowed: true,
+      minChunkMinutes: 40,
+      maxChunks: 3,
+    }
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({
+        freeIntervals: [
+          { start: 540, end: 580 }, // 40m
+          { start: 700, end: 740 }, // 40m
+          { start: 800, end: 840 }, // 40m
+        ],
+      })
+    )
+    expect(plan).not.toBeNull()
+    expect(plan!.scheduledMinutes).toBe(80)
+    expect(plan!.chunks).toHaveLength(2)
+    expect(plan!.chunks.map((c) => [c.start, c.end])).toEqual([
+      [540, 580],
+      [700, 740],
+    ])
+  })
+
+  it("stops filling once the target is met, even with unused regions still selected (degenerate zero-minute minimum chunk)", () => {
+    // Realistic ShrinkRule configs (minChunkMinutes > 0) can never hit this:
+    // the reservation formula (`remaining - minChunk * regionsAfter`)
+    // provably can't reach exactly zero before the last selected region
+    // unless minChunk is 0. Exercised directly here as a degenerate-input
+    // boundary check on fillChunks' own loop, not a realistic activity.
+    const resolved = resolveActivity(
+      activity("Deep Work").rank(1).minutes(20).build(),
+      dayFrame
+    )
+    const rule: ShrinkRule = {
+      type: "shrink",
+      source: "template",
+      minDurationMinutes: 20,
+      chunkingAllowed: true,
+      minChunkMinutes: 0,
+      maxChunks: 3,
+    }
+    const plan = planChunks(
+      resolved,
+      rule,
+      baseContext({
+        freeIntervals: [
+          { start: 0, end: 20 },
+          { start: 100, end: 120 },
+          { start: 200, end: 220 },
+        ],
+      })
+    )
+    expect(plan).not.toBeNull()
+    expect(plan!.scheduledMinutes).toBe(20)
+    expect(plan!.chunks).toHaveLength(1)
+  })
+
   it("accepts a chunked plan that only partially completes the activity, as long as it still clears the shrink floor (SPEC.md 5.5 / 14.6b / edge case 23)", () => {
     const resolved = resolveActivity(
       activity("Deep Work")
