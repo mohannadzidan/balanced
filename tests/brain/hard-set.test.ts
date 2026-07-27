@@ -176,6 +176,32 @@ describe("placeHardSet", () => {
     expect(result.skipped.get("huge")).toBe("INFEASIBLE_HARD_CONSTRAINT")
   })
 
+  it("doesn't reprocess the same activity id twice if it appears more than once in items", () => {
+    const huge = activity("Huge").rank(1).minutes(2000).mandatory().build()
+    const result = placeHardSet([huge, huge], [], ctx)
+    expect(result.skipped.size).toBe(1)
+    expect(result.skipped.get("huge")).toBe("INFEASIBLE_HARD_CONSTRAINT")
+    expect(result.placements.size).toBe(0)
+  })
+
+  it("stops and marks everything left INFEASIBLE_HARD_CONSTRAINT once the node limit is hit", () => {
+    const items = [
+      activity("A").rank(1).minutes(60).mandatory().build(),
+      activity("B").rank(2).minutes(60).mandatory().build(),
+      activity("C").rank(3).minutes(60).mandatory().build(),
+    ]
+    const result = placeHardSet(items, [], { ...ctx, nodeLimit: 1 })
+    expect(result.nodesUsed).toBeGreaterThan(1)
+    expect(result.placements.size).toBe(1)
+    expect(result.placements.get("a")).toEqual({
+      start: 0,
+      end: 60,
+      nestedIn: null,
+    })
+    expect(result.skipped.get("b")).toBe("INFEASIBLE_HARD_CONSTRAINT")
+    expect(result.skipped.get("c")).toBe("INFEASIBLE_HARD_CONSTRAINT")
+  })
+
   it("backtracks when the greedy choice for one activity blocks another", () => {
     // A single 100m free interval. Two mandatory activities of 60m each
     // cannot both fit — one must be reported infeasible, not silently

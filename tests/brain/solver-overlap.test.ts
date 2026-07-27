@@ -129,6 +129,82 @@ describe("solve — OverlapRule (nesting, SPEC.md 14.1's spirit)", () => {
   })
 })
 
+describe("solve — OverlapRule (greedy placement internals)", () => {
+  it("nests a guest that also carries its own ShrinkRule", () => {
+    const result = generate([
+      activity("Work")
+        .rank(1)
+        .minutes(480)
+        .mandatory()
+        .strict("09:00", "17:00")
+        .overlap({ budget: 60, guests: ["break"] }),
+      activity("Break")
+        .id("break")
+        .rank(2)
+        .minutes(40)
+        .strict("09:00", "09:40")
+        .shrink({ floor: 20 }),
+    ])
+    const brk = result.timeline.instances.find((i) => i.name === "Break")!
+    expect(brk.hostInstanceId).toBe("work")
+    expect(brk.plannedStart).toBe(540)
+    expect(brk.plannedEnd).toBe(580)
+    expect(brk.scheduledMinutes).toBe(40)
+  })
+
+  it("can't nest a guest into a host that hasn't been placed yet at the guest's own turn", () => {
+    // Early outranks Later, so by the time Early is greedily placed, Later
+    // (its only eligible host) has no placement yet — nesting isn't
+    // considered, and Early is placed standalone instead.
+    const result = generate([
+      activity("Early").id("early").rank(1).minutes(20),
+      activity("Later")
+        .id("later")
+        .rank(2)
+        .minutes(60)
+        .overlap({ budget: 30, guests: ["early"] }),
+    ])
+    const early = result.timeline.instances.find((i) => i.name === "Early")!
+    expect(early.hostInstanceId).toBeNull()
+    expect(early.plannedStart).toBe(0)
+    expect(early.plannedEnd).toBe(20)
+
+    const later = result.timeline.instances.find((i) => i.name === "Later")!
+    expect(later.plannedStart).toBe(20)
+  })
+
+  it("picks the cheaper of two eligible hosts, replacing an earlier, costlier nested candidate", () => {
+    // Note's own window matches Afternoon exactly (zero drift) but is fully
+    // outside Morning's span (driftMinutes = its own full duration there,
+    // same as standing alone) — Morning is evaluated first (catalog order)
+    // and provisionally accepted, then Afternoon must replace it once found.
+    const result = generate([
+      activity("Morning")
+        .rank(1)
+        .minutes(60)
+        .mandatory()
+        .strict("09:00", "10:00")
+        .overlap({ budget: 30, guests: ["note"] }),
+      activity("Afternoon")
+        .rank(2)
+        .minutes(60)
+        .mandatory()
+        .strict("14:00", "15:00")
+        .overlap({ budget: 30, guests: ["note"] }),
+      activity("Note")
+        .id("note")
+        .rank(3)
+        .minutes(10)
+        .flexible("14:00", "14:10", { drift: 10 }),
+    ])
+    const note = result.timeline.instances.find((i) => i.name === "Note")!
+    expect(note.hostInstanceId).toBe("afternoon")
+    expect(note.plannedStart).toBe(840)
+    expect(note.plannedEnd).toBe(850)
+    expect(note.relaxations).toEqual([])
+  })
+})
+
 describe("solve — OverlapRule (absolute exclusion, SPEC.md 5.7)", () => {
   it("rejects a host placement that doesn't fully contain an absolute exclusion window", () => {
     const customerCall: ExclusionWindow = {
