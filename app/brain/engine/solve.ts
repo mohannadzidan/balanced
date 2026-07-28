@@ -422,6 +422,40 @@ interface AnchorSet {
 }
 
 /**
+ * SPEC-v2.md §7.1: every event reduces to a plan (produced by per-event
+ * code) and a shared executor (`runEvent`). The plan carries only what
+ * differs across events; the executor is written once.
+ */
+interface EventPlan {
+  /** Precondition failure — short-circuits before the pipeline runs. */
+  readonly rejection: RejectionError | null
+  /** `existing` with the event's mutation applied. */
+  readonly workingExisting: readonly TimelineActivity[]
+  /** Freeze boundary for the re-solve — ordinarily `now`; `at` for FINISH_EARLY. */
+  readonly freezeBoundary: number
+  /** Extra activities beyond today's catalogue (ADD_ADHOC's pseudo-activity). */
+  readonly extraActivities: readonly Activity[]
+  /** Whether to run `checkEventRejection` on the speculative result. */
+  readonly checkRejection: boolean
+  /** Extra instances injected between anchors and solved (SKIP's locked instance). */
+  readonly extraInstances: readonly TimelineActivity[]
+  /** Override catalogue for this solve (EDIT_INSTANCE_RULES substitutes rules). */
+  readonly catalogOverride: readonly Activity[] | null
+  /** Override weight function (ADD_ADHOC's totalRanked+1 denominator). */
+  readonly weightOverride: ((activity: Activity) => number) | null
+  /** Post-pipeline instance transform (ADD_ADHOC's `activityId: null` tagging). */
+  readonly instanceTransform:
+    | ((instances: readonly TimelineActivity[]) => TimelineActivity[])
+    | null
+  /** totalRanked override for cost recomputation (ADD_ADHOC). */
+  readonly totalRankedOverride: number | null
+  /** TICK's short-circuit: return the input timeline unchanged. */
+  readonly shortCircuitResult: SolveResult | null
+  /** Activity ids excluded from re-solving (SKIP's target). */
+  readonly excludeActivityIds: ReadonlySet<string> | null
+}
+
+/**
  * An anchor is an existing instance the next solve must leave untouched:
  * either it's already consumed real time (ACTIVE/COMPLETED/CARRIED_IN) or a
  * prior event pinned it explicitly (`locked`, e.g. a user SKIP — SPEC.md
@@ -569,54 +603,45 @@ function toResult(
 }
 
 /**
- * TICK (SPEC.md Section 9.2), the "null event": apply auto-start /
- * auto-complete backdating to `existing`, then — only if something actually
- * changed — re-solve everything not anchored by that backdating. An anchor
- * is an existing instance whose *every* fragment (chunking aside — see
- * below) already reached ACTIVE/COMPLETED/CARRIED_IN; its occupied time is
- * fed into the pipeline as pre-existing occupancy and its instance is
- * echoed back untouched. Calling TICK twice with the same `now` is a no-op:
- * `changed` is false the second time, so the input timeline round-trips
- * with its revision unchanged, exactly as Section 9.2 requires.
- *
- * A chunked activity (chunkGroupId set) is never treated as an anchor here:
- * partial completion of a chunk plan across ticks is a cross-feature
- * interaction no worked example exercises yet, so a chunked activity is
- * always re-solved fresh from its template, ignoring any fragment that
- * already ran. This mirrors the same kind of documented scope boundary
- * used for chunked hosts in the sequence and overlap phases.
+ * SPEC-v2.md §7.1: the shared executor. Every event's plan runs through
+ * this one function — extractAnchors, filter catalogue, runPipeline,
+ * assemble, optionally checkEventRejection — in exactly the order
+ * ALGORITHM.md §14 lists as steps 4–7.
  */
-function solveTick(
+function runEvent(
   input: SolveInput,
+  plan: EventPlan,
   constants: CostConstants,
   todaysCatalog: readonly Activity[],
   resolve: (activity: Activity) => ResolvedActivity,
   weight: (activity: Activity) => number,
   totalRanked: number
 ): SolveResult {
-  const { instances: backdated, changed } = applyBackdating(
-    input.existing,
-    input.now
-  )
-
-  if (!changed) {
-    const { diagnostics, status } = buildDiagnostics(backdated)
-    return toResult(
+  if (plan.shortCircuitResult) return plan.shortCircuitResult
+  if (plan.rejection) {
+    return rejectionResult(
       input,
-      backdated,
-      diagnostics,
-      status,
+      plan.rejection.code,
+      plan.rejection.message,
+      plan.rejection.conflictingInstanceIds,
       constants,
-      totalRanked,
-      input.revision ?? 0
+      totalRanked
     )
   }
 
+  const catalog = plan.catalogOverride ?? todaysCatalog
+  const effectiveWeight = plan.weightOverride ?? weight
+  const effectiveTotalRanked = plan.totalRankedOverride ?? totalRanked
+
   const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(backdated)
-  const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id)
-  )
+    extractAnchors(plan.workingExisting)
+  const excluded = plan.excludeActivityIds
+  const activitiesToSolve = [
+    ...catalog.filter(
+      (a) => !anchorActivityIds.has(a.id) && !(excluded?.has(a.id) ?? false)
+    ),
+    ...plan.extraActivities,
+  ]
 
   const {
     instances: solved,
@@ -628,72 +653,45 @@ function solveTick(
     activitiesToSolve,
     baseOccupied,
     resolve,
-    weight,
-    input.now,
-    todaysCatalog,
+    effectiveWeight,
+    plan.freezeBoundary,
+    [...catalog, ...plan.extraActivities],
     anchorPlacements
   )
 
-  return toResult(
+  let allInstances = [...anchors, ...plan.extraInstances, ...solved]
+  if (plan.instanceTransform) allInstances = plan.instanceTransform(allInstances)
+
+  const speculative = toResult(
     input,
-    [...anchors, ...solved],
+    allInstances,
     diagnostics,
     status,
     constants,
-    totalRanked,
+    effectiveTotalRanked,
     (input.revision ?? 0) + 1
   )
-}
 
-/**
- * GENERATE_DAY (SPEC.md Section 8.3 step 4-5): the initial event for a day
- * frame. `existing` is ordinarily empty, but a caller may seed it with
- * yesterday's carry-in (SPEC.md Section 3.4) — any such anchor must be
- * preserved verbatim and excluded from fresh candidate generation, exactly
- * like every other event. Unlike TICK, there's no "nothing changed, echo
- * back" short-circuit: backdating an empty `existing` trivially reports no
- * change, but the day still needs its first real solve.
- */
-function solveGenerate(
-  input: SolveInput,
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number,
-  totalRanked: number
-): SolveResult {
-  const { instances: backdated } = applyBackdating(input.existing, input.now)
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(backdated)
-  const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id)
-  )
+  if (plan.checkRejection) {
+    const violation = checkEventRejection(
+      [...catalog, ...plan.extraActivities],
+      input.existing,
+      speculative.timeline.instances
+    )
+    if (violation) {
+      return rejectionResult(
+        input,
+        violation.code,
+        violation.message,
+        violation.instanceIds,
+        constants,
+        totalRanked,
+        speculative.timeline
+      )
+    }
+  }
 
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    weight,
-    input.now,
-    todaysCatalog,
-    anchorPlacements
-  )
-
-  return toResult(
-    input,
-    [...anchors, ...solved],
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    1
-  )
+  return speculative
 }
 
 /**
@@ -705,331 +703,6 @@ function solveGenerate(
  */
 function groupKeyOf(inst: TimelineActivity): string {
   return inst.occurrenceId
-}
-
-/**
- * SKIP (SPEC.md Section 9.7): mark a PLANNED instance user-skipped and
- * re-solve everything else. Never rejected except for a malformed request
- * (unknown instance, or one not currently PLANNED). The skip is recorded
- * with `locked: true` so it survives future re-solves (TICK and so on)
- * until a matching RESTORE lifts it — see `extractAnchors`.
- */
-function solveSkip(
-  input: SolveInput & { readonly event: { type: "SKIP"; instanceId: string } },
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number,
-  totalRanked: number
-): SolveResult {
-  const target = input.existing.find((i) => i.id === input.event.instanceId)
-  if (!target) {
-    return rejectionResult(
-      input,
-      "UNKNOWN_INSTANCE",
-      `No instance "${input.event.instanceId}" in the current timeline.`,
-      [],
-      constants,
-      totalRanked
-    )
-  }
-  if (target.state !== "PLANNED") {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ${target.state}, not PLANNED — it can't be skipped.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  const groupKey = groupKeyOf(target)
-  const skippedInstance: TimelineActivity = {
-    ...target,
-    state: "SKIPPED",
-    skipReason: "USER_SKIPPED",
-    plannedStart: null,
-    plannedEnd: null,
-    scheduledMinutes: 0,
-    blockIndex: 1,
-    blockCount: 1,
-    chunkGroupId: null,
-    hostInstanceId: null,
-    relaxations: [],
-    locked: true,
-  }
-
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(input.existing.filter((i) => groupKeyOf(i) !== groupKey))
-  const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id) && a.id !== target.activityId
-  )
-
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    weight,
-    input.now,
-    todaysCatalog,
-    anchorPlacements
-  )
-
-  const speculative = toResult(
-    input,
-    [...anchors, skippedInstance, ...solved],
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    (input.revision ?? 0) + 1
-  )
-  const violation = checkEventRejection(
-    todaysCatalog,
-    input.existing,
-    speculative.timeline.instances
-  )
-  if (violation) {
-    return rejectionResult(
-      input,
-      violation.code,
-      violation.message,
-      violation.instanceIds,
-      constants,
-      totalRanked,
-      speculative.timeline
-    )
-  }
-  return speculative
-}
-
-/**
- * RESTORE (SPEC.md Section 9.7): lift a user skip and re-solve. Lifting the
- * mark is just excluding the old skipped instance from the anchor set
- * before re-solving — since it's no longer `locked`, its activity is a
- * completely ordinary candidate again. If there's genuinely no room, it
- * comes back SKIPPED with whatever reason the pipeline finds this time,
- * not necessarily `USER_SKIPPED` — that's not itself a rejection (the
- * activity being restored was already SKIPPED beforehand, so
- * `checkEventRejection` never blames this event for it), but restoring one
- * activity can still legitimately displace and reject a *different* one.
- */
-function solveRestore(
-  input: SolveInput & {
-    readonly event: { type: "RESTORE"; instanceId: string }
-  },
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number,
-  totalRanked: number
-): SolveResult {
-  const target = input.existing.find((i) => i.id === input.event.instanceId)
-  if (!target) {
-    return rejectionResult(
-      input,
-      "UNKNOWN_INSTANCE",
-      `No instance "${input.event.instanceId}" in the current timeline.`,
-      [],
-      constants,
-      totalRanked
-    )
-  }
-  if (target.state !== "SKIPPED") {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ${target.state}, not SKIPPED — there's nothing to restore.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  const groupKey = groupKeyOf(target)
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(input.existing.filter((i) => groupKeyOf(i) !== groupKey))
-  const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id)
-  )
-
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    weight,
-    input.now,
-    todaysCatalog,
-    anchorPlacements
-  )
-
-  const speculative = toResult(
-    input,
-    [...anchors, ...solved],
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    (input.revision ?? 0) + 1
-  )
-  const violation = checkEventRejection(
-    todaysCatalog,
-    input.existing,
-    speculative.timeline.instances
-  )
-  if (violation) {
-    return rejectionResult(
-      input,
-      violation.code,
-      violation.message,
-      violation.instanceIds,
-      constants,
-      totalRanked,
-      speculative.timeline
-    )
-  }
-  return speculative
-}
-
-/**
- * FINISH_EARLY (SPEC.md Section 9.3): complete an ACTIVE instance ahead of
- * its planned end and re-solve the remainder against a freeze boundary
- * moved back to `at` — not `input.now` — so the reclaimed time between `at`
- * and the old planned end is immediately available to the rest of the day.
- * There's no separate "reuse the freed time" step: a from-scratch re-solve
- * of everything not anchored naturally restores whatever a previously
- * shrunk or skipped activity can now fit. Freeing time is normally
- * harmless, but a sequence dependent bound to this instance's old span
- * could in principle lose its adjacency — `checkEventRejection` covers
- * that alongside every other event.
- *
- * Also legal against a `CARRIED_IN` block (SPEC.md 11 edge case 2): a
- * midnight-spanning activity's overflow into today is just as finishable
- * ahead of schedule as an ordinary ACTIVE one, and the same completion +
- * re-solve logic applies unchanged once its state is treated as an anchor.
- */
-function solveFinishEarly(
-  input: SolveInput & {
-    readonly event: { type: "FINISH_EARLY"; instanceId: string; at: number }
-  },
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number,
-  totalRanked: number
-): SolveResult {
-  const { instanceId, at } = input.event
-  const target = input.existing.find((i) => i.id === instanceId)
-  if (!target) {
-    return rejectionResult(
-      input,
-      "UNKNOWN_INSTANCE",
-      `No instance "${instanceId}" in the current timeline.`,
-      [],
-      constants,
-      totalRanked
-    )
-  }
-  if (target.state !== "ACTIVE" && target.state !== "CARRIED_IN") {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ${target.state}, not ACTIVE or CARRIED_IN — it can't be finished early.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-  // A CARRIED_IN block (SPEC.md 11 edge case 2) has no actualStart of its
-  // own yet — it's been "running" since this day frame's own start.
-  const actualStart = target.actualStart ?? target.plannedStart ?? at
-  if (
-    at < actualStart ||
-    target.plannedEnd === null ||
-    at > target.plannedEnd
-  ) {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" can only finish early between its actual start and its planned end.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  const finished: TimelineActivity = {
-    ...target,
-    state: "COMPLETED",
-    completedSource: "user",
-    actualStart,
-    actualEnd: at,
-  }
-  const workingExisting = input.existing.map((i) =>
-    i.id === target.id ? finished : i
-  )
-
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(workingExisting)
-  const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id)
-  )
-
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    weight,
-    at,
-    todaysCatalog,
-    anchorPlacements
-  )
-
-  const speculative = toResult(
-    input,
-    [...anchors, ...solved],
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    (input.revision ?? 0) + 1
-  )
-  const violation = checkEventRejection(
-    todaysCatalog,
-    input.existing,
-    speculative.timeline.instances
-  )
-  if (violation) {
-    return rejectionResult(
-      input,
-      violation.code,
-      violation.message,
-      violation.instanceIds,
-      constants,
-      totalRanked,
-      speculative.timeline
-    )
-  }
-  return speculative
 }
 
 interface EventRejection {
@@ -1118,233 +791,6 @@ function checkEventRejection(
 }
 
 /**
- * EXTEND (SPEC.md Section 9.4): push an ACTIVE instance's planned end out
- * by `minutes` (a positive multiple of GRID) and freeze it there, then
- * re-solve the remainder at the ordinary `now` boundary. This is the event
- * SPEC.md's own worked examples (14.2, 14.3) use to exercise rejection: if
- * it newly displaces a mandatory activity that was placed before the event,
- * the input timeline is returned unchanged with a rejection instead —
- * `checkEventRejection` decides exactly which code.
- */
-function solveExtend(
-  input: SolveInput & {
-    readonly event: { type: "EXTEND"; instanceId: string; minutes: number }
-  },
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number,
-  totalRanked: number
-): SolveResult {
-  const { instanceId, minutes } = input.event
-  const target = input.existing.find((i) => i.id === instanceId)
-  if (!target) {
-    return rejectionResult(
-      input,
-      "UNKNOWN_INSTANCE",
-      `No instance "${instanceId}" in the current timeline.`,
-      [],
-      constants,
-      totalRanked
-    )
-  }
-  if (target.state !== "ACTIVE") {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ${target.state}, not ACTIVE — it can't be extended.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-  if (
-    minutes <= 0 ||
-    minutes % constants.GRID !== 0 ||
-    target.plannedEnd === null
-  ) {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `An extension must be a positive multiple of ${constants.GRID} minutes.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  const extended: TimelineActivity = {
-    ...target,
-    plannedEnd: target.plannedEnd + minutes,
-    scheduledMinutes: target.scheduledMinutes + minutes,
-  }
-  const workingExisting = input.existing.map((i) =>
-    i.id === target.id ? extended : i
-  )
-
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(workingExisting)
-  const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id)
-  )
-
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    weight,
-    input.now,
-    todaysCatalog,
-    anchorPlacements
-  )
-
-  const speculative = toResult(
-    input,
-    [...anchors, ...solved],
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    (input.revision ?? 0) + 1
-  )
-  const violation = checkEventRejection(
-    todaysCatalog,
-    input.existing,
-    speculative.timeline.instances
-  )
-  if (violation) {
-    return rejectionResult(
-      input,
-      violation.code,
-      violation.message,
-      violation.instanceIds,
-      constants,
-      totalRanked,
-      speculative.timeline
-    )
-  }
-  return speculative
-}
-
-/**
- * ADD_ADHOC (SPEC.md Section 9.5): create a one-off TimelineActivity that
- * was never part of the catalogue — `activity_id: null`, `is_adhoc: true` —
- * and let it compete for placement on equal footing, full rule vocabulary
- * included. The catalogue itself is never touched (the pure-function
- * guarantee). Its id is derived purely from how many ad-hoc instances
- * already exist in `existing`, keeping the engine deterministic without
- * reading a clock or a random source. Rejected (INVALID_STATE_FOR_EVENT)
- * if the payload fails the same catalogue validation a template would —
- * incompatible rules, off-grid values, a colliding priority rank, and so
- * on (SPEC.md Section 10.1). An ad-hoc that outranks and displaces existing
- * activities is legal (SPEC.md 11 edge case 16) — only a genuine regression
- * of a previously-placed activity (worked example 14.4: a fixed ad-hoc
- * squeezing out a mandatory Work) is rejected, via `checkEventRejection`.
- */
-function solveAddAdhoc(
-  input: SolveInput & {
-    readonly event: { type: "ADD_ADHOC"; payload: AdhocPayload }
-  },
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  totalRanked: number
-): SolveResult {
-  const { payload } = input.event
-  const adhocId = `adhoc-${input.existing.filter((i) => i.isAdhoc).length + 1}`
-  const adhocActivity: Activity = {
-    id: adhocId,
-    name: payload.name,
-    durationMinutes: payload.durationMinutes,
-    priorityRank: payload.priorityRank,
-    enabled: true,
-    rules: payload.rules,
-    requiredCount: payload.requiredCount ?? 0,
-  }
-
-  const errors = [
-    ...validateActivity(adhocActivity, constants),
-    ...validateCatalog([...todaysCatalog, adhocActivity]),
-  ].filter((i) => i.severity === "error")
-  if (errors.length > 0) {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${payload.name}" can't be added: ${errors.map((e) => e.message).join("; ")}`,
-      [],
-      constants,
-      totalRanked
-    )
-  }
-
-  const newTotalRanked = totalRanked + 1
-  const adhocWeight = (activity: Activity): number =>
-    priorityWeight(activity.priorityRank, newTotalRanked)
-
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
-    extractAnchors(input.existing)
-  const activitiesToSolve = [
-    ...todaysCatalog.filter((a) => !anchorActivityIds.has(a.id)),
-    adhocActivity,
-  ]
-
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    adhocWeight,
-    input.now,
-    [...todaysCatalog, adhocActivity],
-    anchorPlacements
-  )
-
-  const finalInstances = [...anchors, ...solved].map((inst) =>
-    inst.activityId === adhocId
-      ? { ...inst, activityId: null, isAdhoc: true }
-      : inst
-  )
-
-  const speculative = toResult(
-    input,
-    finalInstances,
-    diagnostics,
-    status,
-    constants,
-    newTotalRanked,
-    (input.revision ?? 0) + 1
-  )
-  const violation = checkEventRejection(
-    [...todaysCatalog, adhocActivity],
-    input.existing,
-    speculative.timeline.instances
-  )
-  if (violation) {
-    return rejectionResult(
-      input,
-      violation.code,
-      violation.message,
-      violation.instanceIds,
-      constants,
-      totalRanked,
-      speculative.timeline
-    )
-  }
-  return speculative
-}
-
-/**
  * SPEC.md Section 9.6's durability rule — "the single most commonly broken
  * behaviour in this spec": an EDIT_INSTANCE_RULES override lives on the
  * instance, not the template, and must be carried forward on every
@@ -1415,161 +861,6 @@ function adhocActivitiesFrom(
     })
   }
   return activities
-}
-
-/**
- * EDIT_INSTANCE_RULES (SPEC.md Section 9.6): replace one or more of an
- * instance's rules for today only, without touching the template — the
- * canonical case is adding an ad-hoc's id to today's Work OverlapRule. The
- * override is written onto the resulting instance with `source: "instance"`
- * and re-solved through the ordinary pipeline (`applyInstanceRuleOverrides`
- * at the top of `solve()` is what makes it durable across later events).
- * Scoped to catalogue-backed instances — an ad-hoc has no template to
- * override in the first place. An edit that leaves a previously-placed
- * activity (possibly the edited one itself) newly unplaceable is rejected,
- * via `checkEventRejection`.
- */
-function solveEditInstanceRules(
-  input: SolveInput & {
-    readonly event: {
-      type: "EDIT_INSTANCE_RULES"
-      instanceId: string
-      rules: readonly Rule[]
-    }
-  },
-  constants: CostConstants,
-  todaysCatalog: readonly Activity[],
-  resolve: (activity: Activity) => ResolvedActivity,
-  weight: (activity: Activity) => number,
-  totalRanked: number
-): SolveResult {
-  const { instanceId, rules } = input.event
-  const target = input.existing.find((i) => i.id === instanceId)
-  if (!target) {
-    return rejectionResult(
-      input,
-      "UNKNOWN_INSTANCE",
-      `No instance "${instanceId}" in the current timeline.`,
-      [],
-      constants,
-      totalRanked
-    )
-  }
-  if (!target.activityId) {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ad-hoc and has no template rule to override.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-  if (target.state === "COMPLETED" || target.state === "CARRIED_IN") {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}" is ${target.state} — its rules can no longer be edited.`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  const templateActivity = todaysCatalog.find(
-    (a) => a.id === target.activityId
-  ) as Activity
-  const overriddenTypes = new Set(rules.map((r) => r.type))
-  const overrideRules: Rule[] = rules.map((r) => ({
-    ...r,
-    source: "instance" as const,
-  }))
-  const overriddenActivity: Activity = {
-    ...templateActivity,
-    rules: [
-      ...templateActivity.rules.filter((r) => !overriddenTypes.has(r.type)),
-      ...overrideRules,
-    ],
-  }
-
-  const errors = validateActivity(overriddenActivity, constants).filter(
-    (i) => i.severity === "error"
-  )
-  if (errors.length > 0) {
-    return rejectionResult(
-      input,
-      "INVALID_STATE_FOR_EVENT",
-      `"${target.name}"'s rules can't be edited that way: ${errors.map((e) => e.message).join("; ")}`,
-      [target.id],
-      constants,
-      totalRanked
-    )
-  }
-
-  const effectiveCatalog = todaysCatalog.map((a) =>
-    a.id === overriddenActivity.id ? overriddenActivity : a
-  )
-  const {
-    anchors: rawAnchors,
-    anchorActivityIds,
-    baseOccupied,
-    anchorPlacements,
-  } = extractAnchors(input.existing)
-  // If the edited activity is itself anchored (e.g. an ACTIVE Work), its own
-  // instance's `rules` must carry the override too — that's what makes the
-  // durability mechanism (applyInstanceRuleOverrides) see it on the *next*
-  // solve. Anchors that aren't the target pass through untouched.
-  const anchors = rawAnchors.map((a) =>
-    a.activityId === overriddenActivity.id
-      ? { ...a, rules: overriddenActivity.rules }
-      : a
-  )
-  const activitiesToSolve = effectiveCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id)
-  )
-
-  const {
-    instances: solved,
-    diagnostics,
-    status,
-  } = runPipeline(
-    input,
-    constants,
-    activitiesToSolve,
-    baseOccupied,
-    resolve,
-    weight,
-    input.now,
-    effectiveCatalog,
-    anchorPlacements
-  )
-
-  const speculative = toResult(
-    input,
-    [...anchors, ...solved],
-    diagnostics,
-    status,
-    constants,
-    totalRanked,
-    (input.revision ?? 0) + 1
-  )
-  const violation = checkEventRejection(
-    effectiveCatalog,
-    input.existing,
-    speculative.timeline.instances
-  )
-  if (violation) {
-    return rejectionResult(
-      input,
-      violation.code,
-      violation.message,
-      violation.instanceIds,
-      constants,
-      totalRanked,
-      speculative.timeline
-    )
-  }
-  return speculative
 }
 
 /**
@@ -1659,6 +950,370 @@ function solveFinaliseDay(
   return { status, timeline, rejection: null, diagnostics, cost, trace: null }
 }
 
+function rejectionPlan(
+  code: RejectionCode,
+  message: string,
+  conflictingInstanceIds: readonly string[]
+): EventPlan {
+  return {
+    rejection: { code, message, conflictingInstanceIds, diagnostics: [], bestEffortTimeline: null },
+    workingExisting: [],
+    freezeBoundary: 0,
+    extraActivities: [],
+    checkRejection: false,
+    extraInstances: [],
+    catalogOverride: null,
+    weightOverride: null,
+    instanceTransform: null,
+    totalRankedOverride: null,
+    shortCircuitResult: null,
+    excludeActivityIds: null,
+  }
+}
+
+/**
+ * SPEC-v2.md §7.1: every event reduces to its preconditions and its
+ * mutation. This is the only per-event code; everything else runs through
+ * `runEvent`. Semantics are SPEC.md §9 / ALGORITHM.md §14 verbatim.
+ */
+function planEvent(
+  input: SolveInput,
+  constants: CostConstants,
+  todaysCatalog: readonly Activity[],
+  resolve: (activity: Activity) => ResolvedActivity,
+  weight: (activity: Activity) => number,
+  totalRanked: number
+): EventPlan {
+  const basePlan: EventPlan = {
+    rejection: null,
+    workingExisting: input.existing,
+    freezeBoundary: input.now,
+    extraActivities: [],
+    checkRejection: false,
+    extraInstances: [],
+    catalogOverride: null,
+    weightOverride: null,
+    instanceTransform: null,
+    totalRankedOverride: null,
+    shortCircuitResult: null,
+    excludeActivityIds: null,
+  }
+
+  if (input.event.type === "TICK") {
+    const { instances: backdated, changed } = applyBackdating(
+      input.existing,
+      input.now
+    )
+    if (!changed) {
+      const { diagnostics, status } = buildDiagnostics(backdated)
+      return {
+        ...basePlan,
+        shortCircuitResult: toResult(
+          input,
+          backdated,
+          diagnostics,
+          status,
+          constants,
+          totalRanked,
+          input.revision ?? 0
+        ),
+      }
+    }
+    return { ...basePlan, workingExisting: backdated }
+  }
+
+  if (input.event.type === "SKIP") {
+    const event = input.event as { type: "SKIP"; instanceId: string }
+    const target = input.existing.find((i) => i.id === event.instanceId)
+    if (!target) {
+      return rejectionPlan(
+        "UNKNOWN_INSTANCE",
+        `No instance "${event.instanceId}" in the current timeline.`,
+        []
+      )
+    }
+    if (target.state !== "PLANNED") {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" is ${target.state}, not PLANNED — it can't be skipped.`,
+        [target.id]
+      )
+    }
+    const groupKey = groupKeyOf(target)
+    const skippedInstance: TimelineActivity = {
+      ...target,
+      state: "SKIPPED",
+      skipReason: "USER_SKIPPED",
+      plannedStart: null,
+      plannedEnd: null,
+      scheduledMinutes: 0,
+      blockIndex: 1,
+      blockCount: 1,
+      chunkGroupId: null,
+      hostInstanceId: null,
+      relaxations: [],
+      locked: true,
+    }
+    const workingExisting = input.existing.filter(
+      (i) => groupKeyOf(i) !== groupKey
+    )
+    const excludeIds = target.activityId
+      ? new Set([target.activityId])
+      : null
+    return {
+      ...basePlan,
+      workingExisting,
+      extraInstances: [skippedInstance],
+      checkRejection: true,
+      excludeActivityIds: excludeIds,
+    }
+  }
+
+  if (input.event.type === "RESTORE") {
+    const event = input.event as { type: "RESTORE"; instanceId: string }
+    const target = input.existing.find((i) => i.id === event.instanceId)
+    if (!target) {
+      return rejectionPlan(
+        "UNKNOWN_INSTANCE",
+        `No instance "${event.instanceId}" in the current timeline.`,
+        []
+      )
+    }
+    if (target.state !== "SKIPPED") {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" is ${target.state}, not SKIPPED — there's nothing to restore.`,
+        [target.id]
+      )
+    }
+    const groupKey = groupKeyOf(target)
+    return {
+      ...basePlan,
+      workingExisting: input.existing.filter(
+        (i) => groupKeyOf(i) !== groupKey
+      ),
+      checkRejection: true,
+    }
+  }
+
+  if (input.event.type === "FINISH_EARLY") {
+    const event = input.event as {
+      type: "FINISH_EARLY"
+      instanceId: string
+      at: number
+    }
+    const target = input.existing.find((i) => i.id === event.instanceId)
+    if (!target) {
+      return rejectionPlan(
+        "UNKNOWN_INSTANCE",
+        `No instance "${event.instanceId}" in the current timeline.`,
+        []
+      )
+    }
+    if (target.state !== "ACTIVE" && target.state !== "CARRIED_IN") {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" is ${target.state}, not ACTIVE or CARRIED_IN — it can't be finished early.`,
+        [target.id]
+      )
+    }
+    const actualStart = target.actualStart ?? target.plannedStart ?? event.at
+    if (
+      event.at < actualStart ||
+      target.plannedEnd === null ||
+      event.at > target.plannedEnd
+    ) {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" can only finish early between its actual start and its planned end.`,
+        [target.id]
+      )
+    }
+    const finished: TimelineActivity = {
+      ...target,
+      state: "COMPLETED",
+      completedSource: "user",
+      actualStart,
+      actualEnd: event.at,
+    }
+    return {
+      ...basePlan,
+      workingExisting: input.existing.map((i) =>
+        i.id === target.id ? finished : i
+      ),
+      freezeBoundary: event.at,
+      checkRejection: true,
+    }
+  }
+
+  if (input.event.type === "EXTEND") {
+    const event = input.event as {
+      type: "EXTEND"
+      instanceId: string
+      minutes: number
+    }
+    const target = input.existing.find((i) => i.id === event.instanceId)
+    if (!target) {
+      return rejectionPlan(
+        "UNKNOWN_INSTANCE",
+        `No instance "${event.instanceId}" in the current timeline.`,
+        []
+      )
+    }
+    if (target.state !== "ACTIVE") {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" is ${target.state}, not ACTIVE — it can't be extended.`,
+        [target.id]
+      )
+    }
+    if (
+      event.minutes <= 0 ||
+      event.minutes % constants.GRID !== 0 ||
+      target.plannedEnd === null
+    ) {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `An extension must be a positive multiple of ${constants.GRID} minutes.`,
+        [target.id]
+      )
+    }
+    const extended: TimelineActivity = {
+      ...target,
+      plannedEnd: target.plannedEnd + event.minutes,
+      scheduledMinutes: target.scheduledMinutes + event.minutes,
+    }
+    return {
+      ...basePlan,
+      workingExisting: input.existing.map((i) =>
+        i.id === target.id ? extended : i
+      ),
+      checkRejection: true,
+    }
+  }
+
+  if (input.event.type === "ADD_ADHOC") {
+    const event = input.event as { type: "ADD_ADHOC"; payload: AdhocPayload }
+    const { payload } = event
+    const adhocId = `adhoc-${input.existing.filter((i) => i.isAdhoc).length + 1}`
+    const adhocActivity: Activity = {
+      id: adhocId,
+      name: payload.name,
+      durationMinutes: payload.durationMinutes,
+      priorityRank: payload.priorityRank,
+      enabled: true,
+      rules: payload.rules,
+      requiredCount: payload.requiredCount ?? 0,
+    }
+    const errors = [
+      ...validateActivity(adhocActivity, constants),
+      ...validateCatalog([...todaysCatalog, adhocActivity]),
+    ].filter((i) => i.severity === "error")
+    if (errors.length > 0) {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${payload.name}" can't be added: ${errors.map((e) => e.message).join("; ")}`,
+        []
+      )
+    }
+    const newTotalRanked = totalRanked + 1
+    const adhocWeight = (activity: Activity): number =>
+      priorityWeight(activity.priorityRank, newTotalRanked)
+    const adhocTransform = (
+      instances: readonly TimelineActivity[]
+    ): TimelineActivity[] =>
+      instances.map((inst) =>
+        inst.activityId === adhocId
+          ? { ...inst, activityId: null, isAdhoc: true }
+          : inst
+      )
+    return {
+      ...basePlan,
+      extraActivities: [adhocActivity],
+      checkRejection: true,
+      weightOverride: adhocWeight,
+      totalRankedOverride: newTotalRanked,
+      instanceTransform: adhocTransform,
+    }
+  }
+
+  if (input.event.type === "EDIT_INSTANCE_RULES") {
+    const event = input.event as {
+      type: "EDIT_INSTANCE_RULES"
+      instanceId: string
+      rules: readonly Rule[]
+    }
+    const target = input.existing.find((i) => i.id === event.instanceId)
+    if (!target) {
+      return rejectionPlan(
+        "UNKNOWN_INSTANCE",
+        `No instance "${event.instanceId}" in the current timeline.`,
+        []
+      )
+    }
+    if (!target.activityId) {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" is ad-hoc and has no template rule to override.`,
+        [target.id]
+      )
+    }
+    if (target.state === "COMPLETED" || target.state === "CARRIED_IN") {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}" is ${target.state} — its rules can no longer be edited.`,
+        [target.id]
+      )
+    }
+    const templateActivity = todaysCatalog.find(
+      (a) => a.id === target.activityId
+    ) as Activity
+    const overriddenTypes = new Set(event.rules.map((r) => r.type))
+    const overrideRules: Rule[] = event.rules.map((r) => ({
+      ...r,
+      source: "instance" as const,
+    }))
+    const overriddenActivity: Activity = {
+      ...templateActivity,
+      rules: [
+        ...templateActivity.rules.filter((r) => !overriddenTypes.has(r.type)),
+        ...overrideRules,
+      ],
+    }
+    const errors = validateActivity(overriddenActivity, constants).filter(
+      (i) => i.severity === "error"
+    )
+    if (errors.length > 0) {
+      return rejectionPlan(
+        "INVALID_STATE_FOR_EVENT",
+        `"${target.name}"'s rules can't be edited that way: ${errors.map((e) => e.message).join("; ")}`,
+        [target.id]
+      )
+    }
+    const effectiveCatalog = todaysCatalog.map((a) =>
+      a.id === overriddenActivity.id ? overriddenActivity : a
+    )
+    const anchorTransform = (
+      instances: readonly TimelineActivity[]
+    ): TimelineActivity[] =>
+      instances.map((a) =>
+        a.activityId === overriddenActivity.id
+          ? { ...a, rules: overriddenActivity.rules }
+          : a
+      )
+    return {
+      ...basePlan,
+      catalogOverride: effectiveCatalog,
+      checkRejection: true,
+      instanceTransform: anchorTransform,
+    }
+  }
+
+  // GENERATE_DAY — no preconditions, no mutation, no rejection check.
+  const { instances: backdated } = applyBackdating(input.existing, input.now)
+  return { ...basePlan, workingExisting: backdated }
+}
+
 export function solve(input: SolveInput): SolveResult {
   const constants = resolveConstants(input.constants)
   const totalRanked = input.catalog.length
@@ -1718,78 +1373,17 @@ export function solve(input: SolveInput): SolveResult {
     seededInput.existing
   )
 
-  if (seededInput.event.type === "TICK") {
-    return solveTick(
-      seededInput,
-      constants,
-      todaysCatalog,
-      resolve,
-      weight,
-      totalRanked
-    )
-  }
-  if (seededInput.event.type === "SKIP") {
-    return solveSkip(
-      { ...seededInput, event: seededInput.event },
-      constants,
-      todaysCatalog,
-      resolve,
-      weight,
-      totalRanked
-    )
-  }
-  if (seededInput.event.type === "RESTORE") {
-    return solveRestore(
-      { ...seededInput, event: seededInput.event },
-      constants,
-      todaysCatalog,
-      resolve,
-      weight,
-      totalRanked
-    )
-  }
-  if (seededInput.event.type === "FINISH_EARLY") {
-    return solveFinishEarly(
-      { ...seededInput, event: seededInput.event },
-      constants,
-      todaysCatalog,
-      resolve,
-      weight,
-      totalRanked
-    )
-  }
-  if (seededInput.event.type === "EXTEND") {
-    return solveExtend(
-      { ...seededInput, event: seededInput.event },
-      constants,
-      todaysCatalog,
-      resolve,
-      weight,
-      totalRanked
-    )
-  }
-  if (seededInput.event.type === "ADD_ADHOC") {
-    return solveAddAdhoc(
-      { ...seededInput, event: seededInput.event },
-      constants,
-      todaysCatalog,
-      resolve,
-      totalRanked
-    )
-  }
-  if (seededInput.event.type === "EDIT_INSTANCE_RULES") {
-    return solveEditInstanceRules(
-      { ...seededInput, event: seededInput.event },
-      constants,
-      todaysCatalog,
-      resolve,
-      weight,
-      totalRanked
-    )
-  }
-
-  return solveGenerate(
+  const plan = planEvent(
     seededInput,
+    constants,
+    todaysCatalog,
+    resolve,
+    weight,
+    totalRanked
+  )
+  return runEvent(
+    seededInput,
+    plan,
     constants,
     todaysCatalog,
     resolve,
