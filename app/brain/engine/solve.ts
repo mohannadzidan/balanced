@@ -32,8 +32,9 @@ function hasFixed(activity: Activity): boolean {
   return activity.rules.some((r) => r.type === "fixed")
 }
 
-function hasMandatory(activity: Activity): boolean {
-  return activity.rules.some((r) => r.type === "mandatory")
+// SPEC-v2.md Section 5.1: isHardConstrained = hasFixedRule || requiredCount > 0.
+function isRequired(activity: Activity): boolean {
+  return activity.requiredCount > 0
 }
 
 function relaxationsFor(
@@ -69,6 +70,7 @@ function freshInstance(
     name: activity.name,
     durationMinutes: activity.durationMinutes,
     priorityRank: activity.priorityRank,
+    requiredCount: activity.requiredCount,
     rules: activity.rules,
     state: placement ? "PLANNED" : "SKIPPED",
     completedSource: null,
@@ -125,6 +127,7 @@ function chunkedInstances(
       name: activity.name,
       durationMinutes: activity.durationMinutes,
       priorityRank: activity.priorityRank,
+      requiredCount: activity.requiredCount,
       rules: activity.rules,
       state: "PLANNED",
       completedSource: null,
@@ -204,7 +207,7 @@ function runPipeline(
 
   // Phase 1b: the remaining hard set — MandatoryRule without a FixedRule —
   // most-constrained first, with bounded backtracking.
-  const mandatorySet = hostPool.filter((a) => hasMandatory(a) && !hasFixed(a))
+  const mandatorySet = hostPool.filter((a) => isRequired(a) && !hasFixed(a))
   const hardOutcome = placeHardSet(mandatorySet, occupiedAfterFixed, {
     freezeBoundary,
     grid,
@@ -1249,6 +1252,7 @@ function solveAddAdhoc(
     priorityRank: payload.priorityRank,
     enabled: true,
     rules: payload.rules,
+    requiredCount: payload.requiredCount ?? 0,
   }
 
   const errors = [
@@ -1394,6 +1398,7 @@ function adhocActivitiesFrom(
       priorityRank: inst.priorityRank,
       enabled: true,
       rules: inst.rules,
+      requiredCount: inst.requiredCount,
     })
   }
   return activities

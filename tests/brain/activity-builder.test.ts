@@ -16,6 +16,7 @@ describe("ActivityBuilder", () => {
       priorityRank: 2,
       enabled: true,
       rules: [],
+      requiredCount: 0,
     })
   })
 
@@ -61,5 +62,15 @@ describe("ActivityBuilder", () => {
   it("is reusable as a class directly, not just via the activity() factory", () => {
     const built = new ActivityBuilder("Direct").rank(1).build()
     expect(built.name).toBe("Direct")
+  })
+
+  it("sets requiredCount to 1 via .mandatory(), idempotently on repeat calls", () => {
+    const built = activity("Gym").rank(1).mandatory().mandatory().build()
+    expect(built.requiredCount).toBe(1)
+  })
+
+  it("sets requiredCount directly via .required(n)", () => {
+    const built = activity("Gym").rank(1).required(1).build()
+    expect(built.requiredCount).toBe(1)
   })
 })

@@ -71,19 +71,19 @@ describe("placementCost", () => {
 
 describe("skipCost", () => {
   it("charges W(a) * SKIP for an ordinary skip", () => {
-    expect(skipCost(4, C, { isMandatory: false, isDependentSkip: false })).toBe(
+    expect(skipCost(4, C, { isRequired: false, isDependentSkip: false })).toBe(
       4 * C.SKIP
     )
   })
 
-  it("charges infinity for a skipped mandatory activity", () => {
-    expect(skipCost(4, C, { isMandatory: true, isDependentSkip: false })).toBe(
+  it("charges infinity for a skipped required activity", () => {
+    expect(skipCost(4, C, { isRequired: true, isDependentSkip: false })).toBe(
       Number.POSITIVE_INFINITY
     )
   })
 
   it("is free for a dependent skipped because its host was skipped", () => {
-    expect(skipCost(4, C, { isMandatory: true, isDependentSkip: true })).toBe(0)
+    expect(skipCost(4, C, { isRequired: true, isDependentSkip: true })).toBe(0)
   })
 })
 
@@ -95,6 +95,7 @@ function instance(overrides: Partial<TimelineActivity>): TimelineActivity {
     name: "Activity",
     durationMinutes: 60,
     priorityRank: 1,
+    requiredCount: 0,
     rules: [],
     state: "PLANNED",
     completedSource: null,

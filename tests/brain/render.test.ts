@@ -12,6 +12,7 @@ function instance(overrides: Partial<TimelineActivity>): TimelineActivity {
     name: "Activity",
     durationMinutes: 60,
     priorityRank: 1,
+    requiredCount: 0,
     rules: [],
     state: "PLANNED",
     completedSource: null,

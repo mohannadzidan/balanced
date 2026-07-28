@@ -41,10 +41,10 @@ export function placementCost(
 export function skipCost(
   weight: number,
   constants: CostConstants,
-  opts: { readonly isMandatory: boolean; readonly isDependentSkip: boolean }
+  opts: { readonly isRequired: boolean; readonly isDependentSkip: boolean }
 ): number {
   if (opts.isDependentSkip) return 0
-  if (opts.isMandatory) return Number.POSITIVE_INFINITY
+  if (opts.isRequired) return Number.POSITIVE_INFINITY
   return weight * constants.SKIP
 }
 
@@ -115,9 +115,11 @@ export function scheduleCost(
     let groupCost: number
 
     if (primary.state === "SKIPPED") {
-      const isMandatory = primary.rules.some((r) => r.type === "mandatory")
+      // SPEC-v2.md Section 5.2: isRequired = occurrenceIndex < requiredCount.
+      // Drop 1's occurrenceIndex is always 0, so this is requiredCount > 0.
+      const isRequired = primary.requiredCount > 0
       const isDependentSkip = primary.skipReason === "HOST_SKIPPED"
-      groupCost = skipCost(weight, constants, { isMandatory, isDependentSkip })
+      groupCost = skipCost(weight, constants, { isRequired, isDependentSkip })
       skip += groupCost
     } else {
       const scheduledMinutes = group.reduce(

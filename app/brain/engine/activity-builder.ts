@@ -50,6 +50,7 @@ export class ActivityBuilder {
   private enabled = true
   private rules: Rule[] = []
   private windowSpecs: WindowSpec[] = []
+  private requiredCount = 0
 
   constructor(private readonly name: string) {
     this.activityId = slugify(name)
@@ -136,9 +137,18 @@ export class ActivityBuilder {
     return this
   }
 
-  /** Adds a `MandatoryRule`: placed via the bounded-backtracking hard set instead of the greedy pass. */
+  /** Sets `requiredCount` to 1: placed via the bounded-backtracking hard set instead of the greedy pass. */
   mandatory(): this {
-    this.rules.push({ type: "mandatory", source: "template" })
+    this.requiredCount = 1
+    return this
+  }
+
+  /**
+   * Sets `Activity.requiredCount` directly (SPEC-v2.md Section 5) — `.mandatory()`
+   * is sugar for `.required(1)`. Drop 1 permits only 0 or 1.
+   */
+  required(n: number): this {
+    this.requiredCount = n
     return this
   }
 
@@ -236,6 +246,7 @@ export class ActivityBuilder {
       priorityRank: this.priorityRank,
       enabled: this.enabled,
       rules: [...this.rules, ...windowRules],
+      requiredCount: this.requiredCount,
     }
   }
 }

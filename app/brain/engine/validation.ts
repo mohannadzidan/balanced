@@ -264,6 +264,18 @@ export function validateActivity(
     )
   }
 
+  // SPEC-v2.md Section 8.2: requiredCount < 0, or > 1 in Drop 1.
+  if (activity.requiredCount < 0 || activity.requiredCount > 1) {
+    issues.push(
+      issue(
+        "error",
+        "REQUIRED_COUNT_INVALID",
+        activity.id,
+        `"${activity.name}" requiredCount ${activity.requiredCount} must be 0 or 1 in Drop 1`
+      )
+    )
+  }
+
   return issues
 }
 

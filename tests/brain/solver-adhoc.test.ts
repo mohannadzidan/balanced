@@ -65,7 +65,8 @@ describe("solve — ADD_ADHOC (SPEC.md 9.5)", () => {
           name: "Urgent Call",
           durationMinutes: 30,
           priorityRank: 1,
-          rules: [{ type: "mandatory", source: "instance" }],
+          rules: [],
+          requiredCount: 1,
           date: dayFrame.date,
         },
       },
@@ -76,7 +77,7 @@ describe("solve — ADD_ADHOC (SPEC.md 9.5)", () => {
       (i) => i.name === "Urgent Call"
     )!
     expect(call.state).toBe("PLANNED")
-    expect(call.rules).toEqual([{ type: "mandatory", source: "instance" }])
+    expect(call.requiredCount).toBe(1)
   })
 
   it("rejects a payload with incompatible rules (SPEC.md 10.1 RULE_INCOMPATIBLE)", () => {

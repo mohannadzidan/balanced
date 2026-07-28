@@ -59,11 +59,6 @@ export interface WindowRule {
   readonly maxDriftMinutes: number // 0 = strict
 }
 
-export interface MandatoryRule {
-  readonly type: "mandatory"
-  readonly source: RuleSource
-}
-
 export interface ShrinkRule {
   readonly type: "shrink"
   readonly source: RuleSource
@@ -104,7 +99,6 @@ export interface OverlapRule {
 export type Rule =
   | FixedRule
   | WindowRule
-  | MandatoryRule
   | ShrinkRule
   | SequenceRule
   | OverlapRule
@@ -120,6 +114,10 @@ export interface Activity {
   readonly priorityRank: number
   readonly enabled: boolean
   readonly rules: readonly Rule[]
+  // SPEC-v2.md Section 5: MandatoryRule becomes a field. 0 = discretionary
+  // (skip costs W x SKIP); 1 = exactly v1's MandatoryRule (skip costs
+  // Infinity, hard-set membership). Drop 1 permits only 0 or 1.
+  readonly requiredCount: number
 }
 
 // --- TimelineActivity (instance) -------------------------------------------
@@ -153,6 +151,7 @@ export interface TimelineActivity {
   readonly name: string
   readonly durationMinutes: number
   readonly priorityRank: number
+  readonly requiredCount: number
   readonly rules: readonly Rule[]
   readonly state: InstanceState
   readonly completedSource: CompletedSource | null
@@ -231,6 +230,8 @@ export interface AdhocPayload {
   readonly priorityRank: number
   readonly rules: readonly Rule[]
   readonly date: string
+  /** SPEC-v2.md Section 5: replaces v1's MandatoryRule. Defaults to 0. */
+  readonly requiredCount?: number
 }
 
 export type Event =

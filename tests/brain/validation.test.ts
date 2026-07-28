@@ -44,10 +44,10 @@ describe("validateActivity", () => {
       (a: ReturnType<typeof activity>) =>
         a.fixed("09:00", "10:00").shrink({ floor: 30 }),
     ],
-    [
-      "duplicate mandatory",
-      (a: ReturnType<typeof activity>) => a.mandatory().mandatory(),
-    ],
+    // "duplicate mandatory" no longer applies: SPEC-v2.md Section 5 turns
+    // MandatoryRule into Activity.requiredCount, a plain field rather than a
+    // repeatable rule, so calling .mandatory() more than once is simply
+    // idempotent instead of producing two rules to flag.
   ])("flags RULE_INCOMPATIBLE for %s", (_label, configure) => {
     const built = configure(activity("Bad").rank(1).minutes(60)).build()
     expect(codesOf(validateActivity(built, C))).toContain("RULE_INCOMPATIBLE")
@@ -154,6 +154,26 @@ describe("validateActivity", () => {
     const bad = activity("Bad").rank(1).minutes(30).days().build()
     expect(codesOf(validateActivity(bad, C))).toContain("NO_ALLOWED_DAYS")
   })
+
+  it.each([-1, 2])(
+    "flags REQUIRED_COUNT_INVALID for requiredCount %i (SPEC-v2.md Section 8.2)",
+    (n) => {
+      const bad = activity("Bad").rank(1).minutes(30).required(n).build()
+      expect(codesOf(validateActivity(bad, C))).toContain(
+        "REQUIRED_COUNT_INVALID"
+      )
+    }
+  )
+
+  it.each([0, 1])(
+    "does not flag REQUIRED_COUNT_INVALID for requiredCount %i",
+    (n) => {
+      const ok = activity("Ok").rank(1).minutes(30).required(n).build()
+      expect(codesOf(validateActivity(ok, C))).not.toContain(
+        "REQUIRED_COUNT_INVALID"
+      )
+    }
+  )
 
   it("flags DOMINANCE_VIOLATION for a deliberately broken activity", () => {
     const broken = activity("Broken")

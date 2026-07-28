@@ -97,7 +97,6 @@ export type {
   RuleSource,
   FixedRule,
   WindowRule,
-  MandatoryRule,
   ShrinkRule,
   SequenceRule,
   OverlapRule,
