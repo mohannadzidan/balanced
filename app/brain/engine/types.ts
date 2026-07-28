@@ -3,12 +3,31 @@
 
 export type Weekday = "SUN" | "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT"
 
-export interface DayFrame {
-  readonly date: string // YYYY-MM-DD, local calendar date
-  readonly timezone: string // IANA zone, e.g. "Europe/Berlin"
-  readonly startInstant: number // UTC epoch ms of local 00:00 on this date
+// SPEC-v2.md Section 3: one entry in Frame.days. Drop 1 always has exactly one.
+export interface Day {
+  readonly index: number // 0-based
+  readonly date: string // YYYY-MM-DD
+  readonly weekday: Weekday
+  readonly startOffset: number // minutes from frame start to this day's local 00:00
   readonly lengthMinutes: number // 1440 normally; 1380 / 1500 on DST transitions
 }
+
+// SPEC-v2.md Section 3: DayFrame generalised to a multi-day frame. `dayCount`
+// is always 1 in Drop 1, so this is arithmetically identical to the old
+// single-day DayFrame; `date` is kept as a field (not just a getter) so every
+// existing DayFrame consumer keeps working unchanged.
+export interface Frame {
+  readonly startDate: string // YYYY-MM-DD, local calendar date of day 0
+  readonly date: string // alias of startDate (SPEC-v2.md Section 3.2 compatibility)
+  readonly timezone: string // IANA zone, e.g. "Europe/Berlin"
+  readonly startInstant: number // UTC epoch ms of local 00:00 on startDate
+  readonly dayCount: number // ALWAYS 1 in Drop 1
+  readonly lengthMinutes: number // sum of days[].lengthMinutes
+  readonly days: readonly Day[] // exactly one entry in Drop 1
+}
+
+/** Retained name for the pre-Drop-1 single-day frame shape (SPEC-v2.md Section 3.2). */
+export type DayFrame = Frame
 
 export interface Interval {
   readonly start: number

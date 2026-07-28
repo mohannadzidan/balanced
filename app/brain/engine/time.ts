@@ -1,4 +1,4 @@
-import type { DayFrame, Weekday } from "./types"
+import type { Day, DayFrame, Frame, Weekday } from "./types"
 
 const WEEKDAYS: readonly Weekday[] = [
   "SUN",
@@ -175,23 +175,91 @@ export function addDays(date: string, days: number): string {
   return new Date(Date.UTC(y, mo - 1, d + days)).toISOString().slice(0, 10)
 }
 
-/** Resolves the day frame for a local calendar date in an IANA zone. */
-export function resolveDayFrame(date: string, timezone: string): DayFrame {
+function buildDay(index: number, date: string, timezone: string): Day {
   const [y, mo, d] = date.split("-").map(Number)
   const start = resolveWallClockToInstant(y, mo, d, 0, 0, timezone)
   const nextDate = addDays(date, 1)
   const [ny, nmo, nd] = nextDate.split("-").map(Number)
   const end = resolveWallClockToInstant(ny, nmo, nd, 0, 0, timezone)
-  const lengthMinutes = Math.round((end.instant - start.instant) / 60_000)
-  return { date, timezone, startInstant: start.instant, lengthMinutes }
+  return {
+    index,
+    date,
+    weekday: weekdayOf(date),
+    // Placeholder; startOffset is filled in by resolveFrame once frame.startInstant
+    // is known. Day 0's offset is always 0.
+    startOffset: 0,
+    lengthMinutes: Math.round((end.instant - start.instant) / 60_000),
+  }
 }
 
-/** Resolves an "HH:MM" wall-clock string to an offset from the start of the day frame. */
-export function resolveWallClock(wall: string, dayFrame: DayFrame): number {
+/**
+ * Resolves a multi-day Frame starting at a local calendar date (SPEC-v2.md
+ * Section 3). `dayCount` is always 1 in Drop 1, so `days[0]` is built exactly
+ * as the pre-Drop-1 `resolveDayFrame` built a `DayFrame` — local midnight to
+ * local midnight, sampled from the timezone database.
+ */
+export function resolveFrame(
+  date: string,
+  dayCount: number,
+  timezone: string
+): Frame {
+  const [y0, mo0, d0] = date.split("-").map(Number)
+  const startInstant = resolveWallClockToInstant(
+    y0,
+    mo0,
+    d0,
+    0,
+    0,
+    timezone
+  ).instant
+
+  const days: Day[] = []
+  let cursorDate = date
+  let cursorOffset = 0
+  for (let index = 0; index < dayCount; index++) {
+    const day = buildDay(index, cursorDate, timezone)
+    days.push({ ...day, startOffset: cursorOffset })
+    cursorOffset += day.lengthMinutes
+    cursorDate = addDays(cursorDate, 1)
+  }
+
+  const lengthMinutes = days.reduce((sum, day) => sum + day.lengthMinutes, 0)
+
+  return {
+    startDate: date,
+    date,
+    timezone,
+    startInstant,
+    dayCount,
+    lengthMinutes,
+    days,
+  }
+}
+
+/** Resolves the day frame for a local calendar date in an IANA zone. Retained as an
+ * alias of `resolveFrame(date, 1, timezone)` (SPEC-v2.md Section 3.2). */
+export function resolveDayFrame(date: string, timezone: string): DayFrame {
+  return resolveFrame(date, 1, timezone)
+}
+
+/**
+ * Resolves an "HH:MM" wall-clock string to an offset from the start of the
+ * frame, on the given day (SPEC-v2.md Section 3.1). `dayIndex` defaults to 0,
+ * so with a single-day frame this is arithmetically identical to before.
+ */
+export function resolveWallClock(
+  wall: string,
+  frame: DayFrame,
+  dayIndex = 0
+): number {
+  const day = frame.days[dayIndex]
   const [h, mi] = wall.split(":").map(Number)
-  const [y, mo, d] = dayFrame.date.split("-").map(Number)
-  const resolved = resolveWallClockToInstant(y, mo, d, h, mi, dayFrame.timezone)
-  return Math.round((resolved.instant - dayFrame.startInstant) / 60_000)
+  const [y, mo, d] = day.date.split("-").map(Number)
+  const resolved = resolveWallClockToInstant(y, mo, d, h, mi, frame.timezone)
+  const dayStartInstant = frame.startInstant + day.startOffset * 60_000
+  return (
+    day.startOffset + Math.round((resolved.instant - dayStartInstant) / 60_000)
+  )
 }
 
 export function weekdayOf(date: string): Weekday {
