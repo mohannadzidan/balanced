@@ -63,9 +63,13 @@ function freshInstance(
   skipReason: SkipReason | null,
   relaxations: readonly Relaxation[]
 ): TimelineActivity {
+  const occurrenceId = `${activity.id}@${dayFrame.date}#1`
   return {
-    id: activity.id,
+    id: occurrenceId,
     activityId: activity.id,
+    occurrenceId,
+    occurrenceIndex: 1,
+    bucketKey: dayFrame.date,
     date: dayFrame.date,
     name: activity.name,
     durationMinutes: activity.durationMinutes,
@@ -79,8 +83,8 @@ function freshInstance(
     actualStart: null,
     actualEnd: null,
     scheduledMinutes: placement ? placement.end - placement.start : 0,
-    chunkIndex: 1,
-    chunkCount: 1,
+    blockIndex: 1,
+    blockCount: 1,
     chunkGroupId: null,
     hostInstanceId: placement?.nestedIn ?? null,
     isAdhoc: false,
@@ -107,6 +111,8 @@ function chunkedInstances(
   const totalScheduled = sorted.reduce((sum, c) => sum + (c.end - c.start), 0)
   const shrunkBy = activity.durationMinutes - totalScheduled
 
+  const occurrenceId = `${activity.id}@${dayFrame.date}#1`
+
   return sorted.map((placement, index) => {
     const relaxations: Relaxation[] = []
     if (index === 0) {
@@ -121,8 +127,11 @@ function chunkedInstances(
     }
 
     return {
-      id: `${activity.id}#${index + 1}`,
+      id: `${occurrenceId}~${index + 1}`,
       activityId: activity.id,
+      occurrenceId,
+      occurrenceIndex: 1,
+      bucketKey: dayFrame.date,
       date: dayFrame.date,
       name: activity.name,
       durationMinutes: activity.durationMinutes,
@@ -136,9 +145,9 @@ function chunkedInstances(
       actualStart: null,
       actualEnd: null,
       scheduledMinutes: placement.end - placement.start,
-      chunkIndex: index + 1,
-      chunkCount: sorted.length,
-      chunkGroupId: activity.id,
+      blockIndex: index + 1,
+      blockCount: sorted.length,
+      chunkGroupId: occurrenceId,
       hostInstanceId: placement.nestedIn,
       isAdhoc: false,
       spanningFromPreviousDay: false,
@@ -376,10 +385,10 @@ function buildDiagnostics(instances: readonly TimelineActivity[]): {
       })
     }
 
-    if (inst.chunkIndex !== 1) continue // avoid double-reporting a chunked plan
+    if (inst.blockIndex !== 1) continue // avoid double-reporting a chunked plan
 
     const shrink = inst.relaxations.find((r) => r.type === "shrink")
-    if (shrink && inst.chunkCount === 1) {
+    if (shrink && inst.blockCount === 1) {
       diagnostics.push({
         severity: "info",
         code: "SHRUNK",
@@ -395,7 +404,7 @@ function buildDiagnostics(instances: readonly TimelineActivity[]): {
         severity: "info",
         code: "CHUNKED",
         instanceIds: [inst.id],
-        message: `"${inst.name}" was split into ${inst.chunkCount} blocks.`,
+        message: `"${inst.name}" was split into ${inst.blockCount} blocks.`,
         suggestedFix: null,
       })
     }
@@ -430,8 +439,10 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
   )
   // An ad-hoc anchor has activityId: null (SPEC.md Section 9.5), so its key
   // for "already spoken for, exclude from re-solving" purposes is its own
-  // instance id instead — see `groupKeyOf`.
-  const anchorActivityIds = new Set(anchors.map((a) => groupKeyOf(a)))
+  // instance id instead.
+  const anchorActivityIds = new Set(
+    anchors.map((a) => a.activityId ?? a.id)
+  )
   const placedAnchors = anchors.filter(
     (a) => a.plannedStart !== null && a.plannedEnd !== null
   )
@@ -443,7 +454,7 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
     }))
   const anchorPlacements = new Map<string, Placement>(
     placedAnchors.map((a) => [
-      groupKeyOf(a),
+      a.activityId ?? a.id,
       {
         start: a.plannedStart as number,
         end: a.plannedEnd as number,
@@ -693,7 +704,7 @@ function solveGenerate(
  * engine implements, but the fallback is cheap to have in place).
  */
 function groupKeyOf(inst: TimelineActivity): string {
-  return inst.activityId ?? inst.id
+  return inst.occurrenceId
 }
 
 /**
@@ -741,8 +752,8 @@ function solveSkip(
     plannedStart: null,
     plannedEnd: null,
     scheduledMinutes: 0,
-    chunkIndex: 1,
-    chunkCount: 1,
+    blockIndex: 1,
+    blockCount: 1,
     chunkGroupId: null,
     hostInstanceId: null,
     relaxations: [],
@@ -752,7 +763,7 @@ function solveSkip(
   const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
     extractAnchors(input.existing.filter((i) => groupKeyOf(i) !== groupKey))
   const activitiesToSolve = todaysCatalog.filter(
-    (a) => !anchorActivityIds.has(a.id) && a.id !== groupKey
+    (a) => !anchorActivityIds.has(a.id) && a.id !== target.activityId
   )
 
   const {
@@ -1044,18 +1055,20 @@ function checkEventRejection(
   after: readonly TimelineActivity[]
 ): EventRejection | null {
   const byActivityId = new Map(catalog.map((a) => [a.id, a]))
-  const priorByActivity = new Map<string, TimelineActivity>()
+  const priorByOccurrence = new Map<string, TimelineActivity>()
   for (const inst of before) {
-    if (inst.activityId) priorByActivity.set(inst.activityId, inst)
+    priorByOccurrence.set(inst.occurrenceId, inst)
   }
-  const afterByActivity = new Map<string, TimelineActivity>()
+  const afterByOccurrence = new Map<string, TimelineActivity>()
+  const afterByActivityId = new Map<string, TimelineActivity>()
   for (const inst of after) {
-    if (inst.activityId) afterByActivity.set(inst.activityId, inst)
+    afterByOccurrence.set(inst.occurrenceId, inst)
+    if (inst.activityId) afterByActivityId.set(inst.activityId, inst)
   }
 
   for (const inst of after) {
     if (!inst.activityId || inst.state !== "SKIPPED") continue
-    const prior = priorByActivity.get(inst.activityId)
+    const prior = priorByOccurrence.get(inst.occurrenceId)
     if (!prior || prior.state === "SKIPPED") continue
     const activity = byActivityId.get(inst.activityId)
     if (!activity) continue
@@ -1089,7 +1102,7 @@ function checkEventRejection(
     if (inst.skipReason === "NO_FREE_SPACE" && isDependent(activity)) {
       const rule = sequenceRuleOf(activity)
       const hostAfter = rule
-        ? afterByActivity.get(rule.linkedActivityId)
+        ? afterByActivityId.get(rule.linkedActivityId)
         : undefined
       if (!hostAfter || hostAfter.state !== "SKIPPED") {
         return {
@@ -1388,11 +1401,11 @@ function adhocActivitiesFrom(
   const activities: Activity[] = []
   for (const inst of existing) {
     if (!inst.isAdhoc) continue
-    const key = groupKeyOf(inst)
-    if (seen.has(key)) continue
-    seen.add(key)
+    const baseId = inst.occurrenceId.split("@")[0]
+    if (seen.has(baseId)) continue
+    seen.add(baseId)
     activities.push({
-      id: key,
+      id: baseId,
       name: inst.name,
       durationMinutes: inst.durationMinutes,
       priorityRank: inst.priorityRank,

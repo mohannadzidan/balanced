@@ -150,10 +150,11 @@ export function placeGreedy(
       bestNested &&
       (!freeResult.placement || bestNested.cost < freeResult.cost)
     ) {
+      const hostInstanceId = `${bestNested.host.id}@${ctx.dayFrame.date}#1`
       const placement: Placement = {
         start: bestNested.placement.start,
         end: bestNested.placement.end,
-        nestedIn: bestNested.host.id,
+        nestedIn: hostInstanceId,
       }
       placements.set(activity.id, placement)
       const guests = hostGuests.get(bestNested.host.id) ?? []

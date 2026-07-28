@@ -132,10 +132,10 @@ describe("solve — ShrinkRule (chunking, SPEC.md 14.6)", () => {
     expect(chunks[1].plannedEnd).toBe(900) // 15:00
 
     expect(chunks[0].chunkGroupId).toBe(chunks[1].chunkGroupId)
-    expect(chunks[0].chunkIndex).toBe(1)
-    expect(chunks[1].chunkIndex).toBe(2)
-    expect(chunks[0].chunkCount).toBe(2)
-    expect(chunks[1].chunkCount).toBe(2)
+    expect(chunks[0].blockIndex).toBe(1)
+    expect(chunks[1].blockIndex).toBe(2)
+    expect(chunks[0].blockCount).toBe(2)
+    expect(chunks[1].blockCount).toBe(2)
     expect(chunks[0].relaxations).toEqual([{ type: "chunk", minutes: 1 }])
     expect(chunks[1].relaxations).toEqual([])
 

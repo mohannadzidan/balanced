@@ -326,7 +326,7 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
     expect(result.status).toBe("OK")
     const chunks = result.timeline.instances
       .filter((i) => i.name === "Deep Work")
-      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+      .sort((a, b) => a.blockIndex - b.blockIndex)
     expect(chunks).toHaveLength(2)
     expect(chunks[0].plannedStart).toBe(540) // 09:00
     expect(chunks[0].plannedEnd).toBe(600) // 10:00

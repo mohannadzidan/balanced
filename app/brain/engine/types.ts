@@ -176,8 +176,11 @@ export interface TimelineActivity {
   readonly actualStart: number | null
   readonly actualEnd: number | null
   readonly scheduledMinutes: number
-  readonly chunkIndex: number
-  readonly chunkCount: number
+  readonly occurrenceId: string
+  readonly occurrenceIndex: number
+  readonly bucketKey: string
+  readonly blockIndex: number
+  readonly blockCount: number
   readonly chunkGroupId: string | null
   readonly hostInstanceId: string | null
   readonly isAdhoc: boolean

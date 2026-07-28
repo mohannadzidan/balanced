@@ -49,7 +49,7 @@ describe("solve — sequence dependents bind to a chunked host's first/last chun
     expect(result.status).toBe("OK")
     const chunks = result.timeline.instances
       .filter((i) => i.name === "Deep Work")
-      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+      .sort((a, b) => a.blockIndex - b.blockIndex)
     expect(chunks).toHaveLength(2) // same layout as SPEC.md 14.6
 
     const firstChunk = chunks[0]

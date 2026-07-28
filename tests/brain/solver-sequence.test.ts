@@ -64,7 +64,7 @@ describe("solve — SequenceRule", () => {
     // Dependent skip costs nothing, unlike an ordinary optional skip.
     const weight = priorityWeight(2, 2)
     expect(result.cost.skip).not.toBe(weight * C.SKIP)
-    expect(result.cost.perInstance["commute"]).toBe(0)
+    expect(result.cost.perInstance["commute@2024-06-17#1"]).toBe(0)
   })
 
   it("pays the sequence gap cost when the tight slot is unavailable", () => {

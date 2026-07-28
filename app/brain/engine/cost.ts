@@ -112,7 +112,7 @@ export function scheduleCost(
   }
 
   for (const group of groups.values()) {
-    group.sort((a, b) => a.chunkIndex - b.chunkIndex)
+    group.sort((a, b) => a.blockIndex - b.blockIndex)
     const [primary, ...rest] = group
     const weight = priorityWeight(primary.priorityRank, totalRanked)
     let groupCost: number

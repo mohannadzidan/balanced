@@ -40,7 +40,7 @@ describe("solve — OverlapRule (nesting, SPEC.md 14.1's spirit)", () => {
 
     const email = result.timeline.instances.find((i) => i.name === "Email")!
     expect(email.state).toBe("PLANNED")
-    expect(email.hostInstanceId).toBe("work")
+    expect(email.hostInstanceId).toBe("work@2024-06-17#1")
     expect(email.plannedStart).toBe(540)
     expect(email.plannedEnd).toBe(570)
 
@@ -67,8 +67,8 @@ describe("solve — OverlapRule (nesting, SPEC.md 14.1's spirit)", () => {
 
     const email = result.timeline.instances.find((i) => i.name === "Email")!
     const call = result.timeline.instances.find((i) => i.name === "Call")!
-    expect(email.hostInstanceId).toBe("work")
-    expect(call.hostInstanceId).toBe("work")
+    expect(email.hostInstanceId).toBe("work@2024-06-17#1")
+    expect(call.hostInstanceId).toBe("work@2024-06-17#1")
 
     const spent = email.scheduledMinutes + call.scheduledMinutes
     expect(spent).toBe(40)
@@ -99,8 +99,8 @@ describe("solve — OverlapRule (nesting, SPEC.md 14.1's spirit)", () => {
     ])
     const a = result.timeline.instances.find((i) => i.name === "A")!
     const b = result.timeline.instances.find((i) => i.name === "B")!
-    expect(a.hostInstanceId).toBe("work")
-    expect(b.hostInstanceId).toBe("work")
+    expect(a.hostInstanceId).toBe("work@2024-06-17#1")
+    expect(b.hostInstanceId).toBe("work@2024-06-17#1")
     expect(a.plannedStart).toBe(540)
     expect(a.plannedEnd).toBe(570)
     expect(b.plannedStart).toBe(570)
@@ -146,7 +146,7 @@ describe("solve — OverlapRule (greedy placement internals)", () => {
         .shrink({ floor: 20 }),
     ])
     const brk = result.timeline.instances.find((i) => i.name === "Break")!
-    expect(brk.hostInstanceId).toBe("work")
+    expect(brk.hostInstanceId).toBe("work@2024-06-17#1")
     expect(brk.plannedStart).toBe(540)
     expect(brk.plannedEnd).toBe(580)
     expect(brk.scheduledMinutes).toBe(40)
@@ -198,7 +198,7 @@ describe("solve — OverlapRule (greedy placement internals)", () => {
         .flexible("14:00", "14:10", { drift: 10 }),
     ])
     const note = result.timeline.instances.find((i) => i.name === "Note")!
-    expect(note.hostInstanceId).toBe("afternoon")
+    expect(note.hostInstanceId).toBe("afternoon@2024-06-17#1")
     expect(note.plannedStart).toBe(840)
     expect(note.plannedEnd).toBe(850)
     expect(note.relaxations).toEqual([])
