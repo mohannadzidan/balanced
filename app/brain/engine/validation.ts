@@ -313,7 +313,7 @@ export function validateActivity(
     issues.push(
       issue(
         "warning",
-        "NO_ALLOWED_DAYS",
+        "NO_ELIGIBLE_DAYS",
         activity.id,
         `"${activity.name}" has no allowed days and will never be generated`
       )

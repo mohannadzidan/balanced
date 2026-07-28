@@ -211,9 +211,9 @@ describe("validateActivity", () => {
     expect(codesOf(validateActivity(bad, C))).toContain("DRIFT_UNAVOIDABLE")
   })
 
-  it("flags NO_ALLOWED_DAYS when the activity can never be generated", () => {
+  it("flags NO_ELIGIBLE_DAYS when the activity can never be generated", () => {
     const bad = activity("Bad").rank(1).minutes(30).days().build()
-    expect(codesOf(validateActivity(bad, C))).toContain("NO_ALLOWED_DAYS")
+    expect(codesOf(validateActivity(bad, C))).toContain("NO_ELIGIBLE_DAYS")
   })
 
   it.each([-1, 2])(
