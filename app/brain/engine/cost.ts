@@ -3,6 +3,9 @@ import type {
   Activity,
   CostBreakdown,
   CostConstants,
+  ElasticityRule,
+  RepeatRule,
+  SequenceRule,
   TimelineActivity,
   WindowRule,
 } from "./types"
@@ -170,31 +173,35 @@ export function violatesDominance(
   activity: Activity,
   constants: CostConstants
 ): boolean {
-  const shrinkRule = activity.rules.find((r) => r.type === "shrink")
+  // SPEC-v2.md Section 8.3's restated invariant, identical arithmetic to
+  // SPEC.md Section 7.4 under the new vocabulary: terms for absent rules are
+  // zero.
+  const elasticityRule = activity.rules.find(
+    (r): r is ElasticityRule => r.type === "elasticity"
+  )
+  const repeatRule = activity.rules.find(
+    (r): r is RepeatRule => r.type === "repeat"
+  )
   const windowRules = activity.rules.filter(
     (r): r is WindowRule => r.type === "window"
   )
-  const sequenceRule = activity.rules.find((r) => r.type === "sequence")
+  const sequenceRule = activity.rules.find(
+    (r): r is SequenceRule => r.type === "sequence"
+  )
 
-  const shrinkTerm =
-    shrinkRule && shrinkRule.type === "shrink"
-      ? constants.SHRINK *
-        (activity.durationMinutes - shrinkRule.minDurationMinutes)
-      : 0
+  const shrinkTerm = elasticityRule
+    ? constants.SHRINK * (activity.durationMinutes - elasticityRule.minTotalMinutes)
+    : 0
   const chunkTerm =
-    shrinkRule && shrinkRule.type === "shrink" && shrinkRule.chunkingAllowed
-      ? constants.CHUNK * (shrinkRule.maxChunks - 1)
+    repeatRule && repeatRule.sharedBudget
+      ? constants.CHUNK * (repeatRule.count - 1)
       : 0
-  // SPEC-v2.md Section 8.3: DRIFT * max over windows of maxDriftMinutes.
   const maxDriftMinutes =
     windowRules.length > 0
       ? Math.max(...windowRules.map((w) => w.maxDriftMinutes))
       : 0
   const driftTerm = constants.DRIFT * maxDriftMinutes
-  const gapTerm =
-    sequenceRule && sequenceRule.type === "sequence"
-      ? constants.GAP * sequenceRule.maxGapMinutes
-      : 0
+  const gapTerm = sequenceRule ? constants.GAP * sequenceRule.maxGapMinutes : 0
 
   return constants.SKIP <= shrinkTerm + chunkTerm + driftTerm + gapTerm
 }

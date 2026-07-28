@@ -4,27 +4,33 @@ import {
   overlapRuleOf,
   resolveAbsoluteExclusions,
 } from "./overlap"
-import { placeWithShrinkRule } from "./shrink"
+import { placeWithElasticity } from "./shrink"
 import type { ResolvedActivity } from "./resolve"
 import type {
   Activity,
   CostConstants,
   DayFrame,
+  ElasticityRule,
   Interval,
   Placement,
-  ShrinkRule,
+  RepeatRule,
   SkipReason,
 } from "./types"
 
-function shrinkRuleOf(activity: Activity): ShrinkRule | null {
+function elasticityRuleOf(activity: Activity): ElasticityRule | null {
   return (
-    activity.rules.find((r): r is ShrinkRule => r.type === "shrink") ?? null
+    activity.rules.find((r): r is ElasticityRule => r.type === "elasticity") ??
+    null
   )
 }
 
-function shrinkFloorOf(activity: Activity): number {
-  const rule = shrinkRuleOf(activity)
-  return rule ? rule.minDurationMinutes : activity.durationMinutes
+function repeatRuleOf(activity: Activity): RepeatRule | null {
+  return activity.rules.find((r): r is RepeatRule => r.type === "repeat") ?? null
+}
+
+function elasticityFloorOf(activity: Activity): number {
+  const rule = elasticityRuleOf(activity)
+  return rule ? rule.minTotalMinutes : activity.durationMinutes
 }
 
 export interface GreedyContext {
@@ -108,9 +114,10 @@ export function placeGreedy(
         ctx.dayFrame
       ),
     }
-    const freeResult = placeWithShrinkRule(
+    const freeResult = placeWithElasticity(
       resolved,
-      shrinkRuleOf(activity),
+      elasticityRuleOf(activity),
+      repeatRuleOf(activity),
       context
     )
 
@@ -127,7 +134,7 @@ export function placeGreedy(
       if (!overlapRule) continue
       const found = findBestNestedPlacement(
         resolved,
-        shrinkFloorOf(activity),
+        elasticityFloorOf(activity),
         hostPlacement,
         overlapRule,
         hostGuests.get(host.id) ?? [],

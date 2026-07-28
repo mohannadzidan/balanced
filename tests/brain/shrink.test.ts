@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest"
 import { DEFAULT_COST_CONSTANTS } from "@/app/brain/engine/constants"
 import type { PlacementContext } from "@/app/brain/engine/placement"
 import { resolveActivity } from "@/app/brain/engine/resolve"
-import { planChunks, placeWithShrinkRule } from "@/app/brain/engine/shrink"
+import { planChunks, placeWithElasticity } from "@/app/brain/engine/shrink"
 import { resolveDayFrame } from "@/app/brain/engine/time"
-import type { ShrinkRule } from "@/app/brain/engine/types"
+import type { ElasticityRule, RepeatRule } from "@/app/brain/engine/types"
 import { activity } from "./support/fixtures"
 
 const dayFrame = resolveDayFrame("2024-06-17", "UTC")
@@ -25,21 +25,40 @@ function baseContext(
   }
 }
 
+function elasticityRule(minTotal: number, minBlock: number): ElasticityRule {
+  return {
+    type: "elasticity",
+    source: "template",
+    minTotalMinutes: minTotal,
+    minBlockMinutes: minBlock,
+  }
+}
+
+function repeatRule(count: number, sharedBudget = true): RepeatRule {
+  return {
+    type: "repeat",
+    source: "template",
+    period: "day",
+    count,
+    sharedBudget,
+    minSeparationMinutes: 0,
+  }
+}
+
 describe("planChunks", () => {
-  it("returns null when chunking is not allowed", () => {
+  it("returns null when the repeat rule is not shared-budget", () => {
     const resolved = resolveActivity(
       activity("Deep Work").rank(1).minutes(120).build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 60,
-      chunkingAllowed: false,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
-    expect(planChunks(resolved, rule, baseContext())).toBeNull()
+    expect(
+      planChunks(
+        resolved,
+        elasticityRule(60, 45),
+        repeatRule(3, false),
+        baseContext()
+      )
+    ).toBeNull()
   })
 
   it("splits across two free gaps to reach the full duration (SPEC.md 14.6)", () => {
@@ -51,18 +70,11 @@ describe("planChunks", () => {
         .build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 60,
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
     // Two free gaps: 09:00-10:00 (540-600) and 14:00-15:00 (840-900).
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(60, 45),
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 540, end: 600 },
@@ -94,17 +106,10 @@ describe("planChunks", () => {
         .build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 60,
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(60, 45),
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 540, end: 600 }, // 60-minute region
@@ -125,17 +130,10 @@ describe("planChunks", () => {
       activity("Deep Work").rank(1).minutes(120).build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 60,
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(60, 45),
+      repeatRule(3),
       baseContext({ freeIntervals: [{ start: 0, end: 50 }] })
     )
     expect(plan).toBeNull()
@@ -146,18 +144,11 @@ describe("planChunks", () => {
       activity("Deep Work").rank(1).minutes(120).build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 60,
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
     // 10 minutes total, all in one region — never even reaches one chunk.
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(60, 45),
+      repeatRule(3),
       baseContext({ freeIntervals: [{ start: 0, end: 10 }] })
     )
     expect(plan).toBeNull()
@@ -168,19 +159,12 @@ describe("planChunks", () => {
       activity("Deep Work").rank(1).minutes(60).build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 30,
-      chunkingAllowed: true,
-      minChunkMinutes: 30,
-      maxChunks: 2,
-    }
     // Large enough on paper (100m, well over the 30m minimum chunk), but
     // every grid-aligned start inside it is frozen out.
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(30, 30),
+      repeatRule(2),
       baseContext({
         freeIntervals: [{ start: 0, end: 100 }],
         freezeBoundary: 150,
@@ -203,17 +187,10 @@ describe("planChunks", () => {
         .build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 80,
-      chunkingAllowed: true,
-      minChunkMinutes: 40,
-      maxChunks: 3,
-    }
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(80, 40),
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 540, end: 580 }, // 40m
@@ -232,7 +209,7 @@ describe("planChunks", () => {
   })
 
   it("stops filling once the target is met, even with unused regions still selected (degenerate zero-minute minimum chunk)", () => {
-    // Realistic ShrinkRule configs (minChunkMinutes > 0) can never hit this:
+    // Realistic elasticity configs (minBlockMinutes > 0) can never hit this:
     // the reservation formula (`remaining - minChunk * regionsAfter`)
     // provably can't reach exactly zero before the last selected region
     // unless minChunk is 0. Exercised directly here as a degenerate-input
@@ -241,17 +218,10 @@ describe("planChunks", () => {
       activity("Deep Work").rank(1).minutes(20).build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 20,
-      chunkingAllowed: true,
-      minChunkMinutes: 0,
-      maxChunks: 3,
-    }
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(20, 0),
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 0, end: 20 },
@@ -265,7 +235,7 @@ describe("planChunks", () => {
     expect(plan!.chunks).toHaveLength(1)
   })
 
-  it("accepts a chunked plan that only partially completes the activity, as long as it still clears the shrink floor (SPEC.md 5.5 / 14.6b / edge case 23)", () => {
+  it("accepts a chunked plan that only partially completes the activity, as long as it still clears the elasticity floor (SPEC.md 5.5 / 14.6b / edge case 23)", () => {
     const resolved = resolveActivity(
       activity("Deep Work")
         .rank(1)
@@ -274,19 +244,12 @@ describe("planChunks", () => {
         .build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 90,
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
     // Two 50-minute gaps: 100 minutes total, short of the full 120-minute
     // duration but past the 90-minute floor.
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(90, 45),
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 540, end: 590 },
@@ -302,7 +265,7 @@ describe("planChunks", () => {
     }
   })
 
-  it("still returns null when even the best partial chunked total falls short of the shrink floor", () => {
+  it("still returns null when even the best partial chunked total falls short of the elasticity floor", () => {
     const resolved = resolveActivity(
       activity("Deep Work")
         .rank(1)
@@ -311,17 +274,10 @@ describe("planChunks", () => {
         .build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 110, // the same two gaps only total 100
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
     const plan = planChunks(
       resolved,
-      rule,
+      elasticityRule(110, 45), // the same two gaps only total 100
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 540, end: 590 },
@@ -333,7 +289,7 @@ describe("planChunks", () => {
   })
 })
 
-describe("placeWithShrinkRule", () => {
+describe("placeWithElasticity", () => {
   it("prefers chunking over a single shrunk block when it is cheaper (SPEC.md 14.6)", () => {
     const resolved = resolveActivity(
       activity("Deep Work")
@@ -343,17 +299,10 @@ describe("placeWithShrinkRule", () => {
         .build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 60,
-      chunkingAllowed: true,
-      minChunkMinutes: 45,
-      maxChunks: 3,
-    }
-    const outcome = placeWithShrinkRule(
+    const outcome = placeWithElasticity(
       resolved,
-      rule,
+      elasticityRule(60, 45),
+      repeatRule(3),
       baseContext({
         freeIntervals: [
           { start: 540, end: 600 },
@@ -366,31 +315,29 @@ describe("placeWithShrinkRule", () => {
     expect(outcome.scheduledMinutes).toBe(120)
   })
 
-  it("falls back to a single block when chunking is not allowed", () => {
+  it("falls back to a single block when there is no RepeatRule", () => {
     const resolved = resolveActivity(
       activity("Gym").rank(1).minutes(60).build(),
       dayFrame
     )
-    const rule: ShrinkRule = {
-      type: "shrink",
-      source: "template",
-      minDurationMinutes: 30,
-      chunkingAllowed: false,
-      minChunkMinutes: 30,
-      maxChunks: 3,
-    }
-    const outcome = placeWithShrinkRule(resolved, rule, baseContext())
+    const outcome = placeWithElasticity(
+      resolved,
+      elasticityRule(30, 30),
+      null,
+      baseContext()
+    )
     expect(outcome.chunks).toBeNull()
     expect(outcome.placement).toEqual({ start: 0, end: 60, nestedIn: null })
   })
 
-  it("behaves like an unshrinkable activity when there is no ShrinkRule", () => {
+  it("behaves like an unshrinkable activity when there is no ElasticityRule or RepeatRule", () => {
     const resolved = resolveActivity(
       activity("Gym").rank(1).minutes(60).build(),
       dayFrame
     )
-    const outcome = placeWithShrinkRule(
+    const outcome = placeWithElasticity(
       resolved,
+      null,
       null,
       baseContext({ freeIntervals: [{ start: 0, end: 30 }] })
     )

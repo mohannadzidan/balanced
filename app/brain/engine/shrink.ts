@@ -6,7 +6,13 @@ import {
 } from "./placement"
 import { evaluateCandidate } from "./resolve"
 import type { ResolvedActivity } from "./resolve"
-import type { Interval, Placement, ShrinkRule, SkipReason } from "./types"
+import type {
+  ElasticityRule,
+  Interval,
+  Placement,
+  RepeatRule,
+  SkipReason,
+} from "./types"
 
 export interface ChunkPlan {
   readonly chunks: readonly Placement[]
@@ -173,35 +179,32 @@ function fillChunks(
 }
 
 /**
- * Best chunked alternative across chunk counts 2..max_chunks (SPEC.md
- * Section 8.6 step 5, Section 5.5). `null` if chunking is not allowed, or no
- * chunk count reaches at least the shrink floor — reaching the full
- * duration is preferred (and always cheaper) but not required; a chunked
- * plan that only partially completes the activity is accepted as long as
- * its total still clears the same floor a single shrunk block would need
- * (SPEC.md Section 4.5 invariant 6: "if scheduled at all, scheduled_minutes
- * ≥ shrink floor").
+ * Best chunked alternative across chunk counts 2..count (SPEC.md Section 8.6
+ * step 5, Section 5.5; SPEC-v2.md Section 4.2: a RepeatRule with
+ * sharedBudget: true). `null` if the repeat isn't shared-budget, or no chunk
+ * count reaches at least the elasticity floor — reaching the full duration
+ * is preferred (and always cheaper) but not required; a chunked plan that
+ * only partially completes the activity is accepted as long as its total
+ * still clears the same floor a single shrunk block would need (SPEC.md
+ * Section 4.5 invariant 6: "if scheduled at all, scheduled_minutes >= shrink
+ * floor"). Defaults when `elasticity` is absent (SPEC-v2.md Section 4.3):
+ * `minTotalMinutes = durationMinutes`, `minBlockMinutes = GRID`.
  */
 export function planChunks(
   resolved: ResolvedActivity,
-  shrinkRule: ShrinkRule,
+  elasticity: ElasticityRule | null,
+  repeat: RepeatRule,
   context: PlacementContext
 ): ChunkPlan | null {
-  if (!shrinkRule.chunkingAllowed) return null
+  if (!repeat.sharedBudget) return null
   const target = resolved.activity.durationMinutes
-  const floor = shrinkRule.minDurationMinutes
+  const floor = elasticity ? elasticity.minTotalMinutes : target
+  const minChunk = elasticity ? elasticity.minBlockMinutes : context.grid
   const searchIntervals = clipToWindowBounds(context.freeIntervals, resolved)
 
   let best: ChunkPlan | null = null
-  for (let k = 2; k <= shrinkRule.maxChunks; k++) {
-    const plan = fillChunks(
-      resolved,
-      searchIntervals,
-      target,
-      k,
-      shrinkRule.minChunkMinutes,
-      context
-    )
+  for (let k = 2; k <= repeat.count; k++) {
+    const plan = fillChunks(resolved, searchIntervals, target, k, minChunk, context)
     if (
       plan &&
       plan.scheduledMinutes >= floor &&
@@ -222,23 +225,25 @@ export interface ShrinkOutcome {
 }
 
 /**
- * Full single-activity placement search including a ShrinkRule's shrink and
- * chunk alternatives (SPEC.md Section 8.6 steps 2, 4 and 5): the cheapest of
- * the best single-block candidate (shrunk if needed) and the best chunk
- * plan wins; a whole unsplit block at full duration remains the zero-cost
- * baseline since it always survives as a single-block candidate.
+ * Full single-activity placement search including an ElasticityRule's
+ * shrink and a shared-budget RepeatRule's chunk alternatives (SPEC.md
+ * Section 8.6 steps 2, 4 and 5): the cheapest of the best single-block
+ * candidate (shrunk if needed) and the best chunk plan wins; a whole
+ * unsplit block at full duration remains the zero-cost baseline since it
+ * always survives as a single-block candidate.
  */
-export function placeWithShrinkRule(
+export function placeWithElasticity(
   resolved: ResolvedActivity,
-  shrinkRule: ShrinkRule | null,
+  elasticity: ElasticityRule | null,
+  repeat: RepeatRule | null,
   context: PlacementContext
 ): ShrinkOutcome {
-  const floor = shrinkRule
-    ? shrinkRule.minDurationMinutes
+  const floor = elasticity
+    ? elasticity.minTotalMinutes
     : resolved.activity.durationMinutes
   const single = placeActivityWithFloor(resolved, floor, context)
-  const chunkPlan = shrinkRule?.chunkingAllowed
-    ? planChunks(resolved, shrinkRule, context)
+  const chunkPlan = repeat?.sharedBudget
+    ? planChunks(resolved, elasticity, repeat, context)
     : null
 
   if (chunkPlan && (!single.placement || chunkPlan.cost < single.cost)) {

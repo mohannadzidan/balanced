@@ -5,16 +5,18 @@ import { sequenceRuleOf } from "./sequence"
 import type {
   Activity,
   CostConstants,
+  ElasticityRule,
+  RepeatRule,
   Rule,
   RuleType,
-  ShrinkRule,
   ValidationIssue,
   WindowRule,
 } from "./types"
 
 const FORBIDDEN_PAIRS: ReadonlyArray<readonly [RuleType, RuleType]> = [
   ["fixed", "window"],
-  ["fixed", "shrink"],
+  ["fixed", "elasticity"],
+  ["fixed", "repeat"],
 ]
 
 function pairForbidden(a: RuleType, b: RuleType): boolean {
@@ -68,7 +70,11 @@ function checkRuleIncompatibility(
       const b = rules[j]
       // SPEC-v2.md Section 4.1: an activity may carry more than one
       // WindowRule — the sole exception to "at most one rule of each type".
-      const duplicateType = a.type === b.type && a.type !== "window"
+      // RepeatRule duplicates are handled separately as REPEAT_DUPLICATE
+      // (Section 8.2), since two are legal as long as their sharedBudget
+      // values differ.
+      const duplicateType =
+        a.type === b.type && a.type !== "window" && a.type !== "repeat"
       const forbiddenPair =
         pairForbidden(a.type, b.type) &&
         !(isDayOnlyWindow(a) || isDayOnlyWindow(b))
@@ -119,17 +125,17 @@ function checkGridAlignment(
         )
       }
     }
-    if (rule.type === "shrink") {
+    if (rule.type === "elasticity") {
       if (
-        !isOnGrid(rule.minDurationMinutes, grid) ||
-        !isOnGrid(rule.minChunkMinutes, grid)
+        !isOnGrid(rule.minTotalMinutes, grid) ||
+        !isOnGrid(rule.minBlockMinutes, grid)
       ) {
         issues.push(
           issue(
             "error",
             "DURATION_NOT_ON_GRID",
             activity.id,
-            `"${activity.name}" shrink floor or chunk minimum is not a multiple of ${grid}`
+            `"${activity.name}" elasticity floor or block minimum is not a multiple of ${grid}`
           )
         )
       }
@@ -137,28 +143,29 @@ function checkGridAlignment(
   }
 }
 
-function checkShrinkFloor(
+/** SPEC-v2.md Section 4.3: minBlockMinutes <= minTotalMinutes <= durationMinutes must hold. */
+function checkElasticityInvalid(
   activity: Activity,
-  rule: ShrinkRule,
+  rule: ElasticityRule,
   issues: ValidationIssue[]
 ): void {
-  if (rule.minDurationMinutes > activity.durationMinutes) {
+  if (rule.minTotalMinutes > activity.durationMinutes) {
     issues.push(
       issue(
         "error",
-        "SHRINK_FLOOR_INVALID",
+        "ELASTICITY_INVALID",
         activity.id,
-        `"${activity.name}" shrink floor ${rule.minDurationMinutes}m exceeds its duration ${activity.durationMinutes}m`
+        `"${activity.name}" elasticity floor ${rule.minTotalMinutes}m exceeds its duration ${activity.durationMinutes}m`
       )
     )
   }
-  if (rule.minChunkMinutes > rule.minDurationMinutes) {
+  if (rule.minBlockMinutes > rule.minTotalMinutes) {
     issues.push(
       issue(
         "error",
-        "SHRINK_FLOOR_INVALID",
+        "ELASTICITY_INVALID",
         activity.id,
-        `"${activity.name}" minimum chunk ${rule.minChunkMinutes}m exceeds its shrink floor ${rule.minDurationMinutes}m`
+        `"${activity.name}" minimum block ${rule.minBlockMinutes}m exceeds its elasticity floor ${rule.minTotalMinutes}m`
       )
     )
   }
@@ -189,14 +196,14 @@ function checkWindowTooShort(
 ): void {
   if (rule.maxDriftMinutes !== 0 || isDayOnlyWindow(rule)) return
   const windowLength = minutesOfDay(rule.endWall) - minutesOfDay(rule.startWall)
-  const hasShrink = activity.rules.some((r) => r.type === "shrink")
-  if (windowLength < activity.durationMinutes && !hasShrink) {
+  const hasElasticity = activity.rules.some((r) => r.type === "elasticity")
+  if (windowLength < activity.durationMinutes && !hasElasticity) {
     issues.push(
       issue(
         "warning",
         "WINDOW_TOO_SHORT",
         activity.id,
-        `"${activity.name}" strict window (${windowLength}m) is shorter than its duration (${activity.durationMinutes}m) and has no ShrinkRule`
+        `"${activity.name}" strict window (${windowLength}m) is shorter than its duration (${activity.durationMinutes}m) and has no ElasticityRule`
       )
     )
   }
@@ -223,6 +230,52 @@ function checkDriftUnavoidable(
   }
 }
 
+/** SPEC-v2.md Section 4.2: Drop 1 permits only sharedBudget: true, period: "day", minSeparationMinutes: 0. */
+function checkNotYetSupported(
+  activity: Activity,
+  rule: RepeatRule,
+  issues: ValidationIssue[]
+): void {
+  if (
+    !rule.sharedBudget ||
+    rule.period !== "day" ||
+    rule.minSeparationMinutes !== 0
+  ) {
+    issues.push(
+      issue(
+        "error",
+        "NOT_YET_SUPPORTED",
+        activity.id,
+        `"${activity.name}" RepeatRule uses a feature not yet supported in Drop 1 (sharedBudget: false, period other than "day", or minSeparationMinutes other than 0)`
+      )
+    )
+  }
+}
+
+/** SPEC-v2.md Section 8.2: two RepeatRules with the same sharedBudget value. */
+function checkRepeatDuplicate(
+  activity: Activity,
+  issues: ValidationIssue[]
+): void {
+  const repeats = activity.rules.filter(
+    (r): r is RepeatRule => r.type === "repeat"
+  )
+  const seen = new Set<boolean>()
+  for (const rule of repeats) {
+    if (seen.has(rule.sharedBudget)) {
+      issues.push(
+        issue(
+          "error",
+          "REPEAT_DUPLICATE",
+          activity.id,
+          `"${activity.name}" has two RepeatRules with sharedBudget: ${rule.sharedBudget}`
+        )
+      )
+    }
+    seen.add(rule.sharedBudget)
+  }
+}
+
 /** Pure predicates over a single Activity template (SPEC.md Section 10.1). */
 export function validateActivity(
   activity: Activity,
@@ -234,13 +287,16 @@ export function validateActivity(
   checkGridAlignment(activity, constants, issues)
 
   for (const rule of activity.rules as readonly Rule[]) {
-    if (rule.type === "shrink") checkShrinkFloor(activity, rule, issues)
+    if (rule.type === "elasticity")
+      checkElasticityInvalid(activity, rule, issues)
+    if (rule.type === "repeat") checkNotYetSupported(activity, rule, issues)
     if (rule.type === "window") {
       checkWindowInverted(activity, rule, issues)
       checkWindowTooShort(activity, rule, issues)
       checkDriftUnavoidable(activity, rule, issues)
     }
   }
+  checkRepeatDuplicate(activity, issues)
 
   if (violatesDominance(activity, constants)) {
     issues.push(

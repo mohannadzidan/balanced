@@ -8,10 +8,10 @@ import type {
   CostConstants,
   DayFrame,
   Diagnostic,
+  ElasticityRule,
   FixedRule,
   Interval,
   Placement,
-  ShrinkRule,
   SkipReason,
 } from "./types"
 
@@ -19,9 +19,11 @@ function fixedRuleOf(activity: Activity): FixedRule | undefined {
   return activity.rules.find((r): r is FixedRule => r.type === "fixed")
 }
 
-function shrinkFloorOf(activity: Activity): number {
-  const rule = activity.rules.find((r): r is ShrinkRule => r.type === "shrink")
-  return rule ? rule.minDurationMinutes : activity.durationMinutes
+function elasticityFloorOf(activity: Activity): number {
+  const rule = activity.rules.find(
+    (r): r is ElasticityRule => r.type === "elasticity"
+  )
+  return rule ? rule.minTotalMinutes : activity.durationMinutes
 }
 
 /**
@@ -158,7 +160,7 @@ function candidatesFor(
   )
   return enumerateFeasiblePlacementsAcrossLengths(
     ctx.resolve(activity),
-    shrinkFloorOf(activity),
+    elasticityFloorOf(activity),
     {
       freeIntervals,
       freezeBoundary: ctx.freezeBoundary,

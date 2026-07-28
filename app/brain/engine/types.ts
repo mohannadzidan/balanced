@@ -59,13 +59,28 @@ export interface WindowRule {
   readonly maxDriftMinutes: number // 0 = strict
 }
 
-export interface ShrinkRule {
-  readonly type: "shrink"
+// SPEC-v2.md Section 4.3: ShrinkRule.minDuration/minChunk becomes ElasticityRule.
+export interface ElasticityRule {
+  readonly type: "elasticity"
   readonly source: RuleSource
-  readonly minDurationMinutes: number
-  readonly chunkingAllowed: boolean
-  readonly minChunkMinutes: number
-  readonly maxChunks: number
+  readonly minTotalMinutes: number // hard floor on total scheduled time (v1: minDurationMinutes)
+  readonly minBlockMinutes: number // hard floor on any single block (v1: minChunkMinutes)
+}
+
+// SPEC-v2.md Section 4.2: ShrinkRule.chunkingAllowed/maxChunks becomes a
+// RepeatRule with sharedBudget: true. sharedBudget is what distinguishes
+// chunking (true: blocks draw on one shared duration budget, the solver
+// minimises block count) from recurrence (false: each block carries its own
+// full duration, the solver maximises block count up to `count`) — Drop 1
+// permits only sharedBudget: true, period: "day", minSeparationMinutes: 0;
+// the other values exist now so Drop 2 adds no type churn.
+export interface RepeatRule {
+  readonly type: "repeat"
+  readonly source: RuleSource
+  readonly period: "day" | "week" | "month" | "frame" // Drop 1: must be "day"
+  readonly count: number // >= 1
+  readonly sharedBudget: boolean // Drop 1: must be true
+  readonly minSeparationMinutes: number // Drop 1: must be 0
 }
 
 export interface SequenceRule {
@@ -99,7 +114,8 @@ export interface OverlapRule {
 export type Rule =
   | FixedRule
   | WindowRule
-  | ShrinkRule
+  | ElasticityRule
+  | RepeatRule
   | SequenceRule
   | OverlapRule
 

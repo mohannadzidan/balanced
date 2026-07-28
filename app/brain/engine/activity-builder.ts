@@ -153,11 +153,14 @@ export class ActivityBuilder {
   }
 
   /**
-   * Adds a `ShrinkRule`: permits reducing the activity down to `opts.floor`
-   * minutes and/or splitting it into chunks of at least `opts.minChunk`
-   * minutes (up to `opts.maxChunks`) when the full duration can't fit
-   * (SPEC.md Section 5.5). A chunked plan may also sum to less than the full
-   * duration, as long as it still clears `opts.floor` (SPEC.md 14.6b).
+   * Adds an `ElasticityRule` and, when `opts.chunking` is set, a
+   * shared-budget `RepeatRule` (SPEC-v2.md Section 10.1 — sugar over the
+   * merged rule vocabulary): permits reducing the activity down to
+   * `opts.floor` minutes and/or splitting it into chunks of at least
+   * `opts.minChunk` minutes (up to `opts.maxChunks`) when the full duration
+   * can't fit (SPEC.md Section 5.5). A chunked plan may also sum to less
+   * than the full duration, as long as it still clears `opts.floor`
+   * (SPEC.md 14.6b).
    */
   shrink(opts: {
     floor: number
@@ -166,12 +169,48 @@ export class ActivityBuilder {
     maxChunks?: number
   }): this {
     this.rules.push({
-      type: "shrink",
+      type: "elasticity",
       source: "template",
-      minDurationMinutes: opts.floor,
-      chunkingAllowed: opts.chunking ?? false,
-      minChunkMinutes: opts.minChunk ?? opts.floor,
-      maxChunks: opts.maxChunks ?? 3,
+      minTotalMinutes: opts.floor,
+      minBlockMinutes: opts.minChunk ?? opts.floor,
+    })
+    if (opts.chunking) {
+      this.rules.push({
+        type: "repeat",
+        source: "template",
+        period: "day",
+        count: opts.maxChunks ?? 3,
+        sharedBudget: true,
+        minSeparationMinutes: 0,
+      })
+    }
+    return this
+  }
+
+  /** Adds an `ElasticityRule` directly (SPEC-v2.md Section 4.3). */
+  elastic(opts: { minTotal: number; minBlock?: number }): this {
+    this.rules.push({
+      type: "elasticity",
+      source: "template",
+      minTotalMinutes: opts.minTotal,
+      minBlockMinutes: opts.minBlock ?? opts.minTotal,
+    })
+    return this
+  }
+
+  /**
+   * Adds a shared-budget `RepeatRule` directly (SPEC-v2.md Section 4.2) —
+   * Drop 1 supports only the chunking direction (`sharedBudget: true`,
+   * `period: "day"`).
+   */
+  repeat(opts: { count: number }): this {
+    this.rules.push({
+      type: "repeat",
+      source: "template",
+      period: "day",
+      count: opts.count,
+      sharedBudget: true,
+      minSeparationMinutes: 0,
     })
     return this
   }

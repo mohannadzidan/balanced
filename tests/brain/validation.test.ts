@@ -95,22 +95,83 @@ describe("validateActivity", () => {
     expect(codesOf(validateActivity(bad, C))).toContain("DURATION_NOT_ON_GRID")
   })
 
-  it("flags SHRINK_FLOOR_INVALID when the floor exceeds the duration", () => {
+  it("flags ELASTICITY_INVALID when the floor exceeds the duration", () => {
     const bad = activity("Bad")
       .rank(1)
       .minutes(60)
       .shrink({ floor: 90 })
       .build()
-    expect(codesOf(validateActivity(bad, C))).toContain("SHRINK_FLOOR_INVALID")
+    expect(codesOf(validateActivity(bad, C))).toContain("ELASTICITY_INVALID")
   })
 
-  it("flags SHRINK_FLOOR_INVALID when the min chunk exceeds the floor", () => {
+  it("flags ELASTICITY_INVALID when the min chunk exceeds the floor", () => {
     const bad = activity("Bad")
       .rank(1)
       .minutes(60)
       .shrink({ floor: 30, chunking: true, minChunk: 45 })
       .build()
-    expect(codesOf(validateActivity(bad, C))).toContain("SHRINK_FLOOR_INVALID")
+    expect(codesOf(validateActivity(bad, C))).toContain("ELASTICITY_INVALID")
+  })
+
+  it.each([
+    ["sharedBudget: false", { sharedBudget: false as const }],
+    ["period other than day", { period: "week" as const }],
+    ["minSeparationMinutes other than 0", { minSeparationMinutes: 15 }],
+  ])(
+    "flags NOT_YET_SUPPORTED for a RepeatRule with %s (SPEC-v2.md Section 4.2)",
+    (_label, override) => {
+      const bad = activity("Bad").rank(1).minutes(60).build()
+      const withRepeat = {
+        ...bad,
+        rules: [
+          {
+            type: "repeat" as const,
+            source: "template" as const,
+            period: "day" as const,
+            count: 2,
+            sharedBudget: true,
+            minSeparationMinutes: 0,
+            ...override,
+          },
+        ],
+      }
+      expect(codesOf(validateActivity(withRepeat, C))).toContain(
+        "NOT_YET_SUPPORTED"
+      )
+    }
+  )
+
+  it("flags REPEAT_DUPLICATE for two RepeatRules with the same sharedBudget value", () => {
+    const bad = activity("Bad").rank(1).minutes(60).build()
+    const withDuplicateRepeats = {
+      ...bad,
+      rules: [
+        {
+          type: "repeat" as const,
+          source: "template" as const,
+          period: "day" as const,
+          count: 2,
+          sharedBudget: true,
+          minSeparationMinutes: 0,
+        },
+        {
+          type: "repeat" as const,
+          source: "template" as const,
+          period: "day" as const,
+          count: 3,
+          sharedBudget: true,
+          minSeparationMinutes: 0,
+        },
+      ],
+    }
+    expect(codesOf(validateActivity(withDuplicateRepeats, C))).toContain(
+      "REPEAT_DUPLICATE"
+    )
+  })
+
+  it("does not flag REPEAT_DUPLICATE for a single RepeatRule via .repeat()", () => {
+    const ok = activity("Ok").rank(1).minutes(60).repeat({ count: 2 }).build()
+    expect(codesOf(validateActivity(ok, C))).not.toContain("REPEAT_DUPLICATE")
   })
 
   it("flags WINDOW_INVERTED when a strict window ends before it starts", () => {
