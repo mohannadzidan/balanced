@@ -14,6 +14,17 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
 }
 
+function isFullWeek(days: readonly Weekday[]): boolean {
+  return ALL_DAYS.every((d) => days.includes(d)) && days.length === ALL_DAYS.length
+}
+
+interface WindowSpec {
+  readonly startWall: string
+  readonly endWall: string
+  readonly maxDriftMinutes: number
+  readonly days?: readonly Weekday[]
+}
+
 /**
  * Fluent builder for `Activity` templates — the recommended way to construct
  * catalog entries for `solve()` without hand-assembling the `Rule` union
@@ -38,6 +49,7 @@ export class ActivityBuilder {
   private allowedDays: readonly Weekday[] = ALL_DAYS
   private enabled = true
   private rules: Rule[] = []
+  private windowSpecs: WindowSpec[] = []
 
   constructor(private readonly name: string) {
     this.activityId = slugify(name)
@@ -61,7 +73,12 @@ export class ActivityBuilder {
     return this
   }
 
-  /** Restricts which weekdays this activity is eligible on. Defaults to every day. */
+  /**
+   * Restricts which weekdays this activity is eligible on — sets `days` on
+   * every WindowRule the activity ends up with (SPEC-v2.md Section 10.1),
+   * including an implicit one synthesized at `.build()` if no `.strict()`/
+   * `.flexible()`/`.window()` call created one. Defaults to every day.
+   */
   days(...days: Weekday[]): this {
     this.allowedDays = days
     return this
@@ -79,29 +96,42 @@ export class ActivityBuilder {
     return this
   }
 
-  /** Adds a `StrictWindowRule`: must be placed entirely inside this window, no drift. */
+  /** Adds a `WindowRule` with zero drift: must be placed entirely inside this window. */
   strict(startWall: string, endWall: string): this {
-    this.rules.push({
-      type: "strictWindow",
-      source: "template",
-      startWall,
-      endWall,
-    })
+    this.windowSpecs.push({ startWall, endWall, maxDriftMinutes: 0 })
     return this
   }
 
-  /** Adds a `FlexibleWindowRule`: preferred window, allowed to drift outside it by `opts.drift` minutes. */
+  /** Adds a `WindowRule`: preferred window, allowed to drift outside it by `opts.drift` minutes. */
   flexible(
     startWall: string,
     endWall: string,
     opts?: { drift?: number }
   ): this {
-    this.rules.push({
-      type: "flexibleWindow",
-      source: "template",
+    this.windowSpecs.push({
       startWall,
       endWall,
       maxDriftMinutes: opts?.drift ?? 0,
+    })
+    return this
+  }
+
+  /**
+   * Adds a `WindowRule` directly (SPEC-v2.md Section 4.1) — repeatable,
+   * unlike `.strict()`/`.flexible()`; an activity's eligible region is the
+   * union of its windows, and drift is the minimum over windows. `opts.days`
+   * overrides this specific window's days independently of `.days()`.
+   */
+  window(
+    startWall: string,
+    endWall: string,
+    opts?: { drift?: number; days?: readonly Weekday[] }
+  ): this {
+    this.windowSpecs.push({
+      startWall,
+      endWall,
+      maxDriftMinutes: opts?.drift ?? 0,
+      days: opts?.days,
     })
     return this
   }
@@ -173,14 +203,39 @@ export class ActivityBuilder {
     if (this.priorityRank === null) {
       throw new Error(`activity "${this.name}" is missing .rank(n)`)
     }
+
+    const windowRules: Rule[] = this.windowSpecs.map((spec) => ({
+      type: "window",
+      source: "template",
+      days: spec.days ?? this.allowedDays,
+      startWall: spec.startWall,
+      endWall: spec.endWall,
+      maxDriftMinutes: spec.maxDriftMinutes,
+    }))
+
+    // No explicit window was ever created, but `.days()` restricted
+    // eligibility away from the default — synthesize a whole-day, zero-drift
+    // WindowRule (00:00-24:00, DST-correct via resolveWallClock) purely to
+    // carry that restriction, so day-eligibility (SPEC-v2.md Section 4.1) is
+    // expressible without a real time-of-day constraint.
+    if (windowRules.length === 0 && !isFullWeek(this.allowedDays)) {
+      windowRules.push({
+        type: "window",
+        source: "template",
+        days: this.allowedDays,
+        startWall: "00:00",
+        endWall: "24:00",
+        maxDriftMinutes: 0,
+      })
+    }
+
     return {
       id: this.activityId,
       name: this.name,
       durationMinutes: this.durationMinutes,
       priorityRank: this.priorityRank,
-      allowedDays: this.allowedDays,
       enabled: this.enabled,
-      rules: this.rules,
+      rules: [...this.rules, ...windowRules],
     }
   }
 }

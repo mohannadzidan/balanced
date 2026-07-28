@@ -49,10 +49,11 @@ function bestChunkInInterval(
 }
 
 /**
- * Clips free intervals to the outer bound a window rule allows (SPEC.md
- * Section 5.3): a StrictWindowRule permits nothing outside it; a
- * FlexibleWindowRule extends that bound by its drift allowance on each
- * side. Without either, every free interval is already in bounds.
+ * Clips free intervals to the outer bound an activity's window rules allow
+ * (SPEC.md Section 5.3; SPEC-v2.md Section 4.1): each WindowRule extends its
+ * own bound by its drift allowance on each side (zero for a strict window),
+ * and the search bound is the union across every window. Without any
+ * WindowRule, every free interval is already in bounds.
  *
  * Chunk regions are ranked by a single guessed length per interval (see
  * `fillChunks`), which only works if that guess is drawn from the window's
@@ -63,16 +64,13 @@ function clipToWindowBounds(
   freeIntervals: readonly Interval[],
   resolved: ResolvedActivity
 ): Interval[] {
-  const { strictWindow, flexibleWindow } = resolved
-  const bound = strictWindow
-    ? strictWindow
-    : flexibleWindow
-      ? {
-          start: flexibleWindow.start - flexibleWindow.maxDriftMinutes,
-          end: flexibleWindow.end + flexibleWindow.maxDriftMinutes,
-        }
-      : null
-  if (!bound) return [...freeIntervals]
+  const { windows } = resolved
+  if (windows.length === 0) return [...freeIntervals]
+
+  const bound = {
+    start: Math.min(...windows.map((w) => w.start - w.maxDriftMinutes)),
+    end: Math.max(...windows.map((w) => w.end + w.maxDriftMinutes)),
+  }
 
   const clipped: Interval[] = []
   for (const iv of freeIntervals) {

@@ -4,7 +4,7 @@ import { applyBackdating } from "./lifecycle"
 import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
-import { resolveActivity, type ResolvedActivity } from "./resolve"
+import { isEligibleOnDay, resolveActivity, type ResolvedActivity } from "./resolve"
 import { isDependent, placeSequenceChain, sequenceRuleOf } from "./sequence"
 import { weekdayOf } from "./time"
 import { validateActivity, validateCatalog } from "./validation"
@@ -26,7 +26,6 @@ import type {
   Timeline,
   TimelineActivity,
   TimelineStatus,
-  Weekday,
 } from "./types"
 
 function hasFixed(activity: Activity): boolean {
@@ -1242,14 +1241,12 @@ function solveAddAdhoc(
   totalRanked: number
 ): SolveResult {
   const { payload } = input.event
-  const weekday = weekdayOf(input.dayFrame.date)
   const adhocId = `adhoc-${input.existing.filter((i) => i.isAdhoc).length + 1}`
   const adhocActivity: Activity = {
     id: adhocId,
     name: payload.name,
     durationMinutes: payload.durationMinutes,
     priorityRank: payload.priorityRank,
-    allowedDays: [weekday],
     enabled: true,
     rules: payload.rules,
   }
@@ -1381,8 +1378,7 @@ function applyInstanceRuleOverrides(
  * `tagAdhocInstances` restores the `activityId: null` tagging afterward.
  */
 function adhocActivitiesFrom(
-  existing: readonly TimelineActivity[],
-  weekday: Weekday
+  existing: readonly TimelineActivity[]
 ): Activity[] {
   const seen = new Set<string>()
   const activities: Activity[] = []
@@ -1396,7 +1392,6 @@ function adhocActivitiesFrom(
       name: inst.name,
       durationMinutes: inst.durationMinutes,
       priorityRank: inst.priorityRank,
-      allowedDays: [weekday],
       enabled: true,
       rules: inst.rules,
     })
@@ -1698,9 +1693,9 @@ export function solve(input: SolveInput): SolveResult {
   const todaysCatalog = applyInstanceRuleOverrides(
     [
       ...seededInput.catalog.filter(
-        (a) => a.enabled && a.allowedDays.includes(weekday)
+        (a) => a.enabled && isEligibleOnDay(a, weekday)
       ),
-      ...adhocActivitiesFrom(seededInput.existing, weekday),
+      ...adhocActivitiesFrom(seededInput.existing),
     ],
     seededInput.existing
   )

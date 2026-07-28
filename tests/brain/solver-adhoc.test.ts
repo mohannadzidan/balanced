@@ -100,10 +100,12 @@ describe("solve — ADD_ADHOC (SPEC.md 9.5)", () => {
               endWall: "09:30",
             },
             {
-              type: "strictWindow",
+              type: "window",
               source: "instance",
+              days: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
               startWall: "09:00",
               endWall: "09:30",
+              maxDriftMinutes: 0,
             },
           ],
           date: dayFrame.date,

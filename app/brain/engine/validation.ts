@@ -1,27 +1,41 @@
 import { violatesDominance } from "./cost"
+import { eligibleWeekdaysOf } from "./resolve"
 import { overlapRuleOf } from "./overlap"
 import { sequenceRuleOf } from "./sequence"
 import type {
   Activity,
   CostConstants,
-  FlexibleWindowRule,
   Rule,
   RuleType,
   ShrinkRule,
-  StrictWindowRule,
   ValidationIssue,
+  WindowRule,
 } from "./types"
 
 const FORBIDDEN_PAIRS: ReadonlyArray<readonly [RuleType, RuleType]> = [
-  ["fixed", "strictWindow"],
-  ["fixed", "flexibleWindow"],
-  ["strictWindow", "flexibleWindow"],
+  ["fixed", "window"],
   ["fixed", "shrink"],
 ]
 
 function pairForbidden(a: RuleType, b: RuleType): boolean {
   return FORBIDDEN_PAIRS.some(
     ([x, y]) => (x === a && y === b) || (x === b && y === a)
+  )
+}
+
+/**
+ * The whole-day, zero-drift marker WindowRule the builder synthesizes to
+ * carry a `.days()` restriction when no real time-of-day window exists
+ * (activity-builder.ts). It imposes no actual time constraint, so it's
+ * exempt from the Fixed x Window incompatibility (SPEC-v2.md Section 4.6) —
+ * that exclusion is about conflicting time constraints, not day eligibility.
+ */
+function isDayOnlyWindow(rule: Rule): boolean {
+  return (
+    rule.type === "window" &&
+    rule.startWall === "00:00" &&
+    rule.endWall === "24:00" &&
+    rule.maxDriftMinutes === 0
   )
 }
 
@@ -52,7 +66,13 @@ function checkRuleIncompatibility(
     for (let j = i + 1; j < rules.length; j++) {
       const a = rules[i]
       const b = rules[j]
-      if (a.type === b.type || pairForbidden(a.type, b.type)) {
+      // SPEC-v2.md Section 4.1: an activity may carry more than one
+      // WindowRule — the sole exception to "at most one rule of each type".
+      const duplicateType = a.type === b.type && a.type !== "window"
+      const forbiddenPair =
+        pairForbidden(a.type, b.type) &&
+        !(isDayOnlyWindow(a) || isDayOnlyWindow(b))
+      if (duplicateType || forbiddenPair) {
         issues.push(
           issue(
             "error",
@@ -84,11 +104,7 @@ function checkGridAlignment(
   }
 
   for (const rule of activity.rules) {
-    if (
-      rule.type === "fixed" ||
-      rule.type === "strictWindow" ||
-      rule.type === "flexibleWindow"
-    ) {
+    if (rule.type === "fixed" || rule.type === "window") {
       if (
         !isOnGrid(minutesOfDay(rule.startWall), grid) ||
         !isOnGrid(minutesOfDay(rule.endWall), grid)
@@ -150,7 +166,7 @@ function checkShrinkFloor(
 
 function checkWindowInverted(
   activity: Activity,
-  rule: StrictWindowRule | FlexibleWindowRule,
+  rule: WindowRule,
   issues: ValidationIssue[]
 ): void {
   if (minutesOfDay(rule.endWall) <= minutesOfDay(rule.startWall)) {
@@ -159,17 +175,19 @@ function checkWindowInverted(
         "error",
         "WINDOW_INVERTED",
         activity.id,
-        `"${activity.name}" ${rule.type} window end must be after its start`
+        `"${activity.name}" window end must be after its start`
       )
     )
   }
 }
 
+/** Strict-equivalent windows only (SPEC-v2.md Section 4.1: maxDriftMinutes 0). */
 function checkWindowTooShort(
   activity: Activity,
-  rule: StrictWindowRule,
+  rule: WindowRule,
   issues: ValidationIssue[]
 ): void {
+  if (rule.maxDriftMinutes !== 0 || isDayOnlyWindow(rule)) return
   const windowLength = minutesOfDay(rule.endWall) - minutesOfDay(rule.startWall)
   const hasShrink = activity.rules.some((r) => r.type === "shrink")
   if (windowLength < activity.durationMinutes && !hasShrink) {
@@ -184,11 +202,13 @@ function checkWindowTooShort(
   }
 }
 
+/** Flexible-equivalent windows only (SPEC-v2.md Section 4.1: maxDriftMinutes > 0). */
 function checkDriftUnavoidable(
   activity: Activity,
-  rule: FlexibleWindowRule,
+  rule: WindowRule,
   issues: ValidationIssue[]
 ): void {
+  if (rule.maxDriftMinutes === 0) return
   const windowLength = minutesOfDay(rule.endWall) - minutesOfDay(rule.startWall)
   const unavoidable = activity.durationMinutes - windowLength
   if (unavoidable > rule.maxDriftMinutes) {
@@ -215,12 +235,9 @@ export function validateActivity(
 
   for (const rule of activity.rules as readonly Rule[]) {
     if (rule.type === "shrink") checkShrinkFloor(activity, rule, issues)
-    if (rule.type === "strictWindow" || rule.type === "flexibleWindow") {
+    if (rule.type === "window") {
       checkWindowInverted(activity, rule, issues)
-    }
-    if (rule.type === "strictWindow")
       checkWindowTooShort(activity, rule, issues)
-    if (rule.type === "flexibleWindow") {
       checkDriftUnavoidable(activity, rule, issues)
     }
   }
@@ -236,7 +253,7 @@ export function validateActivity(
     )
   }
 
-  if (activity.allowedDays.length === 0) {
+  if (eligibleWeekdaysOf(activity).size === 0) {
     issues.push(
       issue(
         "warning",

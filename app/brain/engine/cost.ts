@@ -4,6 +4,7 @@ import type {
   CostBreakdown,
   CostConstants,
   TimelineActivity,
+  WindowRule,
 } from "./types"
 
 /** W(a) = R + 1 − r, where r is the activity's rank in a catalogue of R ranked activities. */
@@ -168,7 +169,9 @@ export function violatesDominance(
   constants: CostConstants
 ): boolean {
   const shrinkRule = activity.rules.find((r) => r.type === "shrink")
-  const flexibleRule = activity.rules.find((r) => r.type === "flexibleWindow")
+  const windowRules = activity.rules.filter(
+    (r): r is WindowRule => r.type === "window"
+  )
   const sequenceRule = activity.rules.find((r) => r.type === "sequence")
 
   const shrinkTerm =
@@ -180,10 +183,12 @@ export function violatesDominance(
     shrinkRule && shrinkRule.type === "shrink" && shrinkRule.chunkingAllowed
       ? constants.CHUNK * (shrinkRule.maxChunks - 1)
       : 0
-  const driftTerm =
-    flexibleRule && flexibleRule.type === "flexibleWindow"
-      ? constants.DRIFT * flexibleRule.maxDriftMinutes
+  // SPEC-v2.md Section 8.3: DRIFT * max over windows of maxDriftMinutes.
+  const maxDriftMinutes =
+    windowRules.length > 0
+      ? Math.max(...windowRules.map((w) => w.maxDriftMinutes))
       : 0
+  const driftTerm = constants.DRIFT * maxDriftMinutes
   const gapTerm =
     sequenceRule && sequenceRule.type === "sequence"
       ? constants.GAP * sequenceRule.maxGapMinutes

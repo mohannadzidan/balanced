@@ -14,7 +14,6 @@ describe("ActivityBuilder", () => {
       name: "Morning Run",
       durationMinutes: 30,
       priorityRank: 2,
-      allowedDays: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
       enabled: true,
       rules: [],
     })

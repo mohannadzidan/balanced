@@ -141,10 +141,12 @@ describe("solve — event-time rejection (SPEC.md 10.2)", () => {
         instanceId: work.id,
         rules: [
           {
-            type: "strictWindow",
+            type: "window",
             source: "instance",
+            days: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
             startWall: "09:15",
             endWall: "17:15",
+            maxDriftMinutes: 0,
           },
         ],
       },
@@ -195,10 +197,12 @@ describe("solve — event-time rejection (SPEC.md 10.2)", () => {
         instanceId: work.id,
         rules: [
           {
-            type: "strictWindow",
+            type: "window",
             source: "instance",
+            days: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
             startWall: "09:15",
             endWall: "17:15",
+            maxDriftMinutes: 0,
           },
         ],
       },

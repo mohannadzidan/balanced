@@ -45,19 +45,18 @@ export interface FixedRule {
   readonly endWall: string
 }
 
-export interface StrictWindowRule {
-  readonly type: "strictWindow"
+// SPEC-v2.md Section 4.1: StrictWindowRule + FlexibleWindowRule + Activity.allowedDays
+// merged into one WindowRule. A strict window is a flexible window with zero
+// drift; "allowedDays" is the union of window `days` across an activity's
+// WindowRules, not a separate filter. An activity may carry more than one
+// WindowRule — the sole exception to "at most one rule of each type".
+export interface WindowRule {
+  readonly type: "window"
   readonly source: RuleSource
+  readonly days: readonly Weekday[] // days this window applies on
   readonly startWall: string
-  readonly endWall: string
-}
-
-export interface FlexibleWindowRule {
-  readonly type: "flexibleWindow"
-  readonly source: RuleSource
-  readonly startWall: string
-  readonly endWall: string
-  readonly maxDriftMinutes: number
+  readonly endWall: string // <= startWall means the window spans midnight
+  readonly maxDriftMinutes: number // 0 = strict
 }
 
 export interface MandatoryRule {
@@ -104,8 +103,7 @@ export interface OverlapRule {
 
 export type Rule =
   | FixedRule
-  | StrictWindowRule
-  | FlexibleWindowRule
+  | WindowRule
   | MandatoryRule
   | ShrinkRule
   | SequenceRule
@@ -120,7 +118,6 @@ export interface Activity {
   readonly name: string
   readonly durationMinutes: number
   readonly priorityRank: number
-  readonly allowedDays: readonly Weekday[]
   readonly enabled: boolean
   readonly rules: readonly Rule[]
 }

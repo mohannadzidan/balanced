@@ -35,11 +35,10 @@ describe("validateActivity", () => {
       (a: ReturnType<typeof activity>) =>
         a.fixed("09:00", "10:00").flexible("09:00", "10:00"),
     ],
-    [
-      "strictWindow + flexibleWindow",
-      (a: ReturnType<typeof activity>) =>
-        a.strict("09:00", "10:00").flexible("09:00", "10:00"),
-    ],
+    // strictWindow + flexibleWindow is no longer forbidden: SPEC-v2.md
+    // Section 4.6 merges them into one WindowRule type, and an activity may
+    // carry more than one — the sole exception to "at most one rule of each
+    // type" (Section 4.1).
     [
       "fixed + shrink",
       (a: ReturnType<typeof activity>) =>
@@ -52,6 +51,16 @@ describe("validateActivity", () => {
   ])("flags RULE_INCOMPATIBLE for %s", (_label, configure) => {
     const built = configure(activity("Bad").rank(1).minutes(60)).build()
     expect(codesOf(validateActivity(built, C))).toContain("RULE_INCOMPATIBLE")
+  })
+
+  it("does not flag RULE_INCOMPATIBLE for two WindowRules on one activity (SPEC-v2.md Section 4.1)", () => {
+    const ok = activity("Ok")
+      .rank(1)
+      .minutes(30)
+      .strict("09:00", "10:00")
+      .flexible("18:00", "20:00", { drift: 15 })
+      .build()
+    expect(codesOf(validateActivity(ok, C))).not.toContain("RULE_INCOMPATIBLE")
   })
 
   it("flags DURATION_NOT_ON_GRID for an off-grid duration", () => {

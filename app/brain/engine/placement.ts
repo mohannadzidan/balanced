@@ -173,8 +173,8 @@ function inferSkipReason(
     context.grid
   ).filter((s) => s >= context.freezeBoundary)
   if (rawStarts.length === 0) return "NO_FREE_SPACE"
-  if (resolved.flexibleWindow) return "DRIFT_EXCEEDED"
-  if (resolved.strictWindow) return "WINDOW_UNSATISFIABLE"
+  if (resolved.windows.some((w) => w.maxDriftMinutes > 0)) return "DRIFT_EXCEEDED"
+  if (resolved.windows.length > 0) return "WINDOW_UNSATISFIABLE"
   return "NO_FREE_SPACE"
 }
 
