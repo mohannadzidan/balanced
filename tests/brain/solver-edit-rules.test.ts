@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { solve } from "@/app/brain/engine/solve"
+import { solveChecked as solve } from "@/tests/brain/support/solve-checked"
 import { resolveDayFrame } from "@/app/brain/engine/time"
 import type { OverlapRule } from "@/app/brain/engine/types"
 import { activity } from "./support/fixtures"

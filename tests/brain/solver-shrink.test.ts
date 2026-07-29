@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { DEFAULT_COST_CONSTANTS } from "@/app/brain/engine/constants"
 import { priorityWeight } from "@/app/brain/engine/cost"
-import { solve } from "@/app/brain/engine/solve"
+import { solveChecked as solve } from "@/tests/brain/support/solve-checked"
 import { resolveDayFrame } from "@/app/brain/engine/time"
 import { activity } from "./support/fixtures"
 import { expectPlacements } from "./support/expect-placements"

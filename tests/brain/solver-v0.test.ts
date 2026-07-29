@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { renderAscii } from "@/app/brain/engine/render"
-import { solve } from "@/app/brain/engine/solve"
+import { solveChecked as solve } from "@/tests/brain/support/solve-checked"
 import { resolveDayFrame } from "@/app/brain/engine/time"
 import { activity } from "./support/fixtures"
 import { expectPlacements } from "./support/expect-placements"
