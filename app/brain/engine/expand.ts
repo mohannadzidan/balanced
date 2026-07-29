@@ -1,4 +1,4 @@
-import { resolveWindows } from "./resolve"
+import { resolveWindows, windowRulesOf } from "./resolve"
 import { isoWeekKey } from "./time"
 import type {
   Activity,
@@ -118,12 +118,18 @@ export function expand(
     const period = repeat?.period ?? "day"
     const count = repeat?.count ?? 1
 
+    // An activity with no WindowRule at all is unconstrained (§3.2: "implicit
+    // window covering every day in full"), not ineligible everywhere — the
+    // same contract `evaluateCandidate` already gives `windows.length === 0`
+    // (always feasible). Bucket-intersecting an empty window list would
+    // otherwise silently produce zero occurrences for it in every bucket.
+    const unconstrained = windowRulesOf(activity).length === 0
     const windows = resolveWindows(activity, frame)
     const buckets = bucketsForPeriod(period, frame)
 
     for (const bucket of buckets) {
-      const bucketWindows = windowsInBucket(windows, bucket)
-      if (bucketWindows.length === 0) continue
+      const bucketWindows = unconstrained ? [] : windowsInBucket(windows, bucket)
+      if (!unconstrained && bucketWindows.length === 0) continue
 
       const placed = quotas.placed.get(activity.id)?.get(bucket.key) ?? 0
       const toEmit = Math.max(0, count - placed)
