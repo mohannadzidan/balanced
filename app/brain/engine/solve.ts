@@ -4,7 +4,7 @@ import { applyBackdating } from "./lifecycle"
 import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
-import { isEligibleOnDay, resolveActivity, type ResolvedActivity } from "./resolve"
+import { isEligibleOnDay, resolveWindows, type ResolvedActivity } from "./resolve"
 import { isDependent, placeSequenceChain, sequenceRuleOf } from "./sequence"
 import { weekdayOf } from "./time"
 import { validateActivity, validateCatalog } from "./validation"
@@ -1355,7 +1355,10 @@ export function solve(input: SolveInput): SolveResult {
   const resolve = (activity: Activity): ResolvedActivity => {
     let resolved = resolvedCache.get(activity.id)
     if (!resolved) {
-      resolved = resolveActivity(activity, seededInput.dayFrame)
+      resolved = {
+        activity,
+        windows: resolveWindows(activity, seededInput.dayFrame),
+      }
       resolvedCache.set(activity.id, resolved)
     }
     return resolved
