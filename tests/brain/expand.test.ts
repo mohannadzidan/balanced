@@ -168,14 +168,17 @@ describe("app/brain/engine/expand", () => {
     expect(occs[0].bucketKey).toBe("frame")
   })
 
-  it("an activity with no RepeatRule defaults to period: frame, count: 1", () => {
-    const catalog = [act("Plain", 60, 1, [win("09:00", "10:00", 0, ["WED"])])]
+  it("an activity with no RepeatRule defaults to period: day, count: 1 (SPEC-v2.1 §2's equivalence property)", () => {
+    // Matches N chained 1-day solves: one occurrence per eligible day, not
+    // one for the whole multi-day frame.
+    const catalog = [
+      act("Plain", 60, 1, [win("09:00", "10:00", 0, ["WED", "FRI"])]),
+    ]
 
     const occs = expand(catalog, frame)
 
-    expect(occs).toHaveLength(1)
-    expect(occs[0].bucketKey).toBe("frame")
-    expect(occs[0].index).toBe(1)
+    expect(occs.map((o) => o.bucketKey)).toEqual(["2026-07-29", "2026-07-31"])
+    expect(occs.every((o) => o.index === 1)).toBe(true)
   })
 
   it("quotas suppress already-placed occurrences within a bucket", () => {

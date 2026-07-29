@@ -95,7 +95,13 @@ export function expand(
 
   for (const activity of catalog) {
     const repeat = repeatRuleOf(activity)
-    const period = repeat?.period ?? "frame"
+    // SPEC-v2.1 §2's own equivalence property (already the §15 row 2 hard
+    // gate) fixes this default: an activity with no RepeatRule must produce
+    // one occurrence per eligible day across a multi-day frame — matching N
+    // chained 1-day solves — not one occurrence for the whole frame. At
+    // dayCount=1 "day" and "frame" buckets coincide, so this is also exactly
+    // Drop 1's one-instance-per-solve behavior.
+    const period = repeat?.period ?? "day"
     const count = repeat?.count ?? 1
 
     const windows = resolveWindows(activity, frame)
