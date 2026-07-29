@@ -70,7 +70,7 @@ export { activity, ActivityBuilder } from "./engine/activity-builder"
 // --- Pre-flight checks ---------------------------------------------------------
 
 /** Catches template mistakes (bad windows, incompatible rules, ...) before they reach `solve()`. */
-export { validateActivity, validateCatalog } from "./engine/validation"
+export { validateActivity, validateCatalog, validateFrame } from "./engine/validation"
 
 // --- Time / day-frame helpers ----------------------------------------------------
 

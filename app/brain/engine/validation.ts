@@ -5,6 +5,7 @@ import { sequenceRuleOf } from "./sequence"
 import type {
   Activity,
   CostConstants,
+  DayFrame,
   ElasticityRule,
   RepeatRule,
   Rule,
@@ -53,7 +54,7 @@ function isOnGrid(minutes: number, grid: number): boolean {
 function issue(
   severity: ValidationIssue["severity"],
   code: string,
-  activityId: string,
+  activityId: string | null,
   message: string
 ): ValidationIssue {
   return { severity, code, activityId, message }
@@ -449,6 +450,30 @@ export function validateCatalog(
   checkSequenceMultiple(activities, issues)
   checkSequenceCycle(activities, issues)
   checkGuestOutranksHost(activities, issues)
+
+  return issues
+}
+
+/**
+ * SPEC-v2.1 §3 / §13.2: pre-flight check for the Frame itself.
+ * Currently emits FRAME_TOO_LONG for dayCount > 366; future drops may add
+ * checks for defaultDayWindow / backdateHorizonMinutes shape.
+ * Caller is expected to invoke this before `solve()` — like `validateActivity`
+ * and `validateCatalog`, this is not auto-run inside the solver.
+ */
+export function validateFrame(frame: DayFrame): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+
+  if (frame.dayCount > 366) {
+    issues.push(
+      issue(
+        "error",
+        "FRAME_TOO_LONG",
+        null,
+        `Frame spans ${frame.dayCount} days; the cap is 366.`
+      ),
+    )
+  }
 
   return issues
 }

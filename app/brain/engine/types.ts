@@ -21,9 +21,17 @@ export interface Frame {
   readonly date: string // alias of startDate (SPEC-v2.md Section 3.2 compatibility)
   readonly timezone: string // IANA zone, e.g. "Europe/Berlin"
   readonly startInstant: number // UTC epoch ms of local 00:00 on startDate
-  readonly dayCount: number // ALWAYS 1 in Drop 1
+  readonly dayCount: number // SPEC-v2.1 §3: unpinned; capped at 366 (FRAME_TOO_LONG)
   readonly lengthMinutes: number // sum of days[].lengthMinutes
-  readonly days: readonly Day[] // exactly one entry in Drop 1
+  readonly days: readonly Day[] // dayCount entries
+  /** SPEC-v2.1 §3.2: implicit per-day window for activities with no WindowRule. */
+  readonly defaultDayWindow?: {
+    readonly startWall: string
+    readonly endWall: string
+  }
+  /** SPEC-v2.1 §3.3: cap on backdating; blocks ending more than this many
+   * minutes before `now` are marked SKIPPED/LAPSED instead of COMPLETED. */
+  readonly backdateHorizonMinutes?: number
 }
 
 /** Retained name for the pre-Drop-1 single-day frame shape (SPEC-v2.md Section 3.2). */
