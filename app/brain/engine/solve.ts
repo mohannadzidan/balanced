@@ -1457,6 +1457,8 @@ export function solve(input: SolveInput): SolveResult {
                   end: meta.day.startOffset + meta.day.lengthMinutes,
                   maxDriftMinutes: 0,
                   dayIndex: meta.day.index,
+                  daySpanStart: meta.day.startOffset,
+                  daySpanEnd: meta.day.startOffset + meta.day.lengthMinutes,
                 },
               ]
       } else {

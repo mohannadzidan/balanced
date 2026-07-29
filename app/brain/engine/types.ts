@@ -376,6 +376,14 @@ export interface ResolvedWindow {
   readonly end: number
   readonly maxDriftMinutes: number
   readonly dayIndex: number
+  /** SPEC-v2.1 §4's "eligible day span" for this window, frame-relative:
+   *  the full calendar-day span of `dayIndex` (and the following day too,
+   *  for a window that spans midnight — its own `end` already lies there).
+   *  A hard bound drift may never cross: softening the window must never
+   *  soften day eligibility (§4, "a candidate could otherwise bleed out of
+   *  Tuesday's window far enough to land on Wednesday"). */
+  readonly daySpanStart: number
+  readonly daySpanEnd: number
 }
 
 // --- Expansion (SPEC-v2.1 §5) -----------------------------------------------

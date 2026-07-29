@@ -61,11 +61,14 @@ export function resolveActivity(
   activity: Activity,
   dayFrame: DayFrame
 ): ResolvedActivity {
+  const day = dayFrame.days[0]
   const windows = windowRulesOf(activity).map((rule) => ({
     start: resolveWallClock(rule.startWall, dayFrame),
     end: resolveWallClock(rule.endWall, dayFrame),
     maxDriftMinutes: rule.maxDriftMinutes,
     dayIndex: 0,
+    daySpanStart: day.startOffset,
+    daySpanEnd: day.startOffset + day.lengthMinutes,
   }))
   return { activity, windows }
 }
@@ -107,7 +110,25 @@ export function resolveWindows(
           day.index + 1 < frame.days.length ? day.index + 1 : day.index
         end = resolveWallClock(rule.endWall, frame, nextDayIndex)
       }
-      windows.push({ start, end, maxDriftMinutes: rule.maxDriftMinutes, dayIndex: day.index })
+      // §4.1's eligible day span: this day's full extent, plus the next
+      // day's too when the window spans midnight (its own `end` already
+      // lies there) — the hard bound drift may soften a window against but
+      // never cross.
+      const spansMidnight = rule.endWall <= rule.startWall
+      const daySpanStart = day.startOffset
+      const daySpanEnd =
+        spansMidnight && day.index + 1 < frame.days.length
+          ? frame.days[day.index + 1].startOffset +
+            frame.days[day.index + 1].lengthMinutes
+          : day.startOffset + day.lengthMinutes
+      windows.push({
+        start,
+        end,
+        maxDriftMinutes: rule.maxDriftMinutes,
+        dayIndex: day.index,
+        daySpanStart,
+        daySpanEnd,
+      })
     }
   }
   return windows
@@ -122,6 +143,13 @@ export function resolveWindows(
  * WindowRule, drift is the minimum raw drift across all windows, and a
  * candidate is feasible iff at least one window's own drift clears its own
  * allowance. An activity with no WindowRule at all is unconstrained.
+ *
+ * SPEC-v2.1 §4's second conjunct: feasibility also requires the candidate
+ * fall entirely within the union of every window's eligible day span. Drift
+ * softens a *window*; it must never soften *day eligibility* — without this,
+ * a generous drift allowance could place a candidate on a calendar day the
+ * activity was never eligible for at all (e.g. drifting off Tuesday's
+ * window onto Wednesday).
  */
 export function evaluateCandidate(
   resolved: ResolvedActivity,
@@ -132,7 +160,7 @@ export function evaluateCandidate(
   if (windows.length === 0) return { feasible: true, driftMinutes: 0 }
 
   let minDrift = Number.POSITIVE_INFINITY
-  let feasible = false
+  let driftFeasible = false
   for (const window of windows) {
     // Minutes of the activity before the window start, and after the window
     // end — each capped against the other bound so a candidate entirely on
@@ -141,9 +169,33 @@ export function evaluateCandidate(
     const after = Math.max(0, end - Math.max(start, window.end))
     const driftMinutes = before + after
     if (driftMinutes < minDrift) minDrift = driftMinutes
-    if (driftMinutes <= window.maxDriftMinutes) feasible = true
+    if (driftMinutes <= window.maxDriftMinutes) driftFeasible = true
   }
+  const feasible = driftFeasible && isContainedInEligibleDaySpan(windows, start, end)
   return { feasible, driftMinutes: minDrift }
+}
+
+/** The union of every window's `[daySpanStart, daySpanEnd)`, merged, checked
+ * for full containment of `[start, end)` — SPEC-v2.1 §4's hard bound. */
+function isContainedInEligibleDaySpan(
+  windows: readonly ResolvedWindow[],
+  start: number,
+  end: number
+): boolean {
+  const spans = [...windows]
+    .map((w) => ({ start: w.daySpanStart, end: w.daySpanEnd }))
+    .sort((a, b) => a.start - b.start)
+
+  const merged: { start: number; end: number }[] = []
+  for (const span of spans) {
+    const last = merged[merged.length - 1]
+    if (last && span.start <= last.end) {
+      last.end = Math.max(last.end, span.end)
+    } else {
+      merged.push({ ...span })
+    }
+  }
+  return merged.some((m) => start >= m.start && end <= m.end)
 }
 
 /** One (activity, day) placement target produced by `expandDailyOccurrences`. */
