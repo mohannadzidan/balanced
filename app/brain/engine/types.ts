@@ -406,6 +406,13 @@ export interface BucketSpan {
   readonly key: string
   readonly start: number
   readonly end: number
+  /** Set only for `period: "day"` buckets: the frame-relative index of the
+   *  single day this bucket represents. A spanning window's `dayIndex` is
+   *  the day it starts on, so day buckets select windows by this field
+   *  rather than by span overlap — a span-overlap intersection would let a
+   *  midnight-crossing window bleed into the following day's bucket too,
+   *  producing a phantom second occurrence for one recurrence. */
+  readonly dayIndex?: number
 }
 
 /** SPEC-v2.1 §5.1: the day's repetition ledger — `placed[bucketKey]` is how

@@ -232,6 +232,22 @@ describe("app/brain/engine/expand", () => {
     }
   })
 
+  it("a spanning window belongs only to the day it starts on (period: 'day')", () => {
+    // Sleep 23:00->07:00 on MON only. Its resolved window's `end` legitimately
+    // extends into Tuesday's span — a naive span-overlap bucket intersection
+    // would hand that same window to both Monday's and Tuesday's buckets,
+    // producing a phantom second occurrence Tuesday was never eligible for.
+    const catalog = [
+      act("Sleep", 480, 1, [win("23:00", "07:00", 0, ["MON"]), rep("day", 1)]),
+    ]
+    const monFrame = resolveFrame("2026-07-27", 3, "UTC") // Mon, Tue, Wed
+
+    const occs = expand(catalog, monFrame)
+
+    expect(occs).toHaveLength(1)
+    expect(occs[0].bucketKey).toBe("2026-07-27")
+  })
+
   it("quotas suppress already-placed occurrences within a bucket", () => {
     const catalog = [
       act("Gym", 60, 1, [win("09:00", "10:00", 0, ["WED"]), rep("day", 3)]),

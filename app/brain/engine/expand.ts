@@ -48,6 +48,7 @@ function bucketsForPeriod(
       key: day.date,
       start: day.startOffset,
       end: day.startOffset + day.lengthMinutes,
+      dayIndex: day.index,
     }))
   }
 
@@ -70,12 +71,21 @@ function bucketsForPeriod(
     .map(([key, span]) => ({ key, ...span }))
 }
 
-/** Intersects `windows` with one bucket's span; a window entirely outside
- * the bucket disappears rather than clamping to an empty/negative range. */
+/** Selects `windows` for one bucket. A `period: "day"` bucket selects by
+ * `dayIndex` — the day a window originates from — not by span overlap: a
+ * midnight-spanning window's `end` legitimately extends into the next day,
+ * and clipping-by-overlap would hand that same window to both days' buckets,
+ * producing a phantom second occurrence for one recurrence. A `week`/`month`/
+ * `frame` bucket aggregates several days into one, so it clips by span
+ * instead — a window entirely outside the bucket disappears rather than
+ * clamping to an empty/negative range. */
 function windowsInBucket(
   windows: readonly ResolvedWindow[],
   bucket: BucketSpan
 ): readonly ResolvedWindow[] {
+  if (bucket.dayIndex !== undefined) {
+    return windows.filter((w) => w.dayIndex === bucket.dayIndex)
+  }
   const clipped: ResolvedWindow[] = []
   for (const w of windows) {
     const start = Math.max(w.start, bucket.start)
