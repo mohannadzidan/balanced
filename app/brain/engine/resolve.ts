@@ -1,5 +1,14 @@
 import { resolveWallClock } from "./time"
-import type { Activity, DayFrame, Frame, Weekday, WindowRule } from "./types"
+import type {
+  Activity,
+  Day,
+  DayFrame,
+  Frame,
+  OverlapRule,
+  SequenceRule,
+  Weekday,
+  WindowRule,
+} from "./types"
 
 const ALL_WEEKDAYS: readonly Weekday[] = [
   "SUN",
@@ -140,4 +149,71 @@ export function evaluateCandidate(
     if (driftMinutes <= window.maxDriftMinutes) feasible = true
   }
   return { feasible, driftMinutes: minDrift }
+}
+
+/** One (activity, day) placement target produced by `expandDailyOccurrences`. */
+export interface DailyOccurrence {
+  /** Same fields as the source activity, but `id` is day-scoped so hard-set /
+   * greedy / sequence — which key their internal placement maps by
+   * `activity.id` — can hold one placement per day instead of one total. */
+  readonly ghost: Activity
+  /** The real Activity.id this occurrence recurs from. */
+  readonly sourceId: string
+  readonly day: Day
+}
+
+/**
+ * Whether `activity` may be expanded into one ghost per eligible day
+ * (SPEC-v2.1 §15 row 2's restricted scope). FixedRule, OverlapRule, and
+ * SequenceRule all cross-reference activities by their real id
+ * (`allowedGuestIds`, `linkedActivityId`) or hardcode day 0
+ * (`resolveFixedPlacement`) — rekeying those per occurrence is §15 row 3's
+ * job (bucketed `Occurrence`, host/guest and sequence-chain rekeying). Until
+ * then, any activity that is a host, a guest, a sequence dependent, or a
+ * sequence host keeps its current single-instance-per-frame behavior.
+ */
+function isGhostable(activity: Activity, catalog: readonly Activity[]): boolean {
+  if (activity.rules.some((r) => r.type === "fixed" || r.type === "overlap" || r.type === "sequence")) {
+    return false
+  }
+  for (const other of catalog) {
+    const overlap = other.rules.find((r): r is OverlapRule => r.type === "overlap")
+    if (overlap?.allowedGuestIds.includes(activity.id)) return false
+    const sequence = other.rules.find((r): r is SequenceRule => r.type === "sequence")
+    if (sequence?.linkedActivityId === activity.id) return false
+  }
+  return true
+}
+
+/**
+ * SPEC-v2.1 §15 row 2: expands a catalog into one placement target per
+ * (activity, eligible day) pair over a multi-day frame, so an ordinary
+ * recurring activity gets one instance per day it's eligible on — matching
+ * what N independently-chained 1-day solves would produce — instead of one
+ * instance for the whole frame.
+ *
+ * Activities excluded by `isGhostable` (Fixed/Overlap/Sequence-involved) are
+ * passed through unchanged, using `frame.days[0]`, reproducing today's
+ * single-instance-per-frame behavior for them.
+ */
+export function expandDailyOccurrences(
+  catalog: readonly Activity[],
+  frame: Frame
+): DailyOccurrence[] {
+  const out: DailyOccurrence[] = []
+  for (const activity of catalog) {
+    if (!isGhostable(activity, catalog)) {
+      out.push({ ghost: activity, sourceId: activity.id, day: frame.days[0] })
+      continue
+    }
+    for (const day of frame.days) {
+      if (!isEligibleOnDay(activity, day.weekday)) continue
+      out.push({
+        ghost: { ...activity, id: `${activity.id}@${day.date}` },
+        sourceId: activity.id,
+        day,
+      })
+    }
+  }
+  return out
 }
