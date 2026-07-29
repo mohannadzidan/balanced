@@ -10,8 +10,22 @@ import type {
   ResolvedWindow,
 } from "./types"
 
-function repeatRuleOf(activity: Activity): RepeatRule | null {
-  return activity.rules.find((r): r is RepeatRule => r.type === "repeat") ?? null
+/**
+ * SPEC-v2.1 §5.4: RepeatRule is one operation applied at two independent
+ * levels — `sharedBudget: false` (recurrence: this function's job, Activity
+ * -> Occurrences) and `sharedBudget: true` (chunking: Drop 1's existing
+ * per-occurrence shrink/chunk machinery, Occurrence -> Blocks). An activity
+ * may legally carry one of each simultaneously ("Gym three times a week,
+ * each session splittable into two"); only the recurrence rule bears on
+ * bucketing here. The chunking rule, if present, stays on `activity.rules`
+ * untouched and is picked up downstream exactly as it is today.
+ */
+function recurrenceRuleOf(activity: Activity): RepeatRule | null {
+  return (
+    activity.rules.find(
+      (r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget
+    ) ?? null
+  )
 }
 
 /**
@@ -82,9 +96,9 @@ function windowsInBucket(
  * bucket. A bucket with no eligible windows yields no occurrences — day
  * eligibility and recurrence compose with no special case (§5.2).
  *
- * An activity without a RepeatRule is treated as `period: "frame", count: 1`
- * — Drop 1's one-instance-per-frame default, expressed in the new grammar
- * rather than special-cased.
+ * An activity without a recurrence RepeatRule (`sharedBudget: false`) is
+ * treated as `period: "day", count: 1` (see `recurrenceRuleOf`'s docstring
+ * for why "day" and not "frame").
  */
 export function expand(
   catalog: readonly Activity[],
@@ -94,7 +108,7 @@ export function expand(
   const occurrences: Occurrence[] = []
 
   for (const activity of catalog) {
-    const repeat = repeatRuleOf(activity)
+    const repeat = recurrenceRuleOf(activity)
     // SPEC-v2.1 §2's own equivalence property (already the §15 row 2 hard
     // gate) fixes this default: an activity with no RepeatRule must produce
     // one occurrence per eligible day across a multi-day frame — matching N

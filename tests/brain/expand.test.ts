@@ -131,6 +131,33 @@ describe("app/brain/engine/expand", () => {
     expect(occs.map((o) => o.required)).toEqual([true, true, false])
   })
 
+  it("a chunking RepeatRule (sharedBudget: true) is ignored for bucketing and passed through unchanged (§5.4)", () => {
+    const chunk: RepeatRule = {
+      type: "repeat",
+      source: "template",
+      period: "day",
+      count: 3,
+      sharedBudget: true,
+      minSeparationMinutes: 0,
+    }
+    const recurrence = rep("day", 1)
+    const catalog = [
+      act("Gym", 60, 1, [win("09:00", "10:00", 0, ["WED", "FRI"]), chunk, recurrence]),
+    ]
+
+    const occs = expand(catalog, frame)
+
+    // Recurrence (sharedBudget: false) drives bucketing: one occurrence per
+    // eligible day. If the chunking rule (count: 3) were wrongly picked up
+    // by bucketing instead, this would be 6 occurrences, 3 per day.
+    expect(occs.map((o) => o.bucketKey)).toEqual(["2026-07-29", "2026-07-31"])
+    // The chunking rule survives untouched on each occurrence's activity, for
+    // Drop 1's existing per-occurrence shrink/chunk machinery downstream.
+    for (const occ of occs) {
+      expect(occ.activity.rules).toContainEqual(chunk)
+    }
+  })
+
   it("period: 'week' buckets by ISO week (§5.1)", () => {
     const catalog = [
       act("Weekly", 60, 1, [win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]), rep("week", 1)]),
