@@ -192,6 +192,14 @@ function buildDay(index: number, date: string, timezone: string): Day {
   }
 }
 
+/** The DST-correct length, in minutes, of one local calendar date in an
+ * IANA timezone (SPEC-v2.1 §4: 1440 normally; 1380 / 1500 on transitions).
+ * Used for midnight-spanning FixedRule resolution at frame edges where
+ * `frame.days[i+1]` doesn't exist. */
+export function lengthMinutesOfDate(date: string, timezone: string): number {
+  return buildDay(0, date, timezone).lengthMinutes
+}
+
 /**
  * Resolves a multi-day Frame starting at a local calendar date (SPEC-v2.md
  * Section 3). `dayCount` is always 1 in Drop 1, so `days[0]` is built exactly

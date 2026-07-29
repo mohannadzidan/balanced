@@ -2,7 +2,7 @@ import { computeFreeIntervals, intervalsOverlap } from "./intervals"
 import { overlapRuleOf, resolveAbsoluteExclusions } from "./overlap"
 import { enumerateFeasiblePlacementsAcrossLengths } from "./placement"
 import type { ResolvedActivity } from "./resolve"
-import { addDays, resolveDayFrame, resolveWallClock } from "./time"
+import { addDays, lengthMinutesOfDate, resolveWallClock } from "./time"
 import type {
   Activity,
   CostConstants,
@@ -27,25 +27,39 @@ function elasticityFloorOf(activity: Activity): number {
 }
 
 /**
- * Resolves a FixedRule's wall-clock endpoints to offsets in `dayFrame`.
- * `end_wall <= start_wall` means the block spans midnight (Section 5.1): its
- * end belongs to the following calendar date, which may have a different
- * DST length than today — resolving it against today's `dayFrame` plus
- * today's own `lengthMinutes` would silently absorb or fabricate an hour on
- * a transition night, so it's resolved against tomorrow's own DayFrame
- * instead (Section 3.3/3.4).
+ * Resolves a FixedRule's wall-clock endpoints to offsets in `frame`
+ * (SPEC-v2.1 §4). `end_wall <= start_wall` means the block spans midnight
+ * (Section 5.1): its end belongs to the following calendar date, whose DST
+ * length may differ from today's — on a transition night, "06:00" the next
+ * morning can be 300 or 420 real minutes past local midnight, not 360.
+ *
+ * Over a multi-day frame (Drop 2), the next day's length is read from
+ * `frame.days[dayIndex + 1]` directly. At the frame's last day there is no
+ * next day in the table; the length is computed from the calendar in the
+ * frame's timezone without round-tripping through a whole new Frame.
  */
 export function resolveFixedPlacement(
   rule: FixedRule,
-  dayFrame: DayFrame
+  frame: DayFrame
 ): Placement {
-  const start = resolveWallClock(rule.startWall, dayFrame)
-  const rawEnd = resolveWallClock(rule.endWall, dayFrame)
+  const start = resolveWallClock(rule.startWall, frame)
+  const rawEnd = resolveWallClock(rule.endWall, frame)
   if (rawEnd > start) return { start, end: rawEnd, nestedIn: null }
 
-  const tomorrow = resolveDayFrame(addDays(dayFrame.date, 1), dayFrame.timezone)
-  const overflow = resolveWallClock(rule.endWall, tomorrow)
-  return { start, end: dayFrame.lengthMinutes + overflow, nestedIn: null }
+  // Spanning window: end belongs to the day after this FixedRule's own day.
+  // FixedRule has no day-index concept yet (Drop 1 only ever calls this with
+  // a single-day frame), so "this FixedRule's day" is always day 0.
+  const thisDay = frame.days[0]
+  const dayStart = thisDay.startOffset
+  const nextLength =
+    frame.days[1]?.lengthMinutes ??
+    lengthMinutesOfDate(addDays(frame.startDate, 1), frame.timezone)
+  const endWallOffset = resolveWallClock(rule.endWall, frame, 0) - dayStart
+  return {
+    start,
+    end: dayStart + nextLength + endWallOffset,
+    nestedIn: null,
+  }
 }
 
 export interface FixedSetOutcome {

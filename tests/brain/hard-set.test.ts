@@ -7,7 +7,7 @@ import {
   resolveFixedPlacement,
 } from "@/app/brain/engine/hard-set"
 import { resolveActivity } from "@/app/brain/engine/resolve"
-import { resolveDayFrame } from "@/app/brain/engine/time"
+import { resolveDayFrame, resolveFrame } from "@/app/brain/engine/time"
 import type { Activity, FixedRule } from "@/app/brain/engine/types"
 import { activity } from "./support/fixtures"
 
@@ -58,6 +58,23 @@ describe("resolveFixedPlacement", () => {
     const placement = resolveFixedPlacement(rule, preTransition)
     expect(placement.start).toBe(1320)
     expect(placement.end - preTransition.lengthMinutes).toBe(300)
+  })
+
+  it("resolves the spanning tail via day-table lookup (frame.days[1]) at dayCount=2, no external frame needed (SPEC-v2.1 §2.2)", () => {
+    // Same DST transition as above, but as day 1 of a 2-day frame instead of
+    // an isolated single-day frame: frame.days[1].lengthMinutes is already
+    // the DST-correct 1380, so no addDays/lengthMinutesOfDate round-trip is
+    // needed to resolve the spanning tail.
+    const frame = resolveFrame("2024-03-09", 2, "America/New_York")
+    const rule: FixedRule = {
+      type: "fixed",
+      source: "template",
+      startWall: "22:00",
+      endWall: "06:00",
+    }
+    const placement = resolveFixedPlacement(rule, frame)
+    expect(placement.start).toBe(1320)
+    expect(placement.end - frame.days[0].lengthMinutes).toBe(300)
   })
 })
 
