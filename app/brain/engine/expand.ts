@@ -1,0 +1,140 @@
+import { resolveWindows } from "./resolve"
+import { isoWeekKey } from "./time"
+import type {
+  Activity,
+  BucketSpan,
+  Frame,
+  Occurrence,
+  RepeatQuotas,
+  RepeatRule,
+  ResolvedWindow,
+} from "./types"
+
+function repeatRuleOf(activity: Activity): RepeatRule | null {
+  return activity.rules.find((r): r is RepeatRule => r.type === "repeat") ?? null
+}
+
+/**
+ * SPEC-v2.1 §5.1: `RepeatRule.period` partitions the frame into buckets,
+ * clipped to the frame. `"day"` and `"frame"` read straight off `frame.days`
+ * / `frame.lengthMinutes`; `"week"`/`"month"` group consecutive frame days
+ * sharing an ISO-week or calendar-month key, so a bucket's span is exactly
+ * the union of its member days — already clipped to the frame because it's
+ * built only from days the frame actually contains.
+ */
+function bucketsForPeriod(
+  period: RepeatRule["period"],
+  frame: Frame
+): readonly BucketSpan[] {
+  if (period === "frame") {
+    return [{ key: "frame", start: 0, end: frame.lengthMinutes }]
+  }
+  if (period === "day") {
+    return frame.days.map((day) => ({
+      key: day.date,
+      start: day.startOffset,
+      end: day.startOffset + day.lengthMinutes,
+    }))
+  }
+
+  const keyOf = period === "week" ? isoWeekKey : (date: string) => date.slice(0, 7)
+  const spans = new Map<string, { start: number; end: number }>()
+  for (const day of frame.days) {
+    const key = keyOf(day.date)
+    const end = day.startOffset + day.lengthMinutes
+    const existing = spans.get(key)
+    if (existing) {
+      existing.end = end // frame.days is chronological, so end only grows
+    } else {
+      spans.set(key, { start: day.startOffset, end })
+    }
+  }
+  // §5.1: "bucketKey sorts lexicographically in [chronological] order" — true
+  // for "YYYY-MM" and "YYYY-Www" keys, so this also fixes iteration order.
+  return [...spans.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, span]) => ({ key, ...span }))
+}
+
+/** Intersects `windows` with one bucket's span; a window entirely outside
+ * the bucket disappears rather than clamping to an empty/negative range. */
+function windowsInBucket(
+  windows: readonly ResolvedWindow[],
+  bucket: BucketSpan
+): readonly ResolvedWindow[] {
+  const clipped: ResolvedWindow[] = []
+  for (const w of windows) {
+    const start = Math.max(w.start, bucket.start)
+    const end = Math.min(w.end, bucket.end)
+    if (start < end) {
+      clipped.push({ ...w, start, end })
+    }
+  }
+  return clipped
+}
+
+/**
+ * SPEC-v2.1 §5: the solver's new unit of work. Pure, additive, and — until
+ * wired into `runPipeline` (§15 row 3, a later slice) — unused by `solve()`.
+ *
+ * For each bucket and each `1..(count - quotaPlaced)`, emits an occurrence
+ * whose `windows` are the activity's resolved windows intersected with that
+ * bucket. A bucket with no eligible windows yields no occurrences — day
+ * eligibility and recurrence compose with no special case (§5.2).
+ *
+ * An activity without a RepeatRule is treated as `period: "frame", count: 1`
+ * — Drop 1's one-instance-per-frame default, expressed in the new grammar
+ * rather than special-cased.
+ */
+export function expand(
+  catalog: readonly Activity[],
+  frame: Frame,
+  quotas: RepeatQuotas = { placed: new Map() }
+): Occurrence[] {
+  const occurrences: Occurrence[] = []
+
+  for (const activity of catalog) {
+    const repeat = repeatRuleOf(activity)
+    const period = repeat?.period ?? "frame"
+    const count = repeat?.count ?? 1
+
+    const windows = resolveWindows(activity, frame)
+    const buckets = bucketsForPeriod(period, frame)
+
+    for (const bucket of buckets) {
+      const bucketWindows = windowsInBucket(windows, bucket)
+      if (bucketWindows.length === 0) continue
+
+      const placed = quotas.placed.get(activity.id)?.get(bucket.key) ?? 0
+      const toEmit = Math.max(0, count - placed)
+      const bucketOccurrenceIds = Array.from(
+        { length: toEmit },
+        (_, i) => `${activity.id}@${bucket.key}#${i + 1}`
+      )
+
+      for (let index = 1; index <= toEmit; index++) {
+        const id = bucketOccurrenceIds[index - 1]
+        occurrences.push({
+          id,
+          activity,
+          bucketKey: bucket.key,
+          index,
+          windows: bucketWindows,
+          required: index <= activity.requiredCount,
+          siblingIds: bucketOccurrenceIds.filter((sid) => sid !== id),
+        })
+      }
+    }
+  }
+
+  // §5.3: sorted by (activity.priorityRank, bucketKey, index); bucket
+  // enumeration above is already chronological, so this only needs to
+  // resolve ties across activities and re-assert bucket/index order.
+  return occurrences.sort((a, b) => {
+    if (a.activity.priorityRank !== b.activity.priorityRank) {
+      return a.activity.priorityRank - b.activity.priorityRank
+    }
+    if (a.bucketKey !== b.bucketKey) return a.bucketKey.localeCompare(b.bucketKey)
+    return a.index - b.index
+  })
+}

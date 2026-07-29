@@ -364,3 +364,48 @@ export interface ValidationIssue {
   readonly activityId: string | null
   readonly message: string
 }
+
+// --- Window resolution (SPEC-v2.1 §4) ---------------------------------------
+
+/** An activity's WindowRule resolved to numeric frame-relative offsets, for
+ *  one matching day (SPEC-v2.1 §4: one ResolvedWindow per rule × eligible day,
+ *  not per rule). Lives here (not resolve.ts) so `Occurrence` can reference it
+ *  without a resolve.ts → types.ts → resolve.ts import cycle. */
+export interface ResolvedWindow {
+  readonly start: number
+  readonly end: number
+  readonly maxDriftMinutes: number
+  readonly dayIndex: number
+}
+
+// --- Expansion (SPEC-v2.1 §5) -----------------------------------------------
+
+/** SPEC-v2.1 §5.2: an activity's expanded form for one (bucket, index).
+ *  `windows` is the activity's resolved windows intersected with the bucket
+ *  — empty after intersection means the bucket produced no occurrence. */
+export interface Occurrence {
+  readonly id: string
+  readonly activity: Activity
+  readonly bucketKey: string
+  readonly index: number // 1-based within the bucket
+  readonly windows: readonly ResolvedWindow[]
+  readonly required: boolean // index ≤ activity.requiredCount
+  readonly siblingIds: readonly string[]
+}
+
+/** Read-only interval shape used by expand() to scope a bucket. */
+export interface BucketSpan {
+  readonly key: string
+  readonly start: number
+  readonly end: number
+}
+
+/** SPEC-v2.1 §5.1: the day's repetition ledger — `placed[bucketKey]` is how
+ *  many of `activityId` have already been placed in that bucket by an
+ *  earlier (carry-over) solve. Drop 2's full form: not yet populated — Step
+ *  6 introduces it alongside `Plan.quotas`. Until then, `expand` always
+ *  treats `placed` as the zero map, so a single multi-day GENERATE_DAY still
+ *  emits one occurrence per eligible bucket per (activity, count). */
+export interface RepeatQuotas {
+  readonly placed: ReadonlyMap<string, ReadonlyMap<string, number>>
+}

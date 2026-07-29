@@ -5,10 +5,13 @@ import type {
   DayFrame,
   Frame,
   OverlapRule,
+  ResolvedWindow,
   SequenceRule,
   Weekday,
   WindowRule,
 } from "./types"
+
+export type { ResolvedWindow }
 
 const ALL_WEEKDAYS: readonly Weekday[] = [
   "SUN",
@@ -23,14 +26,6 @@ const ALL_WEEKDAYS: readonly Weekday[] = [
 export interface CandidateVerdict {
   readonly feasible: boolean
   readonly driftMinutes: number
-}
-
-export interface ResolvedWindow {
-  readonly start: number
-  readonly end: number
-  readonly maxDriftMinutes: number
-  /** SPEC-v2.1 §4: the day in `frame.days` this window was resolved against. */
-  readonly dayIndex: number
 }
 
 /** An activity's WindowRules resolved to numeric offsets for one DayFrame. */

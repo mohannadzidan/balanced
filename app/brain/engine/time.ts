@@ -274,3 +274,23 @@ export function weekdayOf(date: string): Weekday {
   const [y, mo, d] = date.split("-").map(Number)
   return WEEKDAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()]
 }
+
+/**
+ * SPEC-v2.1 §5.1: the ISO-8601 week-numbering key ("2026-W31") a calendar
+ * date falls in — the week containing the date's Thursday, per the standard
+ * "nearest Thursday" construction. Deliberately not `Intl.DateTimeFormat`'s
+ * `week` option: that option isn't part of the stable Intl spec and is
+ * silently absent from `formatToParts` in this runtime (verified: only
+ * `year` comes back), which would make every `period: "week"` bucket empty.
+ */
+export function isoWeekKey(date: string): string {
+  const [y, mo, d] = date.split("-").map(Number)
+  const thursday = new Date(Date.UTC(y, mo - 1, d))
+  const isoDayNum = thursday.getUTCDay() || 7 // Mon=1..Sun=7
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - isoDayNum)
+  const isoYear = thursday.getUTCFullYear()
+  const yearStart = Date.UTC(isoYear, 0, 1)
+  const diffDays = (thursday.getTime() - yearStart) / 86_400_000
+  const weekNo = Math.ceil((diffDays + 1) / 7)
+  return `${isoYear}-W${String(weekNo).padStart(2, "0")}`
+}
