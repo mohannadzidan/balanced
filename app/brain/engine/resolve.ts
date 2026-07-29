@@ -219,7 +219,7 @@ export interface DailyOccurrence {
  * then, any activity that is a host, a guest, a sequence dependent, or a
  * sequence host keeps its current single-instance-per-frame behavior.
  */
-function isGhostable(activity: Activity, catalog: readonly Activity[]): boolean {
+export function isGhostable(activity: Activity, catalog: readonly Activity[]): boolean {
   if (activity.rules.some((r) => r.type === "fixed" || r.type === "overlap" || r.type === "sequence")) {
     return false
   }

@@ -10,6 +10,8 @@ import type {
   ResolvedWindow,
 } from "./types"
 
+export type { Occurrence }
+
 /**
  * SPEC-v2.1 §5.4: RepeatRule is one operation applied at two independent
  * levels — `sharedBudget: false` (recurrence: this function's job, Activity
