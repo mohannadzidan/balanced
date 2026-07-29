@@ -97,6 +97,20 @@ function windowsInBucket(
   return clipped
 }
 
+/** The implicit window for an unconstrained (no WindowRule) activity's
+ * occurrence in one bucket: the bucket's own full span, zero drift — a hard
+ * boundary confining that occurrence to its own bucket (SPEC-v2.1 §3.2). */
+function syntheticBucketWindow(bucket: BucketSpan): ResolvedWindow {
+  return {
+    start: bucket.start,
+    end: bucket.end,
+    maxDriftMinutes: 0,
+    dayIndex: bucket.dayIndex ?? 0,
+    daySpanStart: bucket.start,
+    daySpanEnd: bucket.end,
+  }
+}
+
 /**
  * SPEC-v2.1 §5: the solver's new unit of work. Pure, additive, and — until
  * wired into `runPipeline` (§15 row 3, a later slice) — unused by `solve()`.
@@ -129,17 +143,22 @@ export function expand(
     const count = repeat?.count ?? 1
 
     // An activity with no WindowRule at all is unconstrained (§3.2: "implicit
-    // window covering every day in full"), not ineligible everywhere — the
-    // same contract `evaluateCandidate` already gives `windows.length === 0`
-    // (always feasible). Bucket-intersecting an empty window list would
-    // otherwise silently produce zero occurrences for it in every bucket.
+    // window covering every day in full") — but that "every day in full" is
+    // per-bucket, not a single frame-wide free-for-all: bucketed into N
+    // per-day occurrences, each one must stay confined to its own bucket, or
+    // nothing stops Monday's occurrence and Tuesday's occurrence from both
+    // landing on Monday while Tuesday goes unfilled. So each bucket gets its
+    // own synthetic full-bucket-span window instead of an empty (= fully
+    // unconstrained across the whole frame) window list.
     const unconstrained = windowRulesOf(activity).length === 0
     const windows = resolveWindows(activity, frame)
     const buckets = bucketsForPeriod(period, frame)
 
     for (const bucket of buckets) {
-      const bucketWindows = unconstrained ? [] : windowsInBucket(windows, bucket)
-      if (!unconstrained && bucketWindows.length === 0) continue
+      const bucketWindows = unconstrained
+        ? [syntheticBucketWindow(bucket)]
+        : windowsInBucket(windows, bucket)
+      if (bucketWindows.length === 0) continue
 
       const placed = quotas.placed.get(activity.id)?.get(bucket.key) ?? 0
       const toEmit = Math.max(0, count - placed)

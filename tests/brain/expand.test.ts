@@ -208,28 +208,31 @@ describe("app/brain/engine/expand", () => {
     expect(occs.every((o) => o.index === 1)).toBe(true)
   })
 
-  it("an activity with no WindowRule at all is unconstrained: one occurrence per day, windows: []", () => {
+  it("an activity with no WindowRule at all is unconstrained: one occurrence per day, each confined to its own bucket", () => {
     // §3.2: no WindowRule means an implicit window covering every day in
     // full, not "no eligible windows anywhere" — resolveWindows() correctly
     // returns [] for this case, but that must not read as "ineligible" when
     // bucketing, or every FixedRule/unwindowed activity would silently
-    // vanish from expand()'s output the moment it's wired into solve().
+    // vanish from expand()'s output the moment it's wired into solve(). And
+    // "every day in full" must be per-bucket: a genuinely empty windows list
+    // would leave nothing stopping every day's occurrence from all competing
+    // for the same day's time instead of each being confined to its own.
     const catalog = [act("Fixed", 60, 1, [])]
 
     const occs = expand(catalog, frame)
 
     expect(occs).toHaveLength(5) // frame is Wed 07-29 .. Sun 08-02: all 5 days
-    expect(occs.map((o) => o.bucketKey)).toEqual([
-      "2026-07-29",
-      "2026-07-30",
-      "2026-07-31",
-      "2026-08-01",
-      "2026-08-02",
-    ])
-    for (const occ of occs) {
-      expect(occ.windows).toEqual([])
+    const dates = ["2026-07-29", "2026-07-30", "2026-07-31", "2026-08-01", "2026-08-02"]
+    expect(occs.map((o) => o.bucketKey)).toEqual(dates)
+    occs.forEach((occ, i) => {
       expect(occ.index).toBe(1)
-    }
+      expect(occ.windows).toHaveLength(1)
+      expect(occ.windows[0].maxDriftMinutes).toBe(0)
+      // Confined to this occurrence's own bucket, not the whole frame.
+      const day = frame.days[i]
+      expect(occ.windows[0].start).toBe(day.startOffset)
+      expect(occ.windows[0].end).toBe(day.startOffset + day.lengthMinutes)
+    })
   })
 
   it("a spanning window belongs only to the day it starts on (period: 'day')", () => {
