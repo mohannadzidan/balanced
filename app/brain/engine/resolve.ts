@@ -1,5 +1,5 @@
 import { resolveWallClock } from "./time"
-import type { Activity, DayFrame, Weekday, WindowRule } from "./types"
+import type { Activity, DayFrame, Frame, Weekday, WindowRule } from "./types"
 
 const ALL_WEEKDAYS: readonly Weekday[] = [
   "SUN",
@@ -20,6 +20,8 @@ export interface ResolvedWindow {
   readonly start: number
   readonly end: number
   readonly maxDriftMinutes: number
+  /** SPEC-v2.1 §4: the day in `frame.days` this window was resolved against. */
+  readonly dayIndex: number
 }
 
 /** An activity's WindowRules resolved to numeric offsets for one DayFrame. */
@@ -59,8 +61,52 @@ export function resolveActivity(
     start: resolveWallClock(rule.startWall, dayFrame),
     end: resolveWallClock(rule.endWall, dayFrame),
     maxDriftMinutes: rule.maxDriftMinutes,
+    dayIndex: 0,
   }))
   return { activity, windows }
+}
+
+/**
+ * SPEC-v2.1 §4: resolves an activity's WindowRules into one ResolvedWindow
+ * per matching day in the frame (not per rule, as in Drop 1).
+ *
+ * For each WindowRule and each `frame.days[i]` whose weekday is in `rule.days`,
+ * produces a {start, end, maxDriftMinutes, dayIndex} tuple. A spanning window
+ * (endWall ≤ startWall) is resolved against the following day's own offset so
+ * it becomes one contiguous interval crossing the day boundary.
+ *
+ * Returns an empty list for an activity with no WindowRule (Drop-1-compatible:
+ * `windowRulesOf` returns [], so the activity has no eligible intervals).
+ */
+export function resolveWindows(
+  activity: Activity,
+  frame: Frame
+): readonly ResolvedWindow[] {
+  const rules = windowRulesOf(activity)
+  if (rules.length === 0) return []
+
+  const windows: ResolvedWindow[] = []
+  for (const rule of rules) {
+    for (const day of frame.days) {
+      if (!rule.days.includes(day.weekday)) continue
+      const start = resolveWallClock(rule.startWall, frame, day.index)
+      // Spanning window: endWall ≤ startWall → resolve end against the next
+      // day's offset so it becomes one contiguous interval.
+      let end: number
+      if (rule.endWall > rule.startWall) {
+        end = resolveWallClock(rule.endWall, frame, day.index)
+      } else {
+        // Spanning: resolve end against the next day (or the last day itself
+        // if there is no next). resolveWallClock already returns frame-relative
+        // offset, so adding nextDay.startOffset would double-count.
+        const nextDayIndex =
+          day.index + 1 < frame.days.length ? day.index + 1 : day.index
+        end = resolveWallClock(rule.endWall, frame, nextDayIndex)
+      }
+      windows.push({ start, end, maxDriftMinutes: rule.maxDriftMinutes, dayIndex: day.index })
+    }
+  }
+  return windows
 }
 
 /**
