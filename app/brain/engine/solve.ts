@@ -18,6 +18,7 @@ import type {
   Activity,
   AdhocPayload,
   CostConstants,
+  DayFrame,
   Diagnostic,
   Interval,
   Placement,
@@ -61,20 +62,37 @@ function relaxationsFor(
   return relaxations
 }
 
+/** SPEC.md Section 3: `TimelineActivity.date` is the local calendar date a
+ * placement actually falls on — only the same string as `bucketKey` for a
+ * `period: "day"` occurrence. A `week`/`month`/`frame` bucket's occurrences
+ * can land on any day inside it, so `date` is read off the frame's day table
+ * by offset instead. */
+function dateAtOffset(frame: DayFrame, offset: number): string {
+  for (const day of frame.days) {
+    if (offset < day.startOffset + day.lengthMinutes) return day.date
+  }
+  return frame.days[frame.days.length - 1].date
+}
+
 function freshInstance(
   activity: Activity,
   occurrence: Occurrence,
+  frame: DayFrame,
   placement: Placement | null,
   skipReason: SkipReason | null,
   relaxations: readonly Relaxation[]
 ): TimelineActivity {
+  const date = dateAtOffset(
+    frame,
+    placement ? placement.start : (occurrence.windows[0]?.daySpanStart ?? 0)
+  )
   return {
     id: occurrence.id,
     activityId: activity.id,
     occurrenceId: occurrence.id,
     occurrenceIndex: occurrence.index,
     bucketKey: occurrence.bucketKey,
-    date: occurrence.bucketKey, // bucketKey is the canonical date/bucket identifier
+    date,
     name: activity.name,
     durationMinutes: activity.durationMinutes,
     priorityRank: activity.priorityRank,
@@ -108,6 +126,7 @@ function freshInstance(
 function chunkedInstances(
   activity: Activity,
   occurrence: Occurrence,
+  frame: DayFrame,
   resolved: ResolvedActivity,
   chunkPlacements: readonly Placement[]
 ): TimelineActivity[] {
@@ -136,7 +155,7 @@ function chunkedInstances(
       occurrenceId,
       occurrenceIndex: occurrence.index,
       bucketKey: occurrence.bucketKey,
-      date: occurrence.bucketKey,
+      date: dateAtOffset(frame, placement.start),
       name: activity.name,
       durationMinutes: activity.durationMinutes,
       priorityRank: activity.priorityRank,
@@ -413,6 +432,7 @@ function runPipeline(
       return chunkedInstances(
         activity,
         occurrence,
+        input.dayFrame,
         resolve(activity),
         chunksPlaced
       )
@@ -441,6 +461,7 @@ function runPipeline(
       freshInstance(
         activity,
         occurrence,
+        input.dayFrame,
         placement,
         skipReason,
         relaxations

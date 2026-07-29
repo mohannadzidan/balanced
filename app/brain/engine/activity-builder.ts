@@ -1,4 +1,10 @@
-import type { Activity, ExclusionWindow, Rule, Weekday } from "./types"
+import type {
+  Activity,
+  ExclusionWindow,
+  RepeatRule,
+  Rule,
+  Weekday,
+} from "./types"
 
 const ALL_DAYS: readonly Weekday[] = [
   "SUN",
@@ -199,18 +205,26 @@ export class ActivityBuilder {
   }
 
   /**
-   * Adds a shared-budget `RepeatRule` directly (SPEC-v2.md Section 4.2) —
-   * Drop 1 supports only the chunking direction (`sharedBudget: true`,
-   * `period: "day"`).
+   * Adds a `RepeatRule` directly (SPEC-v2.md Section 4.2 / SPEC-v2.1 §5.4).
+   * Defaults to the chunking direction (`sharedBudget: true`, `period:
+   * "day"`) for backward compatibility; pass `sharedBudget: false` for the
+   * recurrence direction (Activity -> Occurrences, SPEC-v2.1 §5) with any
+   * `period`. `minSeparationMinutes` is not yet wired into placement
+   * (SPEC-v2.1 §6.1, step 4).
    */
-  repeat(opts: { count: number }): this {
+  repeat(opts: {
+    count: number
+    period?: RepeatRule["period"]
+    sharedBudget?: boolean
+    minSeparationMinutes?: number
+  }): this {
     this.rules.push({
       type: "repeat",
       source: "template",
-      period: "day",
+      period: opts.period ?? "day",
       count: opts.count,
-      sharedBudget: true,
-      minSeparationMinutes: 0,
+      sharedBudget: opts.sharedBudget ?? true,
+      minSeparationMinutes: opts.minSeparationMinutes ?? 0,
     })
     return this
   }

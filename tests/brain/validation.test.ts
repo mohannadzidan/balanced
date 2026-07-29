@@ -113,12 +113,31 @@ describe("validateActivity", () => {
     expect(codesOf(validateActivity(bad, C))).toContain("ELASTICITY_INVALID")
   })
 
+  it("flags NOT_YET_SUPPORTED for a RepeatRule with minSeparationMinutes other than 0 (SPEC-v2.1 §13.1)", () => {
+    const bad = activity("Bad").rank(1).minutes(60).build()
+    const withRepeat = {
+      ...bad,
+      rules: [
+        {
+          type: "repeat" as const,
+          source: "template" as const,
+          period: "day" as const,
+          count: 2,
+          sharedBudget: true,
+          minSeparationMinutes: 15,
+        },
+      ],
+    }
+    expect(codesOf(validateActivity(withRepeat, C))).toContain(
+      "NOT_YET_SUPPORTED"
+    )
+  })
+
   it.each([
     ["sharedBudget: false", { sharedBudget: false as const }],
     ["period other than day", { period: "week" as const }],
-    ["minSeparationMinutes other than 0", { minSeparationMinutes: 15 }],
   ])(
-    "flags NOT_YET_SUPPORTED for a RepeatRule with %s (SPEC-v2.md Section 4.2)",
+    "does not flag NOT_YET_SUPPORTED for a RepeatRule with %s (lifted in SPEC-v2.1 §13.1 step 3)",
     (_label, override) => {
       const bad = activity("Bad").rank(1).minutes(60).build()
       const withRepeat = {
@@ -135,7 +154,7 @@ describe("validateActivity", () => {
           },
         ],
       }
-      expect(codesOf(validateActivity(withRepeat, C))).toContain(
+      expect(codesOf(validateActivity(withRepeat, C))).not.toContain(
         "NOT_YET_SUPPORTED"
       )
     }

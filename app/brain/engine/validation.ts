@@ -231,23 +231,24 @@ function checkDriftUnavoidable(
   }
 }
 
-/** SPEC-v2.md Section 4.2: Drop 1 permits only sharedBudget: true, period: "day", minSeparationMinutes: 0. */
+/**
+ * SPEC-v2.1 §13.1: Drop 2 step 3 lifts the `sharedBudget`/`period` part of
+ * this gate — `expand()` (SPEC-v2.1 §5) now bucket-partitions and repeats a
+ * recurrence RepeatRule (`sharedBudget: false`) over any `period`. Step 4
+ * (§6.1) still owns `minSeparationMinutes`, which nothing places against yet.
+ */
 function checkNotYetSupported(
   activity: Activity,
   rule: RepeatRule,
   issues: ValidationIssue[]
 ): void {
-  if (
-    !rule.sharedBudget ||
-    rule.period !== "day" ||
-    rule.minSeparationMinutes !== 0
-  ) {
+  if (rule.minSeparationMinutes !== 0) {
     issues.push(
       issue(
         "error",
         "NOT_YET_SUPPORTED",
         activity.id,
-        `"${activity.name}" RepeatRule uses a feature not yet supported in Drop 1 (sharedBudget: false, period other than "day", or minSeparationMinutes other than 0)`
+        `"${activity.name}" RepeatRule uses a feature not yet supported (minSeparationMinutes other than 0)`
       )
     )
   }
