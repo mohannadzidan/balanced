@@ -17,13 +17,27 @@ import type {
 const FORBIDDEN_PAIRS: ReadonlyArray<readonly [RuleType, RuleType]> = [
   ["fixed", "window"],
   ["fixed", "elasticity"],
-  ["fixed", "repeat"],
 ]
 
 function pairForbidden(a: RuleType, b: RuleType): boolean {
   return FORBIDDEN_PAIRS.some(
     ([x, y]) => (x === a && y === b) || (x === b && y === a)
   )
+}
+
+/**
+ * A Fixed x chunking-repeat pair (`sharedBudget: true`) is still forbidden —
+ * shrinking or splitting a block with a declared exact time makes no sense.
+ * A Fixed x recurrence-repeat pair (`sharedBudget: false`) is legal since
+ * SPEC-v2.1 §7.1: "daily standups across a month" is exactly a FixedRule
+ * paired with a recurrence RepeatRule for a period other than the implicit
+ * default. `checkFixedWithMultiCount` separately catches the case that's
+ * still always wrong: more than one such occurrence per bucket.
+ */
+function isFixedWithChunkingRepeat(a: Rule, b: Rule): boolean {
+  const fixed = a.type === "fixed" ? a : b.type === "fixed" ? b : null
+  const repeat = a.type === "repeat" ? a : b.type === "repeat" ? b : null
+  return fixed !== null && repeat !== null && (repeat as RepeatRule).sharedBudget
 }
 
 /**
@@ -77,8 +91,9 @@ function checkRuleIncompatibility(
       const duplicateType =
         a.type === b.type && a.type !== "window" && a.type !== "repeat"
       const forbiddenPair =
-        pairForbidden(a.type, b.type) &&
-        !(isDayOnlyWindow(a) || isDayOnlyWindow(b))
+        (pairForbidden(a.type, b.type) &&
+          !(isDayOnlyWindow(a) || isDayOnlyWindow(b))) ||
+        isFixedWithChunkingRepeat(a, b)
       if (duplicateType || forbiddenPair) {
         issues.push(
           issue(
@@ -278,6 +293,32 @@ function checkRepeatDuplicate(
   }
 }
 
+/**
+ * SPEC-v2.1 §7.1/§13.2: a FixedRule occurrence has a declared exact time, so
+ * a bucket holding more than one of them always collides — the recurrence
+ * direction's `count` is capped at 1 wherever a FixedRule is present.
+ */
+function checkFixedWithMultiCount(
+  activity: Activity,
+  issues: ValidationIssue[]
+): void {
+  const hasFixed = activity.rules.some((r) => r.type === "fixed")
+  if (!hasFixed) return
+  const recurrence = activity.rules.find(
+    (r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget
+  )
+  if (recurrence && recurrence.count > 1) {
+    issues.push(
+      issue(
+        "error",
+        "FIXED_WITH_MULTI_COUNT",
+        activity.id,
+        `"${activity.name}" combines a FixedRule with a RepeatRule count of ${recurrence.count} — two occurrences at the same declared time always collide`
+      )
+    )
+  }
+}
+
 /** Pure predicates over a single Activity template (SPEC.md Section 10.1). */
 export function validateActivity(
   activity: Activity,
@@ -299,6 +340,7 @@ export function validateActivity(
     }
   }
   checkRepeatDuplicate(activity, issues)
+  checkFixedWithMultiCount(activity, issues)
 
   if (violatesDominance(activity, constants)) {
     issues.push(

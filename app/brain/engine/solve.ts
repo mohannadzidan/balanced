@@ -256,15 +256,15 @@ function runPipeline(
   // internal maps by `activity.id`. SPEC-v2.1's cross-reference rules
   // (OverlapRule.allowedGuestIds, SequenceRule.linkedActivityId) also name
   // hosts by their catalog id, so an activity with a *single* occurrence —
-  // every Fixed/Overlap/Sequence-involved activity (`expandForSolve` never
-  // buckets those into more than one; rekeying them per-occurrence is
-  // §7.1–§7.4's job, slices 3.4–3.7) plus any ordinary recurring activity
-  // that happens to have only one eligible bucket this solve — keeps its own
-  // activity id as the placement key, so those cross-references still
-  // resolve. An activity bucketed into more than one occurrence (an ordinary
-  // recurring activity eligible on more than one bucket) has no such
-  // cross-reference to preserve, so its occurrences are rekeyed to their own
-  // occurrence id to avoid colliding on one placement-map entry.
+  // every Overlap/Sequence-involved activity (`expandForSolve` never buckets
+  // those into more than one; rekeying them per-occurrence is §7.3/§7.4's
+  // job, slices 3.6/3.7) plus any ordinary recurring activity (including a
+  // FixedRule one, ghostable since §7.1) that happens to have only one
+  // eligible bucket this solve — keeps its own activity id as the placement
+  // key, so those cross-references still resolve. An activity bucketed into
+  // more than one occurrence has no such cross-reference to preserve, so its
+  // occurrences are rekeyed to their own occurrence id to avoid colliding on
+  // one placement-map entry.
   const occurrencesByActivityId = new Map<string, Occurrence[]>()
   for (const occ of occurrencesToSolve) {
     const arr = occurrencesByActivityId.get(occ.activity.id) ?? []
@@ -299,6 +299,11 @@ function runPipeline(
     return { start: Math.min(...starts), end: Math.max(...ends) }
   }
 
+  // SPEC-v2.1 §7.1: a bucketed FixedRule occurrence resolves its wall-clock
+  // time against its own bucket's day, not always day 0.
+  const dayIndexOf = (activity: Activity): number =>
+    occurrenceByPlacementKey.get(activity.id)?.windows[0]?.dayIndex ?? 0
+
   const solveActivities = occurrencesToSolve.map((occ) => ({
     ...occ.activity,
     id: placementKeyOf(occ),
@@ -322,7 +327,8 @@ function runPipeline(
     fixedSet,
     input.dayFrame,
     freezeBoundary,
-    baseOccupied
+    baseOccupied,
+    dayIndexOf
   )
   const occupiedAfterFixed: Interval[] = [
     ...baseOccupied,

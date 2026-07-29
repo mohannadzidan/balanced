@@ -33,28 +33,30 @@ function elasticityFloorOf(activity: Activity): number {
  * length may differ from today's — on a transition night, "06:00" the next
  * morning can be 300 or 420 real minutes past local midnight, not 360.
  *
- * Over a multi-day frame (Drop 2), the next day's length is read from
- * `frame.days[dayIndex + 1]` directly. At the frame's last day there is no
- * next day in the table; the length is computed from the calendar in the
+ * `dayIndex` (SPEC-v2.1 §7.1: "each resolving 09:00 against its own day") is
+ * which `frame.days` entry this occurrence's FixedRule resolves against —
+ * 0 for Drop 1's single-day frame, or a bucketed occurrence's own day over a
+ * multi-day frame. Over a multi-day frame, the next day's length is read
+ * from `frame.days[dayIndex + 1]` directly; at the frame's last day there is
+ * no next day in the table, so it's computed from the calendar in the
  * frame's timezone without round-tripping through a whole new Frame.
  */
 export function resolveFixedPlacement(
   rule: FixedRule,
-  frame: DayFrame
+  frame: DayFrame,
+  dayIndex = 0
 ): Placement {
-  const start = resolveWallClock(rule.startWall, frame)
-  const rawEnd = resolveWallClock(rule.endWall, frame)
+  const start = resolveWallClock(rule.startWall, frame, dayIndex)
+  const rawEnd = resolveWallClock(rule.endWall, frame, dayIndex)
   if (rawEnd > start) return { start, end: rawEnd, nestedIn: null }
 
   // Spanning window: end belongs to the day after this FixedRule's own day.
-  // FixedRule has no day-index concept yet (Drop 1 only ever calls this with
-  // a single-day frame), so "this FixedRule's day" is always day 0.
-  const thisDay = frame.days[0]
+  const thisDay = frame.days[dayIndex]
   const dayStart = thisDay.startOffset
   const nextLength =
-    frame.days[1]?.lengthMinutes ??
-    lengthMinutesOfDate(addDays(frame.startDate, 1), frame.timezone)
-  const endWallOffset = resolveWallClock(rule.endWall, frame, 0) - dayStart
+    frame.days[dayIndex + 1]?.lengthMinutes ??
+    lengthMinutesOfDate(addDays(thisDay.date, 1), frame.timezone)
+  const endWallOffset = resolveWallClock(rule.endWall, frame, dayIndex) - dayStart
   return {
     start,
     end: dayStart + nextLength + endWallOffset,
@@ -83,13 +85,17 @@ export function placeFixedSet(
   activities: readonly Activity[],
   dayFrame: DayFrame,
   freezeBoundary: number,
-  baseOccupied: readonly Interval[] = []
+  baseOccupied: readonly Interval[] = [],
+  dayIndexOf: (activity: Activity) => number = () => 0
 ): FixedSetOutcome {
   const withFixed = activities
     .map((activity) => {
       const rule = fixedRuleOf(activity)
       return rule
-        ? { activity, placement: resolveFixedPlacement(rule, dayFrame) }
+        ? {
+            activity,
+            placement: resolveFixedPlacement(rule, dayFrame, dayIndexOf(activity)),
+          }
         : null
     })
     .filter(

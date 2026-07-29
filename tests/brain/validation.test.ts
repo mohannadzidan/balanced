@@ -193,6 +193,52 @@ describe("validateActivity", () => {
     expect(codesOf(validateActivity(ok, C))).not.toContain("REPEAT_DUPLICATE")
   })
 
+  it("flags FIXED_WITH_MULTI_COUNT when a FixedRule activity has a recurrence RepeatRule count > 1 (SPEC-v2.1 §7.1)", () => {
+    const bad = activity("Standup")
+      .rank(1)
+      .minutes(15)
+      .fixed("09:00", "09:15")
+      .repeat({ count: 2, period: "day", sharedBudget: false })
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain(
+      "FIXED_WITH_MULTI_COUNT"
+    )
+  })
+
+  it("does not flag FIXED_WITH_MULTI_COUNT for a FixedRule activity with a recurrence RepeatRule count of 1", () => {
+    const ok = activity("Standup")
+      .rank(1)
+      .minutes(15)
+      .fixed("09:00", "09:15")
+      .repeat({ count: 1, period: "week", sharedBudget: false })
+      .build()
+    expect(codesOf(validateActivity(ok, C))).not.toContain(
+      "FIXED_WITH_MULTI_COUNT"
+    )
+  })
+
+  it("flags RULE_INCOMPATIBLE for a FixedRule combined with a chunking RepeatRule (sharedBudget: true)", () => {
+    const bad = activity("Standup")
+      .rank(1)
+      .minutes(15)
+      .fixed("09:00", "09:15")
+      .repeat({ count: 2 }) // defaults to sharedBudget: true
+      .build()
+    expect(codesOf(validateActivity(bad, C))).toContain("RULE_INCOMPATIBLE")
+  })
+
+  it("does not flag RULE_INCOMPATIBLE for a FixedRule combined with a recurrence RepeatRule (sharedBudget: false, SPEC-v2.1 §7.1)", () => {
+    const ok = activity("Standup")
+      .rank(1)
+      .minutes(15)
+      .fixed("09:00", "09:15")
+      .repeat({ count: 1, period: "week", sharedBudget: false })
+      .build()
+    expect(codesOf(validateActivity(ok, C))).not.toContain(
+      "RULE_INCOMPATIBLE"
+    )
+  })
+
   it("flags WINDOW_INVERTED when a strict window ends before it starts", () => {
     const bad = activity("Bad")
       .rank(1)
