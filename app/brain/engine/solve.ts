@@ -4,7 +4,12 @@ import { applyBackdating } from "./lifecycle"
 import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
 import { placeFixedSet, placeHardSet } from "./hard-set"
-import { isEligibleOnDay, resolveWindows, type ResolvedActivity } from "./resolve"
+import {
+  expandDailyOccurrences,
+  isEligibleOnDay,
+  resolveWindows,
+  type ResolvedActivity,
+} from "./resolve"
 import { isDependent, placeSequenceChain, sequenceRuleOf } from "./sequence"
 import { weekdayOf } from "./time"
 import { validateActivity, validateCatalog } from "./validation"
@@ -12,7 +17,7 @@ import type {
   Activity,
   AdhocPayload,
   CostConstants,
-  DayFrame,
+  Day,
   Diagnostic,
   Interval,
   Placement,
@@ -27,6 +32,21 @@ import type {
   TimelineActivity,
   TimelineStatus,
 } from "./types"
+
+/** Identifies which real activity and which frame day a placement target
+ * belongs to (SPEC-v2.1 §15 row 2). Ghosted activities carry a day-scoped
+ * `id`; this is how `freshInstance`/`chunkedInstances` recover the real
+ * `activityId` and the correct occurrence date from one, and how
+ * `runPipeline` derives each ghost's own day-bounded free-interval search
+ * (`isGhost: true`). Activities absent from the meta map (the default,
+ * everywhere outside multi-day GENERATE_DAY) fall back to
+ * `{ sourceId: activity.id, day: frame.days[0], isGhost: false }` — exactly
+ * today's single-instance-per-frame behavior, unbounded by day. */
+type OccurrenceMetaOf = (activity: Activity) => {
+  sourceId: string
+  day: Day
+  isGhost: boolean
+}
 
 function hasFixed(activity: Activity): boolean {
   return activity.rules.some((r) => r.type === "fixed")
@@ -58,19 +78,20 @@ function relaxationsFor(
 
 function freshInstance(
   activity: Activity,
-  dayFrame: DayFrame,
+  sourceId: string,
+  day: Day,
   placement: Placement | null,
   skipReason: SkipReason | null,
   relaxations: readonly Relaxation[]
 ): TimelineActivity {
-  const occurrenceId = `${activity.id}@${dayFrame.date}#1`
+  const occurrenceId = `${sourceId}@${day.date}#1`
   return {
     id: occurrenceId,
-    activityId: activity.id,
+    activityId: sourceId,
     occurrenceId,
     occurrenceIndex: 1,
-    bucketKey: dayFrame.date,
-    date: dayFrame.date,
+    bucketKey: day.date,
+    date: day.date,
     name: activity.name,
     durationMinutes: activity.durationMinutes,
     priorityRank: activity.priorityRank,
@@ -103,7 +124,8 @@ function freshInstance(
  */
 function chunkedInstances(
   activity: Activity,
-  dayFrame: DayFrame,
+  sourceId: string,
+  day: Day,
   resolved: ResolvedActivity,
   chunkPlacements: readonly Placement[]
 ): TimelineActivity[] {
@@ -111,7 +133,7 @@ function chunkedInstances(
   const totalScheduled = sorted.reduce((sum, c) => sum + (c.end - c.start), 0)
   const shrunkBy = activity.durationMinutes - totalScheduled
 
-  const occurrenceId = `${activity.id}@${dayFrame.date}#1`
+  const occurrenceId = `${sourceId}@${day.date}#1`
 
   return sorted.map((placement, index) => {
     const relaxations: Relaxation[] = []
@@ -128,11 +150,11 @@ function chunkedInstances(
 
     return {
       id: `${occurrenceId}~${index + 1}`,
-      activityId: activity.id,
+      activityId: sourceId,
       occurrenceId,
       occurrenceIndex: 1,
-      bucketKey: dayFrame.date,
-      date: dayFrame.date,
+      bucketKey: day.date,
+      date: day.date,
       name: activity.name,
       durationMinutes: activity.durationMinutes,
       priorityRank: activity.priorityRank,
@@ -180,11 +202,26 @@ function runPipeline(
   weight: (activity: Activity) => number,
   freezeBoundary: number = input.now,
   fullCatalog: readonly Activity[] = activitiesToSolve,
-  anchorPlacements: ReadonlyMap<string, Placement> = new Map()
+  anchorPlacements: ReadonlyMap<string, Placement> = new Map(),
+  occurrenceMetaOf: OccurrenceMetaOf = (activity) => ({
+    sourceId: activity.id,
+    day: input.dayFrame.days[0],
+    isGhost: false,
+  })
 ): PipelineOutcome {
   const grid = constants.GRID
   const nodeLimit = constants.HARD_SET_NODE_LIMIT
   const lengthMinutes = input.dayFrame.lengthMinutes
+
+  // SPEC-v2.1 §15 row 2: bounds a ghost's free-interval search to its own
+  // day (HardSetContext/GreedyContext.dayBoundOf's docstring). Undefined for
+  // every non-ghost activity, which is a no-op at both call sites.
+  const dayBoundOf = (activity: Activity): Interval | undefined => {
+    const meta = occurrenceMetaOf(activity)
+    return meta.isGhost
+      ? { start: meta.day.startOffset, end: meta.day.startOffset + meta.day.lengthMinutes }
+      : undefined
+  }
 
   // Sequence dependents (SPEC.md Section 5.6) are placed adjacent to their
   // host out of priority order, so they sit outside the normal hard-set /
@@ -226,6 +263,7 @@ function runPipeline(
     resolve,
     weight,
     dayFrame: input.dayFrame,
+    dayBoundOf,
   })
   const occupiedAfterHardSet: Interval[] = [
     ...occupiedAfterFixed,
@@ -260,6 +298,7 @@ function runPipeline(
     // that host isn't itself up for re-solving this round.
     allActivities: fullCatalog,
     initialHostPlacements,
+    dayBoundOf,
   })
   const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
     (chunks) => chunks.map((c) => ({ start: c.start, end: c.end }))
@@ -305,11 +344,13 @@ function runPipeline(
   )
 
   const instances = activitiesToSolve.flatMap((activity) => {
+    const { sourceId, day } = occurrenceMetaOf(activity)
     const chunksPlaced = greedyOutcome.chunks.get(activity.id)
     if (chunksPlaced) {
       return chunkedInstances(
         activity,
-        input.dayFrame,
+        sourceId,
+        day,
         resolve(activity),
         chunksPlaced
       )
@@ -337,7 +378,8 @@ function runPipeline(
     return [
       freshInstance(
         activity,
-        input.dayFrame,
+        sourceId,
+        day,
         placement,
         skipReason,
         relaxations
@@ -615,7 +657,8 @@ function runEvent(
   todaysCatalog: readonly Activity[],
   resolve: (activity: Activity) => ResolvedActivity,
   weight: (activity: Activity) => number,
-  totalRanked: number
+  totalRanked: number,
+  occurrenceMetaOf?: OccurrenceMetaOf
 ): SolveResult {
   if (plan.shortCircuitResult) return plan.shortCircuitResult
   if (plan.rejection) {
@@ -656,7 +699,8 @@ function runEvent(
     effectiveWeight,
     plan.freezeBoundary,
     [...catalog, ...plan.extraActivities],
-    anchorPlacements
+    anchorPlacements,
+    occurrenceMetaOf
   )
 
   let allInstances = [...anchors, ...plan.extraInstances, ...solved]
@@ -1351,14 +1395,74 @@ export function solve(input: SolveInput): SolveResult {
       : input
 
   const weekday = weekdayOf(seededInput.dayFrame.date)
+  const frame = seededInput.dayFrame
+
+  // SPEC-v2.1 §15 row 2: over a multi-day GENERATE_DAY, a plain recurring
+  // activity gets one placement target per eligible day (matching what N
+  // chained 1-day solves would produce) instead of one for the whole frame.
+  // Scoped narrowly — see expandDailyOccurrences's docstring for why
+  // Fixed/Overlap/Sequence-involved activities and every other event type
+  // keep today's single-instance-per-frame behavior untouched.
+  const isMultiDayGenerate =
+    input.event.type === "GENERATE_DAY" && frame.dayCount > 1
+  const occurrenceMeta = new Map<string, { sourceId: string; day: Day }>()
+  let baseCatalog: readonly Activity[]
+
+  if (isMultiDayGenerate) {
+    const occurrences = expandDailyOccurrences(
+      seededInput.catalog.filter((a) => a.enabled),
+      frame
+    )
+    for (const occ of occurrences) {
+      if (occ.ghost.id !== occ.sourceId) {
+        occurrenceMeta.set(occ.ghost.id, {
+          sourceId: occ.sourceId,
+          day: occ.day,
+        })
+      }
+    }
+    baseCatalog = occurrences.map((occ) => occ.ghost)
+  } else {
+    baseCatalog = seededInput.catalog.filter(
+      (a) => a.enabled && isEligibleOnDay(a, weekday)
+    )
+  }
+
+  const occurrenceMetaOf: OccurrenceMetaOf = (activity) => {
+    const meta = occurrenceMeta.get(activity.id)
+    return meta
+      ? { ...meta, isGhost: true }
+      : { sourceId: activity.id, day: frame.days[0], isGhost: false }
+  }
+
   const resolvedCache = new Map<string, ResolvedActivity>()
   const resolve = (activity: Activity): ResolvedActivity => {
     let resolved = resolvedCache.get(activity.id)
     if (!resolved) {
-      resolved = {
-        activity,
-        windows: resolveWindows(activity, seededInput.dayFrame),
+      const meta = occurrenceMeta.get(activity.id)
+      let windows: ResolvedActivity["windows"]
+      if (meta) {
+        // Ghosted activity: restrict windows to this ghost's own day, so it
+        // competes only for that day's free time — the resolve.ts-level
+        // resolveWindows already spans every eligible day in the frame.
+        const dayWindows = resolveWindows(activity, frame).filter(
+          (w) => w.dayIndex === meta.day.index
+        )
+        windows =
+          dayWindows.length > 0
+            ? dayWindows
+            : [
+                {
+                  start: meta.day.startOffset,
+                  end: meta.day.startOffset + meta.day.lengthMinutes,
+                  maxDriftMinutes: 0,
+                  dayIndex: meta.day.index,
+                },
+              ]
+      } else {
+        windows = resolveWindows(activity, frame)
       }
+      resolved = { activity, windows }
       resolvedCache.set(activity.id, resolved)
     }
     return resolved
@@ -1367,12 +1471,7 @@ export function solve(input: SolveInput): SolveResult {
     priorityWeight(activity.priorityRank, totalRanked)
 
   const todaysCatalog = applyInstanceRuleOverrides(
-    [
-      ...seededInput.catalog.filter(
-        (a) => a.enabled && isEligibleOnDay(a, weekday)
-      ),
-      ...adhocActivitiesFrom(seededInput.existing),
-    ],
+    [...baseCatalog, ...adhocActivitiesFrom(seededInput.existing)],
     seededInput.existing
   )
 
@@ -1391,6 +1490,7 @@ export function solve(input: SolveInput): SolveResult {
     todaysCatalog,
     resolve,
     weight,
-    totalRanked
+    totalRanked,
+    occurrenceMetaOf
   )
 }

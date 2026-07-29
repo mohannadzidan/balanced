@@ -45,6 +45,8 @@ export interface GreedyContext {
   readonly allActivities: readonly Activity[]
   /** Host placements already settled in phase 1 (fixed + hard-set). */
   readonly initialHostPlacements: ReadonlyMap<string, Placement>
+  /** SPEC-v2.1 §15 row 2: see HardSetContext.dayBoundOf's docstring. */
+  readonly dayBoundOf?: (activity: Activity) => Interval | undefined
 }
 
 export interface GreedyOutcome {
@@ -97,10 +99,11 @@ export function placeGreedy(
   )
   for (const activity of ordered) {
     const resolved = ctx.resolve(activity)
+    const dayBound = ctx.dayBoundOf?.(activity)
     const freeIntervals = computeFreeIntervals(
       occupied,
-      ctx.freezeBoundary,
-      ctx.lengthMinutes
+      dayBound ? Math.max(ctx.freezeBoundary, dayBound.start) : ctx.freezeBoundary,
+      dayBound ? Math.min(ctx.lengthMinutes, dayBound.end) : ctx.lengthMinutes
     )
     const context = {
       freeIntervals,

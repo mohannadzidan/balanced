@@ -139,6 +139,66 @@ export const catalogArb: fc.Arbitrary<readonly Activity[]> = fc
 		})
 	})
 
+// A WindowRule that never spans midnight, regardless of drift (SPEC-v2.1 §2's
+// "no cross-day rules" grammar: "no window spans midnight"). windowRuleArb
+// above allows a flexible (drift > 0) window to span midnight; this doesn't.
+export const noCrossDayWindowRuleArb: fc.Arbitrary<WindowRule> = fc
+	.tuple(
+		wallArb(),
+		wallArb(),
+		fc.integer({ min: 0, max: 120 }),
+		weekdaySubsetArb,
+	)
+	.filter(([start, end, , days]) => start < end && days.length > 0)
+	.map(
+		([start, end, drift, days]): WindowRule => ({
+			type: "window",
+			source: "template",
+			days: days as readonly Weekday[],
+			startWall: start,
+			endWall: end,
+			maxDriftMinutes: drift,
+		}),
+	)
+
+// An Activity with a single non-spanning WindowRule.
+const noCrossDayWindowedActivityArb: fc.Arbitrary<Activity> = fc
+	.tuple(
+		fc.string({ minLength: 1, maxLength: 12 }),
+		fc.integer({ min: 5, max: 180 }).filter((m) => m % 5 === 0),
+		fc.integer({ min: 1, max: 10 }),
+		noCrossDayWindowRuleArb,
+	)
+	.map(
+		([name, minutes, rank, rule]): Activity => ({
+			id: name,
+			name,
+			durationMinutes: minutes,
+			priorityRank: rank,
+			enabled: true,
+			rules: [rule],
+			requiredCount: 0,
+		}),
+	)
+
+// A catalogue restricted to SPEC-v2.1 §2's "no cross-day rules" grammar: no
+// RepeatRule/FixedRule/OverlapRule/SequenceRule, no spanning windows, every
+// duration well under a day. Used by the section 2 equivalence property.
+export const noCrossDayCatalogArb: fc.Arbitrary<readonly Activity[]> = fc
+	.array(fc.oneof(simpleActivityArb, noCrossDayWindowedActivityArb), {
+		minLength: 1,
+		maxLength: 5,
+	})
+	.map((activities): readonly Activity[] => {
+		const seen = new Set<number>()
+		return activities.map((a, i) => {
+			let rank = a.priorityRank
+			while (seen.has(rank)) rank++
+			seen.add(rank)
+			return { ...a, id: `${a.id}-${i}`, priorityRank: rank }
+		})
+	})
+
 // Helper: a date (ISO YYYY-MM-DD) for resolveDayFrame.
 export const dateArb: fc.Arbitrary<string> = fc
 	.integer({ min: 2020, max: 2030 })

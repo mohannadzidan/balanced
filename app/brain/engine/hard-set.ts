@@ -154,6 +154,14 @@ export interface HardSetContext {
   readonly resolve: (activity: Activity) => ResolvedActivity
   readonly weight: (activity: Activity) => number
   readonly dayFrame: DayFrame
+  /** SPEC-v2.1 §15 row 2: confines a ghosted activity's free-interval search
+   * to its own day, so a generous drift allowance can't let it drift into
+   * another day's free time — window/drift feasibility alone only measures
+   * how much of the candidate's own duration spills past the window edge,
+   * not true distance, so it can't catch a candidate an entire day away.
+   * Undefined for every existing caller (dayCount=1, or any activity that
+   * isn't a §15 row 2 ghost), which reproduces today's behavior exactly. */
+  readonly dayBoundOf?: (activity: Activity) => Interval | undefined
 }
 
 export interface HardSetOutcome {
@@ -167,10 +175,11 @@ function candidatesFor(
   occupied: readonly Interval[],
   ctx: HardSetContext
 ): Placement[] {
+  const dayBound = ctx.dayBoundOf?.(activity)
   const freeIntervals = computeFreeIntervals(
     occupied,
-    ctx.freezeBoundary,
-    ctx.lengthMinutes
+    dayBound ? Math.max(ctx.freezeBoundary, dayBound.start) : ctx.freezeBoundary,
+    dayBound ? Math.min(ctx.lengthMinutes, dayBound.end) : ctx.lengthMinutes
   )
   return enumerateFeasiblePlacementsAcrossLengths(
     ctx.resolve(activity),
