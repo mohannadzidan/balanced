@@ -160,6 +160,7 @@ export type SkipReason =
   | "INFEASIBLE_HARD_CONSTRAINT"
   | "NOT_ALLOWED_TODAY"
   | "USER_SKIPPED"
+  | "LAPSED"
 
 export type RelaxationType = "drift" | "shrink" | "chunk" | "gap"
 

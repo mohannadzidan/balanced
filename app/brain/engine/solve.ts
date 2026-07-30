@@ -371,6 +371,7 @@ function runPipeline(
     weight,
     dayFrame: input.dayFrame,
     dayBoundOf,
+    dayIndexOf,
   })
   const occupiedAfterHardSet: Interval[] = [
     ...occupiedAfterFixed,
@@ -424,6 +425,8 @@ function runPipeline(
       }
       return starts
     },
+    // SPEC-v2.1 §7.4: per-day absolute exclusions for bucketed occurrences.
+    dayIndexOf,
   })
   const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
     (chunks) => chunks.map((c) => ({ start: c.start, end: c.end }))
@@ -1243,7 +1246,8 @@ function planEvent(
   if (input.event.type === "TICK") {
     const { instances: backdated, changed } = applyBackdating(
       basePlan.workingExisting,
-      input.now
+      input.now,
+      { horizonMinutes: input.dayFrame.backdateHorizonMinutes }
     )
     if (!changed) {
       const { diagnostics, status } = buildDiagnostics(backdated)

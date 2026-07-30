@@ -64,6 +64,9 @@ export interface GreedyContext {
     activity: Activity,
     placements: ReadonlyMap<string, Placement>
   ) => readonly number[]
+  /** SPEC-v2.1 §7.4: absolute exclusion windows resolve against the host
+   * occurrence's own bucket day. Undefined reproduces v1 "always day 0". */
+  readonly dayIndexOf?: (activity: Activity) => number
 }
 
 export interface GreedyOutcome {
@@ -131,7 +134,8 @@ export function placeGreedy(
       constants: ctx.constants,
       absoluteExclusions: resolveAbsoluteExclusions(
         overlapRuleOf(activity),
-        ctx.dayFrame
+        ctx.dayFrame,
+        ctx.dayIndexOf?.(activity) ?? 0
       ),
       minSeparationMinutes: ctx.minSeparationOf?.(activity) ?? 0,
       siblingStarts: ctx.siblingStartsOf?.(activity, placements),

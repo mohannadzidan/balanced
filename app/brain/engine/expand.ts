@@ -100,17 +100,50 @@ function windowsInBucket(
 }
 
 /** The implicit window for an unconstrained (no WindowRule) activity's
- * occurrence in one bucket: the bucket's own full span, zero drift — a hard
- * boundary confining that occurrence to its own bucket (SPEC-v2.1 §3.2). */
-function syntheticBucketWindow(bucket: BucketSpan): ResolvedWindow {
+ * occurrence in one bucket. With no `defaultDayWindow`, the window is the
+ * bucket's own full span (zero drift — a hard boundary confining that
+ * occurrence to its own bucket). With `defaultDayWindow` (SPEC-v2.1 §3.2),
+ * the window is the bucket's intersection with the implicit daily window,
+ * still zero drift, still bounded to the bucket. dayIndex uses the bucket's
+ * own day when present; for week/month/frame buckets it falls back to the
+ * first day in the frame (the day-span remains the bucket's own extent). */
+function syntheticBucketWindow(
+  bucket: BucketSpan,
+  frame: Frame
+): ResolvedWindow {
+  const bucketStart = bucket.start
+  const bucketEnd = bucket.end
+  const dw = frame.defaultDayWindow
+  let start = bucketStart
+  let end = bucketEnd
+  if (dw && bucket.dayIndex !== undefined) {
+    const day = frame.days[bucket.dayIndex]
+    const dayStart = day.startOffset
+    const dayEnd = dayStart + day.lengthMinutes
+    const dwStart = resolveWallClockSync(dw.startWall, dayStart)
+    const dwEnd = resolveWallClockSync(dw.endWall, dayStart)
+    const ws = Math.max(bucketStart, Math.max(dayStart, dwStart))
+    const we = Math.min(bucketEnd, Math.min(dayEnd, dwEnd))
+    if (ws < we) {
+      start = ws
+      end = we
+    }
+  }
   return {
-    start: bucket.start,
-    end: bucket.end,
+    start,
+    end,
     maxDriftMinutes: 0,
     dayIndex: bucket.dayIndex ?? 0,
     daySpanStart: bucket.start,
     daySpanEnd: bucket.end,
   }
+}
+
+/** Inlined wall-clock-to-offset resolver (no DST math needed when the offset
+ * is given: `dayStart` already encodes the day in frame-relative minutes). */
+function resolveWallClockSync(wall: string, dayStart: number): number {
+  const [h, m] = wall.split(":").map((s) => parseInt(s, 10))
+  return dayStart + (h ?? 0) * 60 + (m ?? 0)
 }
 
 /**
@@ -158,7 +191,7 @@ export function expand(
 
     for (const bucket of buckets) {
       const bucketWindows = unconstrained
-        ? [syntheticBucketWindow(bucket)]
+        ? [syntheticBucketWindow(bucket, frame)]
         : windowsInBucket(windows, bucket)
       if (bucketWindows.length === 0) continue
 

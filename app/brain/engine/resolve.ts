@@ -55,20 +55,39 @@ export function isEligibleOnDay(activity: Activity, weekday: Weekday): boolean {
   return eligibleWeekdaysOf(activity).has(weekday)
 }
 
-/** Phase 0, step 7 (SPEC.md Section 8.3): resolve wall-clock rules to offsets. */
+/** Phase 0, step 7 (SPEC.md Section 8.3): resolve wall-clock rules to offsets.
+ * SPEC-v2.1 §3.2: when an activity has no WindowRule but the frame declares
+ * a `defaultDayWindow`, the activity is constrained to that window on day 0
+ * (Drop 1 callers that pass `dayCount = 1` see exactly the same single window
+ * the new logic emits; the difference only shows up over multi-day frames). */
 export function resolveActivity(
   activity: Activity,
   dayFrame: DayFrame
 ): ResolvedActivity {
   const day = dayFrame.days[0]
-  const windows = windowRulesOf(activity).map((rule) => ({
-    start: resolveWallClock(rule.startWall, dayFrame),
-    end: resolveWallClock(rule.endWall, dayFrame),
-    maxDriftMinutes: rule.maxDriftMinutes,
-    dayIndex: 0,
-    daySpanStart: day.startOffset,
-    daySpanEnd: day.startOffset + day.lengthMinutes,
-  }))
+  const rules = windowRulesOf(activity)
+  const dw = dayFrame.defaultDayWindow
+  const windows = rules.length > 0
+    ? rules.map((rule) => ({
+        start: resolveWallClock(rule.startWall, dayFrame),
+        end: resolveWallClock(rule.endWall, dayFrame),
+        maxDriftMinutes: rule.maxDriftMinutes,
+        dayIndex: 0,
+        daySpanStart: day.startOffset,
+        daySpanEnd: day.startOffset + day.lengthMinutes,
+      }))
+    : dw
+      ? [
+          {
+            start: resolveWallClock(dw.startWall, dayFrame),
+            end: resolveWallClock(dw.endWall, dayFrame),
+            maxDriftMinutes: 0,
+            dayIndex: 0,
+            daySpanStart: day.startOffset,
+            daySpanEnd: day.startOffset + day.lengthMinutes,
+          },
+        ]
+      : []
   return { activity, windows }
 }
 
@@ -83,13 +102,32 @@ export function resolveActivity(
  *
  * Returns an empty list for an activity with no WindowRule (Drop-1-compatible:
  * `windowRulesOf` returns [], so the activity has no eligible intervals).
+ * SPEC-v2.1 §3.2: when the activity has no WindowRule and the frame declares
+ * a `defaultDayWindow`, that frame-level window is materialised as a
+ * per-day resolved window with `maxDriftMinutes: 0` — preserving "no
+ * WindowRule at all" exactly when `defaultDayWindow` is also unset.
  */
 export function resolveWindows(
   activity: Activity,
   frame: Frame
 ): readonly ResolvedWindow[] {
   const rules = windowRulesOf(activity)
-  if (rules.length === 0) return []
+  if (rules.length === 0) {
+    const dw = frame.defaultDayWindow
+    if (!dw) return []
+    const windows: ResolvedWindow[] = []
+    for (const day of frame.days) {
+      windows.push({
+        start: resolveWallClock(dw.startWall, frame, day.index),
+        end: resolveWallClock(dw.endWall, frame, day.index),
+        maxDriftMinutes: 0,
+        dayIndex: day.index,
+        daySpanStart: day.startOffset,
+        daySpanEnd: day.startOffset + day.lengthMinutes,
+      })
+    }
+    return windows
+  }
 
   const windows: ResolvedWindow[] = []
   for (const rule of rules) {

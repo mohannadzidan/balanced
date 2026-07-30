@@ -20,11 +20,16 @@ export function overlapRuleOf(activity: Activity): OverlapRule | null {
   )
 }
 
-/** Resolves one ExclusionWindow to offsets in `dayFrame` (SPEC.md Section 5.7). */
+/** Resolves one ExclusionWindow to offsets in `dayFrame` (SPEC.md Section 5.7).
+ * `dayIndex` selects which calendar day's wall-clock offsets absolute
+ * exclusions resolve against (SPEC-v2.1 §7.4 — absolute exclusions resolve
+ * per day, scoped to the host occurrence's bucket). For relative-anchored
+ * exclusions the parameter is ignored: those windows move with their host. */
 export function resolveExclusionWindow(
   window: ExclusionWindow,
   host: { readonly start: number },
-  dayFrame: DayFrame
+  dayFrame: DayFrame,
+  dayIndex = 0
 ): Interval {
   if (window.anchor === "relative") {
     return {
@@ -33,26 +38,28 @@ export function resolveExclusionWindow(
     }
   }
   return {
-    start: resolveWallClock(window.startWall ?? "00:00", dayFrame),
-    end: resolveWallClock(window.endWall ?? "00:00", dayFrame),
+    start: resolveWallClock(window.startWall ?? "00:00", dayFrame, dayIndex),
+    end: resolveWallClock(window.endWall ?? "00:00", dayFrame, dayIndex),
   }
 }
 
 /**
- * Absolute-anchored exclusion windows, resolved once per day frame — they
- * don't depend on the host's placement, unlike relative ones. Used as a
- * hard feasibility filter on the host's own candidate search (SPEC.md
- * Section 5.7: "the host must be placed such that the window falls
- * entirely inside it").
+ * Absolute-anchored exclusion windows, resolved once per host occurrence's
+ * own day (SPEC-v2.1 §7.4). With `dayIndex = 0` (the default), the function
+ * reproduces v1's "resolve once against day 0" behavior bit-for-bit — every
+ * existing call site continues to work unchanged. A multi-day-frame caller
+ * passes the host occurrence's own bucket dayIndex so the window falls on
+ * the correct calendar day rather than always on day 0.
  */
 export function resolveAbsoluteExclusions(
   rule: OverlapRule | null,
-  dayFrame: DayFrame
+  dayFrame: DayFrame,
+  dayIndex = 0
 ): Interval[] {
   if (!rule) return []
   return rule.exclusionWindows
     .filter((w) => w.anchor === "absolute")
-    .map((w) => resolveExclusionWindow(w, { start: 0 }, dayFrame))
+    .map((w) => resolveExclusionWindow(w, { start: 0 }, dayFrame, dayIndex))
 }
 
 /**

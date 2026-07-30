@@ -554,10 +554,11 @@ export function validateSeparation(
 
 /**
  * SPEC-v2.1 §3 / §13.2: pre-flight check for the Frame itself.
- * Currently emits FRAME_TOO_LONG for dayCount > 366; future drops may add
- * checks for defaultDayWindow / backdateHorizonMinutes shape.
- * Caller is expected to invoke this before `solve()` — like `validateActivity`
- * and `validateCatalog`, this is not auto-run inside the solver.
+ * Emits FRAME_TOO_LONG for dayCount > 366, FRAME_DEFAULT_WINDOW_INVALID
+ * for a malformed `defaultDayWindow`, and FRAME_BACKDATE_HORIZON_INVALID
+ * for a non-positive `backdateHorizonMinutes`. Caller is expected to
+ * invoke this before `solve()` — like `validateActivity` and
+ * `validateCatalog`, this is not auto-run inside the solver.
  */
 export function validateFrame(frame: DayFrame): ValidationIssue[] {
   const issues: ValidationIssue[] = []
@@ -569,6 +570,36 @@ export function validateFrame(frame: DayFrame): ValidationIssue[] {
         "FRAME_TOO_LONG",
         null,
         `Frame spans ${frame.dayCount} days; the cap is 366.`
+      ),
+    )
+  }
+
+  const dw = frame.defaultDayWindow
+  if (dw !== undefined) {
+    const wallRe = /^([01]\d|2[0-3]):[0-5]\d$/
+    if (!wallRe.test(dw.startWall) || !wallRe.test(dw.endWall)) {
+      issues.push(
+        issue(
+          "error",
+          "FRAME_DEFAULT_WINDOW_INVALID",
+          null,
+          `Frame.defaultDayWindow must use "HH:MM" wall-clock form for startWall and endWall; got ${JSON.stringify(dw)}.`
+        ),
+      )
+    }
+  }
+
+  if (
+    frame.backdateHorizonMinutes !== undefined &&
+    (!Number.isFinite(frame.backdateHorizonMinutes) ||
+      frame.backdateHorizonMinutes < 0)
+  ) {
+    issues.push(
+      issue(
+        "error",
+        "FRAME_BACKDATE_HORIZON_INVALID",
+        null,
+        `Frame.backdateHorizonMinutes must be a non-negative number; got ${frame.backdateHorizonMinutes}.`
       ),
     )
   }

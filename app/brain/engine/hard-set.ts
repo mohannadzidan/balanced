@@ -181,6 +181,10 @@ export interface HardSetContext {
     activity: Activity,
     placements: ReadonlyMap<string, Placement>
   ) => readonly number[]
+  /** SPEC-v2.1 §7.4: absolute exclusion windows resolve against the host
+   * occurrence's own bucket day, not always day 0. Undefined reproduces v1
+   * "always day 0" behavior exactly. */
+  readonly dayIndexOf?: (activity: Activity) => number
 }
 
 export interface HardSetOutcome {
@@ -213,7 +217,8 @@ function candidatesFor(
       constants: ctx.constants,
       absoluteExclusions: resolveAbsoluteExclusions(
         overlapRuleOf(activity),
-        ctx.dayFrame
+        ctx.dayFrame,
+        ctx.dayIndexOf?.(activity) ?? 0
       ),
       minSeparationMinutes: ctx.minSeparationOf?.(activity) ?? 0,
       siblingStarts: ctx.siblingStartsOf?.(activity, placements),

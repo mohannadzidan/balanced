@@ -29,4 +29,38 @@ describe("validateFrame (SPEC-v2.1 §3 / §13.2)", () => {
 		expect(issues[0].severity).toBe("error")
 		expect(issues[0].activityId).toBeNull()
 	})
+
+	it("flags FRAME_DEFAULT_WINDOW_INVALID for a malformed defaultDayWindow", () => {
+		const frame = {
+			...resolveFrame("2026-07-29", 7, "UTC"),
+			defaultDayWindow: { startWall: "25:99", endWall: "23:00" },
+		}
+		const issues = validateFrame(frame)
+		expect(issues.map((i) => i.code)).toContain("FRAME_DEFAULT_WINDOW_INVALID")
+	})
+
+	it("accepts a valid defaultDayWindow", () => {
+		const frame = {
+			...resolveFrame("2026-07-29", 7, "UTC"),
+			defaultDayWindow: { startWall: "07:00", endWall: "23:00" },
+		}
+		expect(validateFrame(frame)).toEqual([])
+	})
+
+	it("flags FRAME_BACKDATE_HORIZON_INVALID for a negative horizon", () => {
+		const frame = {
+			...resolveFrame("2026-07-29", 7, "UTC"),
+			backdateHorizonMinutes: -1,
+		}
+		const issues = validateFrame(frame)
+		expect(issues.map((i) => i.code)).toContain("FRAME_BACKDATE_HORIZON_INVALID")
+	})
+
+	it("accepts a zero backdateHorizonMinutes (no backdating past `now` at all)", () => {
+		const frame = {
+			...resolveFrame("2026-07-29", 7, "UTC"),
+			backdateHorizonMinutes: 0,
+		}
+		expect(validateFrame(frame)).toEqual([])
+	})
 })
