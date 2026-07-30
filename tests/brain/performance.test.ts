@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { solveChecked as solve } from "@/tests/brain/support/solve-checked"
-import { resolveDayFrame } from "@/app/brain/engine/time"
+import { resolveDayFrame, resolveFrame } from "@/app/brain/engine/time"
 import { activity } from "./support/fixtures"
 
 const dayFrame = resolveDayFrame("2024-06-17", "UTC")
@@ -132,5 +132,103 @@ describe("solve — performance (SPEC-v2.md 12.1 criterion 6)", () => {
     expect(result.status).not.toBe("REJECTED")
     expect(result.timeline.instances.length).toBeGreaterThan(0)
     expect(elapsedMs).toBeLessThan(1000)
+  })
+})
+
+// SPEC-v2.1 §15.1 criterion 6: "20×7-day < 100 ms, 20×30-day < 500 ms."
+// Same catalogue, multi-day frames, threshold widened to 10x for CI jitter.
+describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () => {
+  it("solves a 7-day frame with the 20-activity catalogue under 1000ms", () => {
+    const frame = resolveFrame("2024-06-17", 7, "UTC")
+    const catalog = [
+      activity("Work")
+        .rank(1)
+        .minutes(480)
+        .fixed("09:00", "17:00")
+        .repeat({ count: 1, period: "day", sharedBudget: false })
+        .build(),
+      activity("Standup")
+        .rank(2)
+        .minutes(15)
+        .fixed("09:00", "09:15")
+        .repeat({ count: 1, period: "day", sharedBudget: false })
+        .build(),
+      activity("Gym")
+        .rank(3)
+        .minutes(60)
+        .window("18:00", "20:00")
+        .repeat({ count: 3, period: "week", sharedBudget: false })
+        .build(),
+      activity("Reading")
+        .rank(4)
+        .minutes(45)
+        .window("20:00", "22:00")
+        .build(),
+      activity("Breakfast")
+        .rank(5)
+        .minutes(20)
+        .window("07:00", "08:00")
+        .build(),
+    ]
+
+    const start = performance.now()
+    const result = solve({
+      dayFrame: frame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const elapsedMs = performance.now() - start
+    expect(result.status).not.toBe("REJECTED")
+    expect(elapsedMs).toBeLessThan(1000)
+  })
+
+  it("solves a 30-day frame with the 20-activity catalogue under 5000ms", () => {
+    const frame = resolveFrame("2024-06-17", 30, "UTC")
+    const catalog = [
+      activity("Work")
+        .rank(1)
+        .minutes(480)
+        .fixed("09:00", "17:00")
+        .repeat({ count: 1, period: "day", sharedBudget: false })
+        .build(),
+      activity("Standup")
+        .rank(2)
+        .minutes(15)
+        .fixed("09:00", "09:15")
+        .repeat({ count: 1, period: "day", sharedBudget: false })
+        .build(),
+      activity("Gym")
+        .rank(3)
+        .minutes(60)
+        .window("18:00", "20:00")
+        .repeat({ count: 3, period: "week", sharedBudget: false })
+        .build(),
+      activity("Reading")
+        .rank(4)
+        .minutes(45)
+        .window("20:00", "22:00")
+        .build(),
+      activity("Breakfast")
+        .rank(5)
+        .minutes(20)
+        .window("07:00", "08:00")
+        .build(),
+    ]
+
+    const start = performance.now()
+    const result = solve({
+      dayFrame: frame,
+      now: 0,
+      catalog,
+      existing: [],
+      carryIn: [],
+      event: { type: "GENERATE_DAY" },
+    })
+    const elapsedMs = performance.now() - start
+    expect(result.status).not.toBe("REJECTED")
+    expect(elapsedMs).toBeLessThan(5000)
   })
 })
