@@ -2,6 +2,7 @@ import { placementCost } from "./cost"
 import {
   enumerateCandidateStarts,
   placeActivityWithFloor,
+  violatesSeparation,
   type PlacementContext,
 } from "./placement"
 import { evaluateCandidate } from "./resolve"
@@ -37,7 +38,16 @@ function bestChunkInInterval(
     length,
     [interval],
     context.grid
-  ).filter((s) => s >= context.freezeBoundary)
+  )
+    .filter((s) => s >= context.freezeBoundary)
+    .filter(
+      (s) =>
+        !violatesSeparation(
+          s,
+          context.minSeparationMinutes ?? 0,
+          context.siblingStarts
+        )
+    )
 
   let best: ChunkCandidate | null = null
   for (const start of starts) {

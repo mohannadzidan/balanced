@@ -3,7 +3,7 @@ import { resolveConstants } from "./constants"
 import { applyBackdating } from "./lifecycle"
 import { evaluateCandidate } from "./placement"
 import { placeGreedy } from "./greedy"
-import { placeFixedSet, placeHardSet } from "./hard-set"
+import { placeFixedSet, placeHardSetDecomposed } from "./hard-set"
 import { expand, type Occurrence } from "./expand"
 import {
   isEligibleOnDay,
@@ -25,6 +25,7 @@ import type {
   Relaxation,
   RejectionCode,
   RejectionError,
+  RepeatRule,
   Rule,
   SkipReason,
   SolveInput,
@@ -284,6 +285,21 @@ function runPipeline(
     occurrencesToSolve.map((occ) => [placementKeyOf(occ), occ])
   )
 
+  // SPEC-v2.1 §6.1: sibling placement keys for each occurrence — every
+  // other placement key belonging to one of this occurrence's activity's
+  // occurrences. Used by the discretionary greedy pass to thread
+  // `siblingStarts` into each candidate's start-to-start separation filter.
+  // Pre-computed once, not per iteration, because `occurrencesByActivityId`
+  // is stable across the whole solve.
+  const siblingPlacementKeysOf = (placementKey: string): readonly string[] => {
+    const occ = occurrenceByPlacementKey.get(placementKey)
+    if (!occ) return []
+    const siblings = occurrencesByActivityId.get(occ.activity.id) ?? []
+    return siblings
+      .map((s) => placementKeyOf(s))
+      .filter((k) => k !== placementKey)
+  }
+
   // SPEC-v2.1 §4/§5: bounds the free-interval search to the occurrence's
   // *eligible day span* (`daySpanStart`/`daySpanEnd` — the calendar day(s) a
   // window's dayIndex covers), not the window's own tight start/end. Drift
@@ -339,9 +355,13 @@ function runPipeline(
   ]
 
   // Phase 1b: the remaining hard set — MandatoryRule without a FixedRule —
-  // most-constrained first, with bounded backtracking.
+  // most-constrained first, with bounded backtracking. Routed through
+  // `placeHardSetDecomposed` (SPEC-v2.1 §6.3 / §15 row 5): union-find
+  // partition by candidate-span overlap, then `placeOccurrenceGroup` per
+  // component. Per-component node budgets sum to the global `nodeLimit`
+  // backstop. Drop 1 callers behave identically (one component = one search).
   const mandatorySet = hostPool.filter((a) => isRequired(a) && !hasFixed(a))
-  const hardOutcome = placeHardSet(mandatorySet, occupiedAfterFixed, {
+  const hardOutcome = placeHardSetDecomposed(mandatorySet, occupiedAfterFixed, {
     freezeBoundary,
     grid,
     lengthMinutes,
@@ -386,6 +406,24 @@ function runPipeline(
     allActivities: fullCatalog,
     initialHostPlacements,
     dayBoundOf,
+    // SPEC-v2.1 §6.1: thread minSeparationMinutes + sibling starts into the
+    // discretionary pass so a non-required recurrence activity (the typical
+    // "gym 3×/week" case) still respects the start-to-start filter.
+    minSeparationOf: (activity) => {
+      const rule = activity.rules.find(
+        (r): r is RepeatRule => r.type === "repeat"
+      )
+      return rule?.minSeparationMinutes ?? 0
+    },
+    siblingStartsOf: (activity, placements) => {
+      const siblingKeys = siblingPlacementKeysOf(activity.id)
+      const starts: number[] = []
+      for (const key of siblingKeys) {
+        const p = placements.get(key)
+        if (p) starts.push(p.start)
+      }
+      return starts
+    },
   })
   const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
     (chunks) => chunks.map((c) => ({ start: c.start, end: c.end }))
@@ -583,6 +621,11 @@ interface EventPlan {
   readonly shortCircuitResult: SolveResult | null
   /** Activity ids excluded from re-solving (SKIP's target). */
   readonly excludeActivityIds: ReadonlySet<string> | null
+  /** SPEC-v2.1 §9.1: interval to re-solve. Instances placed entirely
+   *  outside this interval become anchors (locked, contribute to
+   *  `baseOccupied` but aren't re-placed). Default:
+   *  `[freezeBoundary, lengthMinutes)`. */
+  readonly scope: { start: number; end: number }
 }
 
 /**
@@ -765,6 +808,19 @@ function runEvent(
 
   const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
     extractAnchors(plan.workingExisting)
+  // SPEC-v2.1 §8.1: prelude blocks from a prior frame occupy
+  // `[max(0, start), end)` of this frame's coordinates. Applied here rather
+  // than inside `extractAnchors` so the existing function's surface stays
+  // tight on `existing`-only inputs.
+  const lengthMinutes = input.dayFrame.lengthMinutes
+  for (const b of input.prelude ?? []) {
+    if (b.plannedStart === null || b.plannedEnd === null) continue
+    if (b.plannedEnd <= 0 || b.plannedStart >= lengthMinutes) continue
+    baseOccupied.push({
+      start: Math.max(0, b.plannedStart),
+      end: Math.min(lengthMinutes, b.plannedEnd),
+    })
+  }
   const excluded = plan.excludeActivityIds
   const activitiesToSolve = [
     ...catalog.filter(
@@ -996,7 +1052,7 @@ function adhocActivitiesFrom(
 }
 
 /**
- * FINALISE_DAY (SPEC.md Section 9.8): backdate whatever residue is left,
+ * FINALISE_FRAME (SPEC-v2.1 §8.4 / SPEC.md Section 9.8): backdate whatever residue is left,
  * snapshot it as today's closed record, and derive the carry-in list for
  * tomorrow's day frame — the engine's only cross-day link; it holds no
  * other state between days. Rejects (INVALID_STATE_FOR_EVENT) if the day
@@ -1082,6 +1138,57 @@ function solveFinaliseDay(
   return { status, timeline, rejection: null, diagnostics, cost, trace: null }
 }
 
+/**
+ * SPEC-v2.1 §9.1: default scope is `[freezeBoundary, end of the day
+ * containing freezeBoundary)`. At `dayCount = 1` this is exactly the rest
+ * of the day (v1 behavior). Multi-day frames get the rest of whichever
+ * calendar day holds `freezeBoundary`. `SolveInput.options.scope: "frame"`
+ * widens to the full frame.
+ */
+function defaultScope(
+  input: SolveInput,
+  freezeBoundary: number
+): { start: number; end: number } {
+  const opt = input.options?.scope
+  if (opt === "frame") {
+    return { start: 0, end: input.dayFrame.lengthMinutes }
+  }
+  if (opt && typeof opt === "object") return opt
+  const day = input.dayFrame.days.find(
+    (d) =>
+      freezeBoundary >= d.startOffset &&
+      freezeBoundary < d.startOffset + d.lengthMinutes
+  )
+  const end = day
+    ? day.startOffset + day.lengthMinutes
+    : input.dayFrame.lengthMinutes
+  return { start: freezeBoundary, end }
+}
+
+/**
+ * SPEC-v2.1 §9.1: out-of-scope PLANNED instances become locked anchors
+ * (so they stay put but still contribute occupied time). Already-anchored
+ * instances (ACTIVE/COMPLETED/CARRIED_IN/locked) are untouched regardless
+ * of scope. Replaces the input's `existing` with the partition.
+ */
+function scopePartitionExisting(
+  existing: readonly TimelineActivity[],
+  scope: { start: number; end: number }
+): readonly TimelineActivity[] {
+  return existing.map((i) => {
+    const isAlreadyAnchored =
+      i.state === "ACTIVE" ||
+      i.state === "COMPLETED" ||
+      i.state === "CARRIED_IN" ||
+      i.locked
+    if (isAlreadyAnchored) return i
+    if (i.plannedStart === null || i.plannedEnd === null) return i
+    const intersects = i.plannedStart < scope.end && i.plannedEnd > scope.start
+    if (intersects) return i
+    return { ...i, locked: true }
+  })
+}
+
 function rejectionPlan(
   code: RejectionCode,
   message: string,
@@ -1100,6 +1207,7 @@ function rejectionPlan(
     totalRankedOverride: null,
     shortCircuitResult: null,
     excludeActivityIds: null,
+    scope: { start: 0, end: 0 },
   }
 }
 
@@ -1114,9 +1222,11 @@ function planEvent(
   todaysCatalog: readonly Activity[],
   totalRanked: number
 ): EventPlan {
+  const scopeInterval = defaultScope(input, input.now)
+  const scopedExisting = scopePartitionExisting(input.existing, scopeInterval)
   const basePlan: EventPlan = {
     rejection: null,
-    workingExisting: input.existing,
+    workingExisting: scopedExisting,
     freezeBoundary: input.now,
     extraActivities: [],
     checkRejection: false,
@@ -1127,11 +1237,12 @@ function planEvent(
     totalRankedOverride: null,
     shortCircuitResult: null,
     excludeActivityIds: null,
+    scope: scopeInterval,
   }
 
   if (input.event.type === "TICK") {
     const { instances: backdated, changed } = applyBackdating(
-      input.existing,
+      basePlan.workingExisting,
       input.now
     )
     if (!changed) {
@@ -1266,10 +1377,14 @@ function planEvent(
       actualStart,
       actualEnd: event.at,
     }
+    const finishedExisting = input.existing.map((i) =>
+      i.id === target.id ? finished : i
+    )
     return {
       ...basePlan,
-      workingExisting: input.existing.map((i) =>
-        i.id === target.id ? finished : i
+      workingExisting: scopePartitionExisting(
+        finishedExisting,
+        defaultScope(input, event.at)
       ),
       freezeBoundary: event.at,
       checkRejection: true,
@@ -1460,12 +1575,12 @@ export function solve(input: SolveInput): SolveResult {
     )
   }
 
-  if (input.event.type === "FINALISE_DAY") {
+  if (input.event.type === "FINALISE_FRAME") {
     return solveFinaliseDay(input, constants, totalRanked)
   }
 
-  // SPEC.md Section 8.3 step 4 / 3.4: carry-in blocks from a prior day's
-  // FINALISE_DAY are anchors from this day's very first solve onward. The
+  // SPEC.md Section 8.3 step 4 / 3.4: carry-in blocks from a prior frame's
+  // FINALISE_FRAME are anchors from this frame's very first solve onward. The
   // caller supplies them exactly once — typically alongside GENERATE_DAY —
   // and every later event of the same day already carries them forward
   // inside `existing` (the same convention `existing` itself already

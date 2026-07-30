@@ -19,6 +19,36 @@ export interface PlacementContext {
    * must fully contain every one of these windows.
    */
   readonly absoluteExclusions?: readonly Interval[]
+  /**
+   * SPEC-v2.1 §6.1: when this occurrence has already-placed siblings,
+   * `minSeparationMinutes` rejects any candidate start within that window
+   * of any sibling's start (start-to-start). Unset / 0 disables the
+   * filter — the existing single-occurrence path is unchanged.
+   */
+  readonly minSeparationMinutes?: number
+  /** SPEC-v2.1 §6.1: sibling starts to keep `minSeparationMinutes` clear of. */
+  readonly siblingStarts?: readonly number[]
+}
+
+/**
+ * SPEC-v2.1 §6.1: pure start-to-start separation filter. Discard any
+ * candidate start within `minSeparationMinutes` of an already-placed
+ * sibling's start. Feasibility-only — never a cost term (§6.1: "Separation
+ * is feasibility, never cost") — which keeps every cost local to the
+ * candidate and lets greedy-earliest fall out cleanly across siblings.
+ */
+export function violatesSeparation(
+  start: number,
+  minSeparationMinutes: number,
+  siblingStarts: readonly number[] | undefined
+): boolean {
+  if (minSeparationMinutes <= 0 || !siblingStarts || siblingStarts.length === 0) {
+    return false
+  }
+  for (const s of siblingStarts) {
+    if (Math.abs(start - s) < minSeparationMinutes) return true
+  }
+  return false
 }
 
 function containsAllExclusions(
@@ -73,7 +103,16 @@ export function enumerateFeasiblePlacementsForLength(
     length,
     context.freeIntervals,
     context.grid
-  ).filter((s) => s >= context.freezeBoundary)
+  )
+    .filter((s) => s >= context.freezeBoundary)
+    .filter(
+      (s) =>
+        !violatesSeparation(
+          s,
+          context.minSeparationMinutes ?? 0,
+          context.siblingStarts
+        )
+    )
 
   const ranked: { placement: Placement; cost: number }[] = []
   for (const start of starts) {

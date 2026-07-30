@@ -54,7 +54,7 @@
  * Subsequent calls pass the previous `result.timeline.instances` back in as
  * `existing`, with a new `event` (e.g. `{ type: "TICK" }` or
  * `{ type: "FINISH_EARLY", instanceId, at }`). At end of day, send
- * `{ type: "FINALISE_DAY" }` and carry `result.timeline.carryIn` into
+ * `{ type: "FINALISE_FRAME" }` and carry `result.timeline.carryIn` into
  * tomorrow's `carryIn`.
  */
 

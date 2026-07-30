@@ -168,6 +168,19 @@ export interface HardSetContext {
    * Undefined for every existing caller (dayCount=1, or any activity that
    * isn't a §15 row 2 ghost), which reproduces today's behavior exactly. */
   readonly dayBoundOf?: (activity: Activity) => Interval | undefined
+  /** SPEC-v2.1 §6.1: per-item `minSeparationMinutes` (start-to-start against
+   * any already-placed sibling). Undefined for the legacy single-occurrence
+   * path, which reproduces today's behavior exactly. */
+  readonly minSeparationOf?: (activity: Activity) => number
+  /** SPEC-v2.1 §6.1: per-item list of already-placed sibling starts. The
+   * `placements` map is keyed by `solveActivities[i].id` (= `placementKeyOf`
+   * for an occurrence, which equals its own occurrence id when the activity
+   * has multiple occurrences this solve). Paired with `minSeparationOf` to
+   * thread the start-to-start filter through the existing enumeration. */
+  readonly siblingStartsOf?: (
+    activity: Activity,
+    placements: ReadonlyMap<string, Placement>
+  ) => readonly number[]
 }
 
 export interface HardSetOutcome {
@@ -179,7 +192,8 @@ export interface HardSetOutcome {
 function candidatesFor(
   activity: Activity,
   occupied: readonly Interval[],
-  ctx: HardSetContext
+  ctx: HardSetContext,
+  placements: ReadonlyMap<string, Placement> = new Map()
 ): Placement[] {
   const dayBound = ctx.dayBoundOf?.(activity)
   const freeIntervals = computeFreeIntervals(
@@ -201,6 +215,8 @@ function candidatesFor(
         overlapRuleOf(activity),
         ctx.dayFrame
       ),
+      minSeparationMinutes: ctx.minSeparationOf?.(activity) ?? 0,
+      siblingStarts: ctx.siblingStartsOf?.(activity, placements),
     }
   )
 }
@@ -251,7 +267,10 @@ export function placeHardSet(
         ...baseOccupied,
         ...path.map((idx) => placements.get(ordered[idx].id) as Placement),
       ]
-      frame = { candidates: candidatesFor(activity, occupied, ctx), attempt: 0 }
+      frame = {
+        candidates: candidatesFor(activity, occupied, ctx, placements),
+        attempt: 0,
+      }
       frames.set(cursor, frame)
     }
 
@@ -278,4 +297,151 @@ export function placeHardSet(
   }
 
   return { placements, skipped, nodesUsed: nodes }
+}
+
+/**
+ * SPEC-v2.1 §6.2: place a group of sibling occurrences (one activity's
+ * expansion this solve) as one bounded-backtracking node. A "thin wrapper
+ * over placeHardSet" by design — the spec explicitly forbids writing a
+ * second search: the existing routine already sorts most-constrained-first,
+ * already backtracks on failure, and already shares a single node-limit
+ * budget. The only thing it doesn't do natively is per-occurrence
+ * `minSeparationMinutes`; that's wired via two optional callbacks on
+ * `HardSetContext` (`minSeparationOf` / `siblingStartsOf`) that are no-ops
+ * for every non-occurrence-group caller.
+ *
+ * `minSeparationOf` reads `minSeparationMinutes` off any `RepeatRule` on
+ * the item. `siblingStartsOf` returns the starts of every *other* group
+ * member already committed in this search (every key in `placements`
+ * belonging to one of `items` whose start isn't this item's own current
+ * candidate — same-group and same-item are filtered out).
+ *
+ * Caller is expected to feed the group in their natural occurrence order;
+ * `placeHardSet` reorders internally to most-constrained-first, so the
+ * caller's ordering is informational only.
+ */
+export function placeOccurrenceGroup(
+  items: readonly Activity[],
+  baseOccupied: readonly Interval[],
+  ctx: HardSetContext
+): HardSetOutcome {
+  const itemIds = new Set(items.map((i) => i.id))
+  const siblingStartsOf = (
+    activity: Activity,
+    placements: ReadonlyMap<string, Placement>
+  ): readonly number[] => {
+    const starts: number[] = []
+    for (const [id, p] of placements) {
+      if (!itemIds.has(id) || id === activity.id) continue
+      starts.push(p.start)
+    }
+    return starts
+  }
+  const minSeparationOf = (activity: Activity): number => {
+    const rule = activity.rules.find(
+      (r): r is import("./types").RepeatRule => r.type === "repeat"
+    )
+    return rule?.minSeparationMinutes ?? 0
+  }
+  return placeHardSet(items, baseOccupied, {
+    ...ctx,
+    minSeparationOf,
+    siblingStartsOf,
+  })
+}
+
+/**
+ * SPEC-v2.1 §15 row 5 / §6.3 footgun mitigation: required occurrences whose
+ * candidate spans don't overlap cannot conflict — group them by candidate-
+ * span overlap (union-find) and run `placeOccurrenceGroup` per component,
+ * so each search stays well inside `nodeLimit`. The global limit stays as
+ * a backstop across components (sum of `nodesUsed`).
+ *
+ * "About twenty lines" per the spec. Implementation: precompute every
+ * item's candidate span (`[min(start), max(end)]` across its feasible
+ * candidates — already cached inside `candidatesFor`); union-find by
+ * pairwise span overlap; run `placeOccurrenceGroup` per component. Items
+ * with no feasible candidates fall straight into the skip map with
+ * `INFEASIBLE_HARD_CONSTRAINT` — no point sending them through a search.
+ */
+export function placeHardSetDecomposed(
+  items: readonly Activity[],
+  baseOccupied: readonly Interval[],
+  ctx: HardSetContext
+): HardSetOutcome {
+  const placements = new Map<string, Placement>()
+  const skipped = new Map<string, SkipReason>()
+  let nodesUsed = 0
+
+  // Precompute each item's candidate span. An item with zero feasible
+  // candidates is dead on arrival — record the skip here and exclude from
+  // decomposition so the search doesn't waste a node on it.
+  const span = new Map<string, { start: number; end: number }>()
+  const alive: Activity[] = []
+  for (const item of items) {
+    const candidates = candidatesFor(item, baseOccupied, ctx, placements)
+    if (candidates.length === 0) {
+      skipped.set(item.id, "INFEASIBLE_HARD_CONSTRAINT")
+      continue
+    }
+    let s = Number.POSITIVE_INFINITY
+    let e = Number.NEGATIVE_INFINITY
+    for (const c of candidates) {
+      if (c.start < s) s = c.start
+      if (c.end > e) e = c.end
+    }
+    span.set(item.id, { start: s, end: e })
+    alive.push(item)
+  }
+  if (alive.length === 0) {
+    return { placements, skipped, nodesUsed }
+  }
+
+  // Union-find by pairwise span overlap.
+  const parent = new Map<string, string>()
+  for (const item of alive) parent.set(item.id, item.id)
+  const find = (x: string): string => {
+    let r = x
+    while (parent.get(r) !== r) {
+      const p = parent.get(r) as string
+      parent.set(r, parent.get(p) as string) // path compression
+      r = parent.get(r) as string
+    }
+    return r
+  }
+  const union = (a: string, b: string) => {
+    const ra = find(a)
+    const rb = find(b)
+    if (ra !== rb) parent.set(ra, rb)
+  }
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) {
+      const sa = span.get(alive[i].id)!
+      const sb = span.get(alive[j].id)!
+      if (sa.start < sb.end && sb.start < sa.end) {
+        union(alive[i].id, alive[j].id)
+      }
+    }
+  }
+  const components = new Map<string, Activity[]>()
+  for (const item of alive) {
+    const root = find(item.id)
+    const arr = components.get(root) ?? []
+    arr.push(item)
+    components.set(root, arr)
+  }
+
+  // Run each component through the existing bounded search.
+  for (const component of components.values()) {
+    const componentOccupied: Interval[] = [
+      ...baseOccupied,
+      ...[...placements.values()].map((p) => ({ start: p.start, end: p.end })),
+    ]
+    const outcome = placeOccurrenceGroup(component, componentOccupied, ctx)
+    for (const [id, p] of outcome.placements) placements.set(id, p)
+    for (const [id, s] of outcome.skipped) skipped.set(id, s)
+    nodesUsed += outcome.nodesUsed
+  }
+
+  return { placements, skipped, nodesUsed }
 }

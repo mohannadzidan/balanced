@@ -72,7 +72,7 @@ describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
         catalog,
         existing: dayA.timeline.instances,
         carryIn: [],
-        event: { type: "FINALISE_DAY" },
+        event: { type: "FINALISE_FRAME" },
         revision: dayA.timeline.revision,
       })
       expect(finalisedA.status).not.toBe("REJECTED")

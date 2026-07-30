@@ -24,8 +24,17 @@ function elasticityRuleOf(activity: Activity): ElasticityRule | null {
   )
 }
 
-function repeatRuleOf(activity: Activity): RepeatRule | null {
-  return activity.rules.find((r): r is RepeatRule => r.type === "repeat") ?? null
+// SPEC-v2.1 §5.4: an activity may carry a chunking RepeatRule (sharedBudget:
+// true, feeds placeWithElasticity's chunk plan) and a recurrence RepeatRule
+// (sharedBudget: false, feeds expand()'s bucketing) at once — only the
+// chunking one is relevant here, so this must not just grab whichever
+// RepeatRule happens to appear first in `rules`.
+export function repeatRuleOf(activity: Activity): RepeatRule | null {
+  return (
+    activity.rules.find(
+      (r): r is RepeatRule => r.type === "repeat" && r.sharedBudget
+    ) ?? null
+  )
 }
 
 function elasticityFloorOf(activity: Activity): number {
@@ -47,6 +56,14 @@ export interface GreedyContext {
   readonly initialHostPlacements: ReadonlyMap<string, Placement>
   /** SPEC-v2.1 §15 row 2: see HardSetContext.dayBoundOf's docstring. */
   readonly dayBoundOf?: (activity: Activity) => Interval | undefined
+  /** SPEC-v2.1 §6.1: per-activity `minSeparationMinutes` from its RepeatRule. */
+  readonly minSeparationOf?: (activity: Activity) => number
+  /** SPEC-v2.1 §6.1: starts of sibling occurrences already placed (greedy
+   *  visits each occurrence in turn, so the prior ones are the siblings). */
+  readonly siblingStartsOf?: (
+    activity: Activity,
+    placements: ReadonlyMap<string, Placement>
+  ) => readonly number[]
 }
 
 export interface GreedyOutcome {
@@ -116,6 +133,8 @@ export function placeGreedy(
         overlapRuleOf(activity),
         ctx.dayFrame
       ),
+      minSeparationMinutes: ctx.minSeparationOf?.(activity) ?? 0,
+      siblingStarts: ctx.siblingStartsOf?.(activity, placements),
     }
     const freeResult = placeWithElasticity(
       resolved,

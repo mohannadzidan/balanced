@@ -4,10 +4,13 @@ import { DEFAULT_COST_CONSTANTS } from "@/app/brain/engine/constants"
 import {
   validateActivity,
   validateCatalog,
+  validateSeparation,
 } from "@/app/brain/engine/validation"
+import { resolveFrame } from "@/app/brain/engine/time"
 import { activity } from "./support/fixtures"
 
 const C = DEFAULT_COST_CONSTANTS
+const frame = resolveFrame("2026-07-27", 1, "UTC")
 
 function codesOf(issues: ReturnType<typeof validateActivity>): string[] {
   return issues.map((i) => i.code)
@@ -113,7 +116,7 @@ describe("validateActivity", () => {
     expect(codesOf(validateActivity(bad, C))).toContain("ELASTICITY_INVALID")
   })
 
-  it("flags NOT_YET_SUPPORTED for a RepeatRule with minSeparationMinutes other than 0 (SPEC-v2.1 §13.1)", () => {
+  it("no longer flags NOT_YET_SUPPORTED for minSeparationMinutes > 0 (lifted in SPEC-v2.1 §13.1 step 4)", () => {
     const bad = activity("Bad").rank(1).minutes(60).build()
     const withRepeat = {
       ...bad,
@@ -128,8 +131,55 @@ describe("validateActivity", () => {
         },
       ],
     }
-    expect(codesOf(validateActivity(withRepeat, C))).toContain(
+    expect(codesOf(validateActivity(withRepeat, C))).not.toContain(
       "NOT_YET_SUPPORTED"
+    )
+  })
+
+  it("flags SEPARATION_UNSATISFIABLE when minSeparationMinutes makes even the day bucket infeasible", () => {
+    // 2 × 600m + 1 × 600m = 1800m separation need, but a day is 1440m — the
+    // activity simply cannot fit two 10h sessions separated by 10h on a
+    // single day.
+    const bad = activity("Bad").rank(1).minutes(600).build()
+    const withRepeat = {
+      ...bad,
+      rules: [
+        {
+          type: "repeat" as const,
+          source: "template" as const,
+          period: "day" as const,
+          count: 2,
+          sharedBudget: false,
+          minSeparationMinutes: 600,
+        },
+      ],
+    }
+    expect(codesOf(validateActivity(withRepeat, C))).not.toContain(
+      "NOT_YET_SUPPORTED"
+    )
+    expect(codesOf(validateSeparation(withRepeat, frame))).toContain(
+      "SEPARATION_UNSATISFIABLE"
+    )
+  })
+
+  it("does not flag SEPARATION_UNSATISFIABLE when the day bucket fits", () => {
+    // 3 × 60m + 2 × 360m = 900m need, day is 1440m — comfortable fit.
+    const ok = activity("Ok").rank(1).minutes(60).build()
+    const withRepeat = {
+      ...ok,
+      rules: [
+        {
+          type: "repeat" as const,
+          source: "template" as const,
+          period: "day" as const,
+          count: 3,
+          sharedBudget: false,
+          minSeparationMinutes: 360,
+        },
+      ],
+    }
+    expect(codesOf(validateSeparation(withRepeat, frame))).not.toContain(
+      "SEPARATION_UNSATISFIABLE"
     )
   })
 

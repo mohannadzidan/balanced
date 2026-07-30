@@ -247,26 +247,20 @@ function checkDriftUnavoidable(
 }
 
 /**
- * SPEC-v2.1 §13.1: Drop 2 step 3 lifts the `sharedBudget`/`period` part of
- * this gate — `expand()` (SPEC-v2.1 §5) now bucket-partitions and repeats a
- * recurrence RepeatRule (`sharedBudget: false`) over any `period`. Step 4
- * (§6.1) still owns `minSeparationMinutes`, which nothing places against yet.
+ * SPEC-v2.1 §13.1 step 3: `sharedBudget` and `period ≠ "day"` are now
+ * wired into placement; step 4 wires `minSeparationMinutes` too. The only
+ * remaining reason this gate exists is to reserve a choke point for any
+ * future RepeatRule field that lands before its placement story — it is
+ * currently a no-op.
  */
 function checkNotYetSupported(
   activity: Activity,
   rule: RepeatRule,
   issues: ValidationIssue[]
 ): void {
-  if (rule.minSeparationMinutes !== 0) {
-    issues.push(
-      issue(
-        "error",
-        "NOT_YET_SUPPORTED",
-        activity.id,
-        `"${activity.name}" RepeatRule uses a feature not yet supported (minSeparationMinutes other than 0)`
-      )
-    )
-  }
+  void rule
+  void activity
+  void issues
 }
 
 /** SPEC-v2.md Section 8.2: two RepeatRules with the same sharedBudget value. */
@@ -364,14 +358,22 @@ export function validateActivity(
     )
   }
 
-  // SPEC-v2.md Section 8.2: requiredCount < 0, or > 1 in Drop 1.
-  if (activity.requiredCount < 0 || activity.requiredCount > 1) {
+  // SPEC-v2.1 §13.1: requiredCount < 0 or > count is now invalid; the upper
+  // bound widens from 1 (Drop 1) to count (the recurrence's count). "At
+  // most as many required occurrences as the activity declares" — anything
+  // beyond that is an authoring mistake.
+  const repeatCount = activity.rules
+    .filter(
+      (r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget
+    )
+    .reduce((max, r) => Math.max(max, r.count), 1)
+  if (activity.requiredCount < 0 || activity.requiredCount > repeatCount) {
     issues.push(
       issue(
         "error",
         "REQUIRED_COUNT_INVALID",
         activity.id,
-        `"${activity.name}" requiredCount ${activity.requiredCount} must be 0 or 1 in Drop 1`
+        `"${activity.name}" requiredCount ${activity.requiredCount} must be in [0, ${repeatCount}]`
       )
     )
   }
@@ -494,6 +496,59 @@ export function validateCatalog(
   checkSequenceCycle(activities, issues)
   checkGuestOutranksHost(activities, issues)
 
+  return issues
+}
+
+/**
+ * SPEC-v2.1 §6.1/§13.2: pure-arithmetic pre-flight for a recurrence with
+ * `minSeparationMinutes > 0`. Emits `SEPARATION_UNSATISFIABLE` when even
+ * the tightest realistic bucket (a day, for non-frame periods; the full
+ * frame, for `period: "frame"`) cannot hold `count` sessions separated by
+ * `minSeparationMinutes` — `(count × duration) + ((count − 1) × minSeparation)
+ * > bucketLength`. This catches the common authoring mistake (e.g.
+ * "three times a day, 6h apart" against a 60-minute duration) without
+ * running a solve.
+ *
+ * Caller is expected to invoke this before `solve()` — like
+ * `validateActivity`, this is not auto-run inside the solver.
+ */
+export function validateSeparation(
+  activity: Activity,
+  dayFrame: DayFrame
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  const repeats = activity.rules.filter(
+    (r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget
+  )
+  for (const rule of repeats) {
+    if (rule.minSeparationMinutes <= 0) continue
+    const sep = rule.minSeparationMinutes
+    const count = rule.count
+    const duration = activity.durationMinutes
+    // Tightest realistic bucket: a single day for any period smaller than
+    // `frame`, the full frame for `period: "frame"`. If the day-bucket
+    // already fits, the activity is feasible across every bucket shape;
+    // if it doesn't, the activity cannot fit any way the recurrence can
+    // be configured. The arithmetic is an upper bound on real bucket
+    // extent — fine for a "this catalog entry is fundamentally broken"
+    // signal, not for sizing specific buckets.
+    const smallestBucketLength =
+      rule.period === "frame"
+        ? dayFrame.lengthMinutes
+        : dayFrame.days.length > 0
+          ? dayFrame.days[0].lengthMinutes
+          : dayFrame.lengthMinutes
+    if (count * duration + (count - 1) * sep > smallestBucketLength) {
+      issues.push(
+        issue(
+          "error",
+          "SEPARATION_UNSATISFIABLE",
+          activity.id,
+          `"${activity.name}" requires ${count} × ${duration}m + ${count - 1} × ${sep}m separation (>${smallestBucketLength}m smallest bucket)`,
+        ),
+      )
+    }
+  }
   return issues
 }
 

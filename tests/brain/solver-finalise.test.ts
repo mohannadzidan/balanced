@@ -6,7 +6,7 @@ import { activity } from "./support/fixtures"
 
 const dayFrame = resolveDayFrame("2024-06-17", "UTC")
 
-describe("solve — FINALISE_DAY (SPEC.md 9.8)", () => {
+describe("solve — FINALISE_FRAME (SPEC.md 9.8)", () => {
   it("rejects with INVALID_STATE_FOR_EVENT before the day has ended", () => {
     const catalog = [activity("Work").rank(1).minutes(60).build()]
     const generated = solve({
@@ -24,7 +24,7 @@ describe("solve — FINALISE_DAY (SPEC.md 9.8)", () => {
       catalog,
       existing: generated.timeline.instances,
       carryIn: [],
-      event: { type: "FINALISE_DAY" },
+      event: { type: "FINALISE_FRAME" },
       revision: generated.timeline.revision,
     })
     expect(result.status).toBe("REJECTED")
@@ -76,7 +76,7 @@ describe("solve — FINALISE_DAY (SPEC.md 9.8)", () => {
       catalog,
       existing: extended.timeline.instances,
       carryIn: [],
-      event: { type: "FINALISE_DAY" },
+      event: { type: "FINALISE_FRAME" },
       revision: extended.timeline.revision,
     })
 

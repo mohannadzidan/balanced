@@ -248,4 +248,300 @@ describe("checkInvariants — SPEC.md §4.5 invariants", () => {
 		const violations = checkInvariants(timeline)
 		expect(violations).toHaveLength(0)
 	})
+
+	it("Invariant 10: catches two blocks sharing an occurrenceId but disagreeing on bucketKey", () => {
+		const a = makeInstance({
+			id: "a",
+			occurrenceId: "gym@2026-W31#1",
+			bucketKey: "2026-W31",
+			chunkGroupId: "gym@2026-W31#1",
+			blockIndex: 1,
+			blockCount: 2,
+		})
+		const b = makeInstance({
+			id: "b",
+			occurrenceId: "gym@2026-W31#1", // same occurrenceId
+			bucketKey: "2026-W32", // but disagrees on bucket
+			chunkGroupId: "gym@2026-W31#1",
+			blockIndex: 2,
+			blockCount: 2,
+			plannedStart: 600,
+			plannedEnd: 660,
+		})
+		const timeline = makeBaseTimeline([a, b])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_10_ONE_OCCURRENCE_ONE_BUCKET")).toBe(true)
+	})
+
+	it("Invariant 10: allows two chunks of one occurrence sharing occurrenceId and bucketKey", () => {
+		const a = makeInstance({
+			id: "a",
+			occurrenceId: "gym@2026-W31#1",
+			bucketKey: "2026-W31",
+			chunkGroupId: "gym@2026-W31#1",
+			blockIndex: 1,
+			blockCount: 2,
+			plannedStart: 540,
+			plannedEnd: 570,
+		})
+		const b = makeInstance({
+			id: "b",
+			occurrenceId: "gym@2026-W31#1",
+			bucketKey: "2026-W31",
+			chunkGroupId: "gym@2026-W31#1",
+			blockIndex: 2,
+			blockCount: 2,
+			plannedStart: 600,
+			plannedEnd: 630,
+		})
+		const timeline = makeBaseTimeline([a, b])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_10_ONE_OCCURRENCE_ONE_BUCKET")).toBe(false)
+	})
+
+	it("Invariant 14: catches two distinct occurrences sharing the same occurrenceId", () => {
+		const a = makeInstance({
+			id: "a",
+			occurrenceId: "gym@2026-W31#1",
+			occurrenceIndex: 1,
+			bucketKey: "2026-W31",
+		})
+		const b = makeInstance({
+			id: "b",
+			occurrenceId: "gym@2026-W31#1", // same id
+			occurrenceIndex: 2, // but a distinct occurrence
+			bucketKey: "2026-W31",
+			plannedStart: 600,
+			plannedEnd: 660,
+		})
+		const timeline = makeBaseTimeline([a, b])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_14_UNIQUE_OCCURRENCE_ID")).toBe(true)
+	})
+
+	it("Invariant 14: allows distinct occurrences with distinct occurrenceIds", () => {
+		const a = makeInstance({
+			id: "a",
+			occurrenceId: "gym@2026-W31#1",
+			occurrenceIndex: 1,
+			bucketKey: "2026-W31",
+		})
+		const b = makeInstance({
+			id: "b",
+			occurrenceId: "gym@2026-W31#2",
+			occurrenceIndex: 2,
+			bucketKey: "2026-W31",
+			plannedStart: 600,
+			plannedEnd: 660,
+		})
+		const timeline = makeBaseTimeline([a, b])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_14_UNIQUE_OCCURRENCE_ID")).toBe(false)
+	})
+
+	it("Invariant 11: catches a bucket holding more occurrences of an activity than its RepeatRule count", () => {
+		const repeatRule = {
+			type: "repeat" as const,
+			source: "template" as const,
+			period: "week" as const,
+			count: 2,
+			sharedBudget: false,
+			minSeparationMinutes: 0,
+		}
+		const o1 = makeInstance({
+			id: "o1",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#1",
+			occurrenceIndex: 1,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 540,
+			plannedEnd: 600,
+		})
+		const o2 = makeInstance({
+			id: "o2",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#2",
+			occurrenceIndex: 2,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 600,
+			plannedEnd: 660,
+		})
+		const o3 = makeInstance({
+			id: "o3",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#3",
+			occurrenceIndex: 3,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 660,
+			plannedEnd: 720,
+		})
+		const timeline = makeBaseTimeline([o1, o2, o3])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_11_BUCKET_COUNT_CAP")).toBe(true)
+	})
+
+	it("Invariant 11: allows a bucket holding exactly its RepeatRule count of occurrences", () => {
+		const repeatRule = {
+			type: "repeat" as const,
+			source: "template" as const,
+			period: "week" as const,
+			count: 2,
+			sharedBudget: false,
+			minSeparationMinutes: 0,
+		}
+		const o1 = makeInstance({
+			id: "o1",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#1",
+			occurrenceIndex: 1,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 540,
+			plannedEnd: 600,
+		})
+		const o2 = makeInstance({
+			id: "o2",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#2",
+			occurrenceIndex: 2,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 600,
+			plannedEnd: 660,
+		})
+		const timeline = makeBaseTimeline([o1, o2])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_11_BUCKET_COUNT_CAP")).toBe(false)
+	})
+
+	it("Invariant 13: catches a placement outside its WindowRule's eligible day span", () => {
+		const twoDayFrame = makeDayFrame({
+			dayCount: 2,
+			lengthMinutes: 2880,
+			days: [
+				{ index: 0, date: "2026-07-27", weekday: "MON", startOffset: 0, lengthMinutes: 1440 },
+				{ index: 1, date: "2026-07-28", weekday: "TUE", startOffset: 1440, lengthMinutes: 1440 },
+			],
+		})
+		const inst = makeInstance({
+			id: "i",
+			date: "2026-07-28",
+			rules: [
+				{
+					type: "window",
+					source: "template",
+					days: ["MON"], // only Monday (day 0) is eligible
+					startWall: "00:00",
+					endWall: "24:00",
+					maxDriftMinutes: 0,
+				},
+			],
+			plannedStart: 1440 + 540, // Tuesday 09:00 — outside the eligible span
+			plannedEnd: 1440 + 600,
+		})
+		const timeline = { ...makeBaseTimeline([inst]), dayFrame: twoDayFrame }
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_13_WITHIN_ELIGIBLE_DAY_SPAN")).toBe(true)
+	})
+
+	it("Invariant 13: allows a placement inside its WindowRule's eligible day span", () => {
+		const twoDayFrame = makeDayFrame({
+			dayCount: 2,
+			lengthMinutes: 2880,
+			days: [
+				{ index: 0, date: "2026-07-27", weekday: "MON", startOffset: 0, lengthMinutes: 1440 },
+				{ index: 1, date: "2026-07-28", weekday: "TUE", startOffset: 1440, lengthMinutes: 1440 },
+			],
+		})
+		const inst = makeInstance({
+			id: "i",
+			date: "2026-07-27",
+			rules: [
+				{
+					type: "window",
+					source: "template",
+					days: ["MON"],
+					startWall: "00:00",
+					endWall: "24:00",
+					maxDriftMinutes: 0,
+				},
+			],
+			plannedStart: 540, // Monday 09:00 — inside the eligible span
+			plannedEnd: 600,
+		})
+		const timeline = { ...makeBaseTimeline([inst]), dayFrame: twoDayFrame }
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_13_WITHIN_ELIGIBLE_DAY_SPAN")).toBe(false)
+	})
+
+	it("Invariant 12: catches sibling occurrences closer than minSeparationMinutes", () => {
+		const repeatRule = {
+			type: "repeat" as const,
+			source: "template" as const,
+			period: "week" as const,
+			count: 3,
+			sharedBudget: false,
+			minSeparationMinutes: 48 * 60,
+		}
+		const a = makeInstance({
+			id: "a",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#1",
+			occurrenceIndex: 1,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 540,
+			plannedEnd: 600,
+		})
+		const b = makeInstance({
+			id: "b",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#2",
+			occurrenceIndex: 2,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 540 + 24 * 60, // 24h apart — violates 48h separation
+			plannedEnd: 600 + 24 * 60,
+		})
+		const timeline = makeBaseTimeline([a, b])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_12_SIBLING_SEPARATION")).toBe(true)
+	})
+
+	it("Invariant 12: allows siblings ≥ minSeparationMinutes apart", () => {
+		const repeatRule = {
+			type: "repeat" as const,
+			source: "template" as const,
+			period: "week" as const,
+			count: 3,
+			sharedBudget: false,
+			minSeparationMinutes: 48 * 60,
+		}
+		const a = makeInstance({
+			id: "a",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#1",
+			occurrenceIndex: 1,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 540,
+			plannedEnd: 600,
+		})
+		const b = makeInstance({
+			id: "b",
+			activityId: "gym",
+			occurrenceId: "gym@2026-W31#2",
+			occurrenceIndex: 2,
+			bucketKey: "2026-W31",
+			rules: [repeatRule],
+			plannedStart: 540 + 72 * 60, // 72h apart — clears 48h
+			plannedEnd: 600 + 72 * 60,
+		})
+		const timeline = makeBaseTimeline([a, b])
+		const violations = checkInvariants(timeline)
+		expect(violations.some((v) => v.code === "INVARIANT_12_SIBLING_SEPARATION")).toBe(false)
+	})
 })

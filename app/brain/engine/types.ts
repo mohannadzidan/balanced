@@ -282,13 +282,28 @@ export type Event =
     }
   | { readonly type: "SKIP"; readonly instanceId: string }
   | { readonly type: "RESTORE"; readonly instanceId: string }
-  | { readonly type: "FINALISE_DAY" }
+  | { readonly type: "FINALISE_FRAME" }
 
 // --- Engine input / output -----------------------------------------------------
 
 export interface SolveOptions {
   readonly trace?: boolean
+  /** SPEC-v2.1 §9.1: forces a full-frame re-solve (the "replan everything"
+   * button). Default scope is `[freezeBoundary, end of day containing
+   * freezeBoundary)`. Setting `scope: "frame"` widens to `[0, lengthMinutes)`. */
+  readonly scope?: "frame" | { start: number; end: number }
 }
+
+/**
+ * SPEC-v2.1 §8.1: blocks from a prior frame that overlap or precede this
+ * frame's start, expressed in this frame's coordinates (negative starts
+ * allowed). The solver treats them as already-occupied and never
+ * duplicates the instance. Empty for the first frame in a chain or when
+ * chaining isn't in play. Replaces (in a future slice) `carryIn`'s role
+ * for the chained-frame case; `carryIn` remains as Drop 1's
+ * `InstanceState.CARRIED_IN` channel until that deletion lands.
+ */
+export type Prelude = readonly TimelineActivity[]
 
 export interface SolveInput {
   readonly dayFrame: DayFrame
@@ -296,12 +311,13 @@ export interface SolveInput {
   readonly catalog: readonly Activity[]
   readonly existing: readonly TimelineActivity[]
   readonly carryIn: readonly TimelineActivity[]
+  readonly prelude?: Prelude
   readonly event: Event
   readonly constants?: Partial<CostConstants>
   readonly options?: SolveOptions
   /** The revision of `existing`, echoed back unchanged by a no-op TICK. */
   readonly revision?: number
-  /** True once a prior FINALISE_DAY closed this day frame (SPEC.md 9.8). */
+  /** True once a prior FINALISE_FRAME closed this frame. */
   readonly finalised?: boolean
 }
 

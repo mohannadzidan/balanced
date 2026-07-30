@@ -179,8 +179,11 @@ export function violatesDominance(
   const elasticityRule = activity.rules.find(
     (r): r is ElasticityRule => r.type === "elasticity"
   )
+  // SPEC-v2.1 §5.4: an activity may carry both a chunking RepeatRule
+  // (sharedBudget: true) and a recurrence RepeatRule (sharedBudget: false)
+  // at once — only the chunking one contributes a chunkTerm here.
   const repeatRule = activity.rules.find(
-    (r): r is RepeatRule => r.type === "repeat"
+    (r): r is RepeatRule => r.type === "repeat" && r.sharedBudget
   )
   const windowRules = activity.rules.filter(
     (r): r is WindowRule => r.type === "window"
