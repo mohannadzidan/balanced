@@ -1,0 +1,25 @@
+{
+  "name": "@balanced/api",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "oxlint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "^5.11.2"
+  },
+  "devDependencies": {
+    "@balanced/typescript-config": "workspace:*",
+    "@balanced/vitest-config": "workspace:*",
+    "@types/node": "^20",
+    "tsx": "^4.23.1",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
