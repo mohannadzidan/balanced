@@ -3,7 +3,10 @@
 import { useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
-import { resetAndRegenerateTimelineAction, seedOvernightSleepFixtureAction } from "@/lib/actions/dev"
+import {
+  resetAndRegenerateTimelineAction,
+  seedOvernightSleepFixtureAction,
+} from "@/lib/actions/dev"
 
 /** TEMPORARY — testing scaffolding for the generator/midnight-spanning behavior. Remove when done. */
 export function DevTools() {
@@ -11,13 +14,17 @@ export function DevTools() {
 
   return (
     <div className="mx-4 mt-4 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-destructive/40 bg-destructive/5 p-3">
-      <span className="font-mono text-[10px] uppercase tracking-wide text-destructive">Dev Tools</span>
+      <span className="font-mono text-[10px] tracking-wide text-destructive uppercase">
+        Dev Tools
+      </span>
       <Button
         type="button"
         variant="outline"
         size="sm"
         disabled={pending}
-        onClick={() => startTransition(() => resetAndRegenerateTimelineAction())}
+        onClick={() =>
+          startTransition(() => resetAndRegenerateTimelineAction())
+        }
       >
         Reschedule From Scratch (w/ Overnight Sleep)
       </Button>

@@ -1,10 +1,25 @@
 "use client"
 
-import { createContext, useContext, useState, useTransition, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react"
 
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { acceptPullNextAction, acceptStartNewAction } from "@/lib/actions/execution"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
+  acceptPullNextAction,
+  acceptStartNewAction,
+} from "@/lib/actions/execution"
 import type { FinishEarlyPrompt } from "@/lib/db/execution-queries"
 
 type FinishEarlyContextValue = {
@@ -23,7 +38,10 @@ const FinishEarlyContext = createContext<FinishEarlyContextValue | null>(null)
  */
 export function useFinishEarlyPrompt(): FinishEarlyContextValue {
   const ctx = useContext(FinishEarlyContext)
-  if (!ctx) throw new Error("useFinishEarlyPrompt must be used within a FinishEarlyProvider")
+  if (!ctx)
+    throw new Error(
+      "useFinishEarlyPrompt must be used within a FinishEarlyProvider"
+    )
   return ctx
 }
 
@@ -35,7 +53,10 @@ export function FinishEarlyProvider({ children }: { children: ReactNode }) {
   function handlePullNext(timelineActivityId: string) {
     if (!prompt) return
     startTransition(async () => {
-      const result = await acceptPullNextAction(timelineActivityId, prompt.freedStartIso)
+      const result = await acceptPullNextAction(
+        timelineActivityId,
+        prompt.freedStartIso
+      )
       if (result.ok) {
         setError(null)
         setPrompt(null)
@@ -48,7 +69,11 @@ export function FinishEarlyProvider({ children }: { children: ReactNode }) {
   function handleStartNew(activityId: string, durationMin: number) {
     if (!prompt) return
     startTransition(async () => {
-      const result = await acceptStartNewAction({ activityId, startIso: prompt.freedStartIso, durationMin })
+      const result = await acceptStartNewAction({
+        activityId,
+        startIso: prompt.freedStartIso,
+        durationMin,
+      })
       if (result.ok) {
         setError(null)
         setPrompt(null)
@@ -80,11 +105,15 @@ export function FinishEarlyProvider({ children }: { children: ReactNode }) {
           side="bottom"
           className="max-h-[85vh] overflow-y-auto rounded-t-2xl border-t-0 pb-[max(1rem,env(safe-area-inset-bottom))]"
         >
-          <div aria-hidden className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted" />
+          <div
+            aria-hidden
+            className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted"
+          />
           <SheetHeader>
             <SheetTitle>You freed up {prompt?.freedMin ?? 0}m</SheetTitle>
             <SheetDescription>
-              Bring the next task forward, start something else, or just stay idle.
+              Bring the next task forward, start something else, or just stay
+              idle.
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-2 px-4 pb-4">
@@ -107,13 +136,20 @@ export function FinishEarlyProvider({ children }: { children: ReactNode }) {
                   variant="outline"
                   className="justify-start"
                   disabled={pending}
-                  onClick={() => handleStartNew(option.activityId, option.durationMin)}
+                  onClick={() =>
+                    handleStartNew(option.activityId, option.durationMin)
+                  }
                 >
                   Start {option.name} ({option.durationMin}m)
                 </Button>
               )
             )}
-            <Button type="button" variant="ghost" disabled={pending} onClick={() => setPrompt(null)}>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={pending}
+              onClick={() => setPrompt(null)}
+            >
               Stay idle
             </Button>
             {error && <p className="text-sm text-destructive">{error}</p>}

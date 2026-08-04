@@ -23,13 +23,13 @@ follows from it.
   - Recurrence: **documented, not built** (see §7).
 
   The three defining traits of a rule map onto structure rather than data:
-  - **Scope** → *where the table is keyed*. Activity-level rules key on the activity; the
+  - **Scope** → _where the table is keyed_. Activity-level rules key on the activity; the
     system-wide Overlap Rule has no per-activity switch to turn it on globally — it is one rule
-    the system always understands, whose per-host *settings* live in `overlap_rule`.
-  - **Category** → *one table per category, primary-keyed by activity id*. This makes "an
+    the system always understands, whose per-host _settings_ live in `overlap_rule`.
+  - **Category** → _one table per category, primary-keyed by activity id_. This makes "an
     activity holds at most one rule per category" (spec Rules Model) a **database-enforced
     invariant**, not something application code must remember to check.
-  - **Classification** → *a property of the variant, derived in code*: `kind='strict'` ⇒ Hard,
+  - **Classification** → _a property of the variant, derived in code_: `kind='strict'` ⇒ Hard,
     `kind='preferred'` ⇒ Soft; the Overlap Rule's bounds/budget/allowed-set checks are Hard. It
     is never stored, because storing it would allow a row asserting a Preferred Window is Hard.
 
@@ -42,20 +42,20 @@ follows from it.
   surprise.
 
 - **Alternatives considered**:
-  - *Generic `rule` table with a JSON payload and a `category` column.* Rejected: prohibited by
+  - _Generic `rule` table with a JSON payload and a `category` column._ Rejected: prohibited by
     Constitution V, defeats Constitution IV's typed-boundary requirement (payload is `unknown`
     until hand-parsed), and enforces category exclusivity only via a unique index that no type
     system can see. It would be justified only if rules were **user-authored at runtime**, which
-    the PRD never asks for — rule *types* are fixed by the developer; users only choose among
+    the PRD never asks for — rule _types_ are fixed by the developer; users only choose among
     them.
-  - *Keep ad-hoc columns on `activity` (`pref_window_start_min`, `is_container`, …), i.e. the
-    pre-pivot design.* Rejected: this is precisely what the spec pivoted away from. It cannot
+  - _Keep ad-hoc columns on `activity` (`pref_window_start_min`, `is_container`, …), i.e. the
+    pre-pivot design._ Rejected: this is precisely what the spec pivoted away from. It cannot
     structurally prevent an activity from holding both a preferred and a strict window (FR-013),
     and it leaves `is_container` as a boolean flag rather than the instance of a system-wide rule.
 
-- **Consequence for the solver (later feature)**: the solver consumes rule *classification*, so
+- **Consequence for the solver (later feature)**: the solver consumes rule _classification_, so
   it can iterate categories generically (`hard rules → skeleton`, `soft rules → relaxation
-  cascade`) while each category stays concretely typed. Adding a category later = one table + one
+cascade`) while each category stays concretely typed. Adding a category later = one table + one
   union member + one case in the cascade; no engine to generalize.
 
 ## 2. Strict activities: separate columns vs. a Strict Window rule
@@ -63,7 +63,7 @@ follows from it.
 - **Decision**: A Strict activity's fixed start/end **is** its Temporal Placement rule
   (`kind='strict'`), stored in the same rule table as a Flexible activity's window. No
   `start_min`/`end_min` columns on `activity`. What differs by constraint type is how the window
-  is *consumed*: a **Strict activity's block fills its entire window**, whereas a **Flexible
+  is _consumed_: a **Strict activity's block fills its entire window**, whereas a **Flexible
   activity's block is `min_block_min` long and floats inside it**.
 
 - **Rationale**: The spec (Story 1) already describes a Strict activity as "an activity whose
@@ -87,17 +87,17 @@ follows from it.
     `host_activity_id` as the **sanctioned-overlap exemption**: a guest block is allowed to
     intersect its own host's span, and nothing else.
 
-- **Rationale**: The spec requires (FR-026) that a guest's minutes count toward *the guest
-  activity's own daily progress*. With one table, progress is a single sum over
+- **Rationale**: The spec requires (FR-026) that a guest's minutes count toward _the guest
+  activity's own daily progress_. With one table, progress is a single sum over
   `scheduled_block WHERE activity_id = ?` and that requirement is satisfied by construction — a
   separate `guest_block` table would force every progress query to union two tables and would
   make it easy to forget one. It also collapses two spec entities into one storage shape without
   losing any distinction, since `host_activity_id` carries it (Constitution V).
 
 - **Alternatives considered**:
-  - *Separate `overlap_guest_block` table* (the pre-pivot `nested_block`). Rejected as above:
+  - _Separate `overlap_guest_block` table_ (the pre-pivot `nested_block`). Rejected as above:
     duplicate shape, unioned queries, easy accounting bug.
-  - *Shrinking/splitting the host block to carve out the guest.* Rejected — it contradicts the
+  - _Shrinking/splitting the host block to carve out the guest._ Rejected — it contradicts the
     spec's "parallel reality" framing and FR-025/SC-007 (the host must still report its full
     span). Splitting would also destroy the host's identity as a single block.
 
@@ -106,8 +106,8 @@ follows from it.
 - **Decision**: A dedicated pure module `lib/domain/accounting.ts` owns every duration figure the
   UI shows, with three distinct notions kept deliberately separate:
   1. **Activity progress** (sidebar) = Σ of that activity's own block durations. A guest block
-     counts here for the *guest*, and contributes nothing to the host.
-  2. **Host logged duration** = the host's own span, *by definition* — computed from its window
+     counts here for the _guest_, and contributes nothing to the host.
+  2. **Host logged duration** = the host's own span, _by definition_ — computed from its window
      and never adjusted by guests.
   3. **Total logged time for the day** = the **union measure** of all block intervals, not their
      sum. Overlapping wall-clock minutes collapse, so 10:00–18:00 host + 13:00–13:30 guest = 8h
@@ -131,10 +131,10 @@ follows from it.
   `{ ok: true } | { ok: false; classification: 'hard' | 'soft'; message: string }`. The Server
   Action branches on classification — **Hard ⇒ reject and return an error state without
   persisting; Soft ⇒ persist and return `{ ok: true, warnings: [...] }`**. The timeline
-  additionally *derives* the flag at render time (a block outside its activity's Preferred
+  additionally _derives_ the flag at render time (a block outside its activity's Preferred
   Window is badged), so the warning survives past the one action response.
 
-- **Rationale**: FR-016/FR-017 differ *only* in classification, so encoding classification in the
+- **Rationale**: FR-016/FR-017 differ _only_ in classification, so encoding classification in the
   verdict keeps one evaluation path rather than two parallel validators. Deriving the render-time
   flag rather than persisting a `soft_violation` column avoids storing a fact that is already
   computable and could drift if the activity's window were later edited.
@@ -160,7 +160,7 @@ follows from it.
 
 - **Alternatives considered**: The PRD's Phase-1 narrative ("the client executes an insert query
   against Turso"). Rejected for this feature — it forks DB access across client and server in
-  violation of Constitution III. Note this does **not** compromise the PRD's client-side *solver*:
+  violation of Constitution III. Note this does **not** compromise the PRD's client-side _solver_:
   the solver is a pure function over already-loaded state (§1's rule functions), and needs no
   client-side DB write to run.
 
@@ -205,13 +205,13 @@ follows from it.
 - **Rationale**: Constitution IV requires validated typed I/O boundaries and names Zod; the
   Next.js forms guide uses this `safeParse` pattern. Separating field-shape validation (Zod) from
   rule evaluation (pure fns) is what makes the rules testable without a DB — the PRD's designated
-  primary seam. Zod's discriminated unions also enforce FR-013's exclusivity *at the input
-  boundary*, so an impossible pair (both windows) is rejected before it can reach the DB, which
+  primary seam. Zod's discriminated unions also enforce FR-013's exclusivity _at the input
+  boundary_, so an impossible pair (both windows) is rejected before it can reach the DB, which
   in turn enforces it structurally.
 
 - **Alternatives considered**: Manual `FormData.get` + hand-checks (rejected — untyped boundary,
   exactly where Constitution IV says bugs hide); client-only validation (rejected — the spec
-  requires *the system* to reject invalid saves, i.e. server-enforced).
+  requires _the system_ to reject invalid saves, i.e. server-enforced).
 
 ## 10. Time representation
 
@@ -243,12 +243,12 @@ follows from it.
   progress, and the Soft-violation flag.
 
 - **Note**: The allowed-guest multi-select and the sidebar layout are **not** single shadcn
-  primitives — they are *composed* from `checkbox`/`select`/`card` under Constitution I's
+  primitives — they are _composed_ from `checkbox`/`select`/`card` under Constitution I's
   "customization through composition" clause, never forked from a primitive's internals.
 
 - **Alternatives considered**: Hand-built modal/multi-select (rejected — Constitution I; loses
   accessibility the library already provides). Native `<select multiple>` (rejected for theming
-  consistency, though native `<input type="time">` *is* used inside a shadcn-styled field, since
+  consistency, though native `<input type="time">` _is_ used inside a shadcn-styled field, since
   it is a form control shadcn does not replace).
 
 ## 12. Timeline rendering model
@@ -266,25 +266,25 @@ follows from it.
 
 - **Alternatives considered**: A full pixel-per-minute grid canvas (deferred — not required by any
   FR/SC here; better justified once Focus Mode and drag interactions arrive). Rendering guests as
-  *nested children* of the host (rejected — that is the hierarchy framing the spec explicitly
+  _nested children_ of the host (rejected — that is the hierarchy framing the spec explicitly
   pivoted away from; overlay preserves the host's own span visually as well as in data).
 
 ---
 
 ## Summary of resolved unknowns
 
-| Technical Context item | Resolution |
-|------------------------|------------|
-| Rules model → storage | One concrete table per rule category, PK'd on `activity_id`; category exclusivity is a DB invariant; Hard/Soft derived in code (§1) |
-| Strict activity times | Are its Strict Window rule; no duplicate columns on `activity` (§2) |
-| Guest/overlap blocks | One `scheduled_block` table; guest = non-null `host_activity_id` (§3) |
-| Overlap accounting | Dedicated pure `accounting.ts`; union measure for day totals, count-once guaranteed (§4) |
-| Hard vs Soft handling | Rule verdict carries classification; Hard rejects, Soft persists + warns (§5) |
-| Mutation mechanism | Server Actions + `revalidatePath("/")`; Server Component reads (§6) |
-| Recurrence category | Documented, not built this feature; additive migration path (§7) |
-| Storage driver | `@libsql/client` (Turso), single `lib/db` layer, SQL migrations in repo (§8) |
-| Validation library | Zod discriminated unions at action boundaries + pure rule functions (§9) |
-| Time model | Integer minutes-from-midnight via `lib/time.ts` (§10) |
-| UI primitives | shadcn `dialog/select/input/label/checkbox/card/badge` + existing `button` (§11) |
-| Timeline layout | Ordered block list; guests layered over hosts; soft violations badged (§12) |
-| Testing framework | Vitest for `rules`/`accounting`/`time`; manual quickstart for UI (§4, §5) |
+| Technical Context item | Resolution                                                                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Rules model → storage  | One concrete table per rule category, PK'd on `activity_id`; category exclusivity is a DB invariant; Hard/Soft derived in code (§1) |
+| Strict activity times  | Are its Strict Window rule; no duplicate columns on `activity` (§2)                                                                 |
+| Guest/overlap blocks   | One `scheduled_block` table; guest = non-null `host_activity_id` (§3)                                                               |
+| Overlap accounting     | Dedicated pure `accounting.ts`; union measure for day totals, count-once guaranteed (§4)                                            |
+| Hard vs Soft handling  | Rule verdict carries classification; Hard rejects, Soft persists + warns (§5)                                                       |
+| Mutation mechanism     | Server Actions + `revalidatePath("/")`; Server Component reads (§6)                                                                 |
+| Recurrence category    | Documented, not built this feature; additive migration path (§7)                                                                    |
+| Storage driver         | `@libsql/client` (Turso), single `lib/db` layer, SQL migrations in repo (§8)                                                        |
+| Validation library     | Zod discriminated unions at action boundaries + pure rule functions (§9)                                                            |
+| Time model             | Integer minutes-from-midnight via `lib/time.ts` (§10)                                                                               |
+| UI primitives          | shadcn `dialog/select/input/label/checkbox/card/badge` + existing `button` (§11)                                                    |
+| Timeline layout        | Ordered block list; guests layered over hosts; soft violations badged (§12)                                                         |
+| Testing framework      | Vitest for `rules`/`accounting`/`time`; manual quickstart for UI (§4, §5)                                                           |

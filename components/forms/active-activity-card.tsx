@@ -4,14 +4,19 @@ import { useEffect, useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
 import { useFinishEarlyPrompt } from "@/components/forms/finish-early-provider"
-import { extendActivityAction, finishEarlyAction } from "@/lib/actions/execution"
+import {
+  extendActivityAction,
+  finishEarlyAction,
+} from "@/lib/actions/execution"
 
 function formatCountdown(ms: number): string {
   const totalSeconds = Math.round(ms / 1000)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
-  return [hours, minutes, seconds].map((n) => String(n).padStart(2, "0")).join(":")
+  return [hours, minutes, seconds]
+    .map((n) => String(n).padStart(2, "0"))
+    .join(":")
 }
 
 function formatClock(date: Date): string {
@@ -71,24 +76,29 @@ export function ActiveActivityCard({
   const overtime = remainingMs !== null && remainingMs < 0
 
   return (
-    <div className="bg-foreground text-background rounded-[12px] p-4 shadow-floating relative overflow-hidden">
+    <div className="shadow-floating relative overflow-hidden rounded-[12px] bg-foreground p-4 text-background">
       <div className="flex flex-col">
-        <span className="text-background text-sm font-semibold tracking-[-0.2px]">{title}</span>
+        <span className="text-sm font-semibold tracking-[-0.2px] text-background">
+          {title}
+        </span>
         <span className="text-xs text-muted-foreground">{subtitle}</span>
       </div>
       <div className="my-6 text-center">
         <div className="font-mono text-4xl font-medium tracking-[-1px] text-background tabular-nums">
-          {remainingMs === null ? "--:--:--" : `${overtime ? "-" : ""}${formatCountdown(Math.abs(remainingMs))}`}
+          {remainingMs === null
+            ? "--:--:--"
+            : `${overtime ? "-" : ""}${formatCountdown(Math.abs(remainingMs))}`}
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
-          {overtime ? "Overtime since" : "Remaining until"} {formatClock(endTime)}
+          {overtime ? "Overtime since" : "Remaining until"}{" "}
+          {formatClock(endTime)}
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <Button
           type="button"
           variant="outline"
-          className="bg-muted border-border text-background py-2 text-xs font-medium"
+          className="border-border bg-muted py-2 text-xs font-medium text-background"
           disabled={pending}
           onClick={() => handleExtend(15)}
         >
@@ -97,7 +107,7 @@ export function ActiveActivityCard({
         <Button
           type="button"
           variant="outline"
-          className="bg-muted border-border text-background py-2 text-xs font-medium"
+          className="border-border bg-muted py-2 text-xs font-medium text-background"
           disabled={pending}
           onClick={() => handleExtend(30)}
         >
@@ -105,7 +115,7 @@ export function ActiveActivityCard({
         </Button>
         <Button
           type="button"
-          className="bg-background text-foreground py-2 text-xs font-medium"
+          className="bg-background py-2 text-xs font-medium text-foreground"
           disabled={pending}
           onClick={handleFinishEarly}
         >

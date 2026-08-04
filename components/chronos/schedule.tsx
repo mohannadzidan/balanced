@@ -5,12 +5,22 @@ import { AddGuestSheet } from "@/components/forms/add-guest-sheet"
 import { GuestActivityActions } from "@/components/forms/guest-activity-actions"
 import { TimelineActivityActions } from "@/components/forms/timeline-activity-actions"
 import { listActivitiesByIds } from "@/lib/db/activity-queries"
-import { getGuestLinks, getOverlapBudgetForHost } from "@/lib/db/overlap-queries"
+import {
+  getGuestLinks,
+  getOverlapBudgetForHost,
+} from "@/lib/db/overlap-queries"
 import { getActivityRules } from "@/lib/db/rule-queries"
-import { getOrCreateTimeline, getTodayTimelineActivities } from "@/lib/db/timeline-queries"
+import {
+  getOrCreateTimeline,
+  getTodayTimelineActivities,
+} from "@/lib/db/timeline-queries"
 import { formatTimeOfDate, todayISO } from "@/lib/time"
 
-type GuestOption = { hostTimelineActivityId: string; remainingMin: number; guestOptions: { id: string; name: string }[] }
+type GuestOption = {
+  hostTimelineActivityId: string
+  remainingMin: number
+  guestOptions: { id: string; name: string }[]
+}
 
 async function getGuestAddOption(activity: {
   id: string
@@ -27,7 +37,11 @@ async function getGuestAddOption(activity: {
   const guestOptions = await listActivitiesByIds(guestActivityIds)
   if (guestOptions.length === 0) return null
 
-  return { hostTimelineActivityId: activity.id, remainingMin: budget.remainingMin, guestOptions }
+  return {
+    hostTimelineActivityId: activity.id,
+    remainingMin: budget.remainingMin,
+    guestOptions,
+  }
 }
 
 export async function Schedule() {
@@ -40,27 +54,39 @@ export async function Schedule() {
   const { guestIdToHostId, hostIdToGuestIds } = await getGuestLinks(timeline.id)
 
   const byId = new Map(activities.map((activity) => [activity.id, activity]))
-  const topLevel = activities.filter((activity) => !guestIdToHostId.has(activity.id))
-  const guestAddOptions = await Promise.all(topLevel.map((activity) => getGuestAddOption(activity)))
+  const topLevel = activities.filter(
+    (activity) => !guestIdToHostId.has(activity.id)
+  )
+  const guestAddOptions = await Promise.all(
+    topLevel.map((activity) => getGuestAddOption(activity))
+  )
   const guestAddOptionById = new Map(
-    topLevel.map((activity, index) => [activity.id, guestAddOptions[index]] as const)
+    topLevel.map(
+      (activity, index) => [activity.id, guestAddOptions[index]] as const
+    )
   )
 
   return (
-    <main className="px-4 pt-6 space-y-4">
-      <div className="flex justify-between items-center pb-2">
-        <h2 className="font-mono uppercase text-xs text-muted-foreground tracking-normal">Schedule</h2>
-        <span className="font-mono text-xs text-muted-foreground/80">Solver: Idle</span>
+    <main className="space-y-4 px-4 pt-6">
+      <div className="flex items-center justify-between pb-2">
+        <h2 className="font-mono text-xs tracking-normal text-muted-foreground uppercase">
+          Schedule
+        </h2>
+        <span className="font-mono text-xs text-muted-foreground/80">
+          Solver: Idle
+        </span>
       </div>
       {topLevel.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nothing scheduled yet. Activities with a Window Rule allowed today will appear here.
+          Nothing scheduled yet. Activities with a Window Rule allowed today
+          will appear here.
         </p>
       ) : (
         topLevel.map((activity) => {
           const guestIds = hostIdToGuestIds.get(activity.id) ?? []
           const guestAddOption = guestAddOptionById.get(activity.id) ?? null
-          const isActive = activity.status !== "completed" && activity.startTime <= now
+          const isActive =
+            activity.status !== "completed" && activity.startTime <= now
 
           const nested = (
             <>
@@ -68,7 +94,10 @@ export async function Schedule() {
                 const guest = byId.get(guestId)
                 if (!guest) return null
                 return (
-                  <div key={guest.id} className="mt-2 border-l-2 border-border pl-3">
+                  <div
+                    key={guest.id}
+                    className="mt-2 border-l-2 border-border pl-3"
+                  >
                     <ActivityCard
                       title={guest.title}
                       subtitle={`${formatTimeOfDate(guest.startTime)} - ${formatTimeOfDate(guest.endTime)}`}
@@ -87,7 +116,9 @@ export async function Schedule() {
               {guestAddOption && (
                 <div className="mt-2">
                   <AddGuestSheet
-                    hostTimelineActivityId={guestAddOption.hostTimelineActivityId}
+                    hostTimelineActivityId={
+                      guestAddOption.hostTimelineActivityId
+                    }
                     hostTitle={activity.title}
                     remainingMin={guestAddOption.remainingMin}
                     guestOptions={guestAddOption.guestOptions}
@@ -98,7 +129,10 @@ export async function Schedule() {
           )
 
           return (
-            <TimelineSlot key={activity.id} time={formatTimeOfDate(activity.startTime)}>
+            <TimelineSlot
+              key={activity.id}
+              time={formatTimeOfDate(activity.startTime)}
+            >
               {isActive ? (
                 <ActiveActivityCard
                   timelineActivityId={activity.id}
@@ -119,7 +153,9 @@ export async function Schedule() {
                   }
                 >
                   {activity.warningMessage && (
-                    <p className="mt-1 text-xs text-destructive">{activity.warningMessage}</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      {activity.warningMessage}
+                    </p>
                   )}
                   <TimelineActivityActions
                     timelineActivityId={activity.id}

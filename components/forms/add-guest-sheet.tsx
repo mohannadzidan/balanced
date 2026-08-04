@@ -36,7 +36,11 @@ export function AddGuestSheet({
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await manualPlaceGuestActivityAction(hostTimelineActivityId, { ok: false, error: "" }, formData)
+      const result = await manualPlaceGuestActivityAction(
+        hostTimelineActivityId,
+        { ok: false, error: "" },
+        formData
+      )
       if (result.ok) {
         formRef.current?.reset()
         setError(null)
@@ -51,7 +55,9 @@ export function AddGuestSheet({
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button type="button" variant="outline" size="sm" />}>
+      <SheetTrigger
+        render={<Button type="button" variant="outline" size="sm" />}
+      >
         <UserPlus className="h-4 w-4" />
         Add Guest
       </SheetTrigger>
@@ -59,12 +65,21 @@ export function AddGuestSheet({
         side="bottom"
         className="max-h-[85vh] overflow-y-auto rounded-t-2xl border-t-0 pb-[max(1rem,env(safe-area-inset-bottom))]"
       >
-        <div aria-hidden className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted" />
+        <div
+          aria-hidden
+          className="mx-auto mt-2 h-1.5 w-10 shrink-0 rounded-full bg-muted"
+        />
         <SheetHeader>
           <SheetTitle>Add a Guest to {hostTitle}</SheetTitle>
-          <SheetDescription>{remainingMin}m of overlap budget remaining.</SheetDescription>
+          <SheetDescription>
+            {remainingMin}m of overlap budget remaining.
+          </SheetDescription>
         </SheetHeader>
-        <form ref={formRef} action={handleSubmit} className="flex flex-col gap-4 px-4">
+        <form
+          ref={formRef}
+          action={handleSubmit}
+          className="flex flex-col gap-4 px-4"
+        >
           <div className="flex flex-col gap-1.5">
             <Label htmlFor={`${hostTimelineActivityId}-guest`}>Activity</Label>
             <select
@@ -82,12 +97,24 @@ export function AddGuestSheet({
           </div>
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor={`${hostTimelineActivityId}-guest-start`}>Start</Label>
-              <Input id={`${hostTimelineActivityId}-guest-start`} name="startMin" type="time" required />
+              <Label htmlFor={`${hostTimelineActivityId}-guest-start`}>
+                Start
+              </Label>
+              <Input
+                id={`${hostTimelineActivityId}-guest-start`}
+                name="startMin"
+                type="time"
+                required
+              />
             </div>
             <div className="flex flex-1 flex-col gap-1.5">
               <Label htmlFor={`${hostTimelineActivityId}-guest-end`}>End</Label>
-              <Input id={`${hostTimelineActivityId}-guest-end`} name="endMin" type="time" required />
+              <Input
+                id={`${hostTimelineActivityId}-guest-end`}
+                name="endMin"
+                type="time"
+                required
+              />
             </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -95,7 +122,9 @@ export function AddGuestSheet({
             <Button type="submit" disabled={pending}>
               {pending ? "Adding…" : "Add Guest"}
             </Button>
-            <SheetClose render={<Button type="button" variant="outline" />}>Cancel</SheetClose>
+            <SheetClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </SheetClose>
           </SheetFooter>
         </form>
       </SheetContent>

@@ -134,7 +134,11 @@ export async function createActivity(
 
   const transitionsVerdict = checkTransitions(transitions)
   if (!transitionsVerdict.ok) {
-    return { ok: false, formErrors: [transitionsVerdict.message], fieldErrors: {} }
+    return {
+      ok: false,
+      formErrors: [transitionsVerdict.message],
+      fieldErrors: {},
+    }
   }
 
   await insertActivityWithRules({ activity, transitions })
@@ -180,9 +184,17 @@ export async function scheduleFlexibleBlock(
   const startMin = parsed.data.startMin
   const endMin = startMin + activity.minBlockMin
 
-  const placementVerdict = evaluatePlacement(activity.placement, startMin, endMin)
+  const placementVerdict = evaluatePlacement(
+    activity.placement,
+    startMin,
+    endMin
+  )
   if (!placementVerdict.ok && placementVerdict.classification === "hard") {
-    return { ok: false, formErrors: [placementVerdict.message], fieldErrors: {} }
+    return {
+      ok: false,
+      formErrors: [placementVerdict.message],
+      fieldErrors: {},
+    }
   }
 
   const occupiedRanges = await getOccupiedRanges(date)

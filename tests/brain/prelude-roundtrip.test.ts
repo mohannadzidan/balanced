@@ -78,7 +78,9 @@ describe("SPEC-v2.1 §8.1: prelude carries a spanning block across two solves", 
     })
     expect(r2.status).not.toBe("REJECTED")
 
-    const placedFollowUp = r2.timeline.instances.find((i) => i.name === "Follow Up")!
+    const placedFollowUp = r2.timeline.instances.find(
+      (i) => i.name === "Follow Up"
+    )!
     expect(placedFollowUp.state).toBe("PLANNED")
     expect(placedFollowUp.plannedStart!).toBeGreaterThanOrEqual(30)
   })

@@ -1,251 +1,504 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chronos - Dynamic Scheduling</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        :root {
-            --ink: #171717;
-            --body: #4d4d4d;
-            --mute: #8f8f8f;
-            --faint: #a1a1a1;
-            --hairline: #ebebeb;
-            --hairline-soft: #f2f2f2;
-            --canvas: #fafafa;
-            --canvas-elevated: #ffffff;
-            --link: #0070f3;
-            --link-soft: #d3e5ff;
-            --error: #ee0000;
-            --warning: #f5a623;
-            --warning-soft: #ffefcf;
-        }
-        body {
-            font-family: 'Geist', 'Inter', Arial, sans-serif;
-            background-color: var(--canvas);
-            color: var(--ink);
-            -webkit-font-smoothing: antialiased;
-        }
-        .font-mono {
-            font-family: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
-        }
-        .shadow-whisper {
-            box-shadow: 0px 1px 1px rgba(0,0,0,0.04);
-        }
-        .shadow-floating {
-            box-shadow: 0px 2px 2px rgba(0,0,0,0.02), 0px 8px 16px -4px rgba(0,0,0,0.1);
-        }
-        /* Vercel Hero Mesh Gradient */
-        .mesh-gradient {
-            background: conic-gradient(from 180deg at 50% 50%, #007cf0 0deg, #7928ca 90deg, #ff0080 180deg, #f9cb28 270deg, #007cf0 360deg);
-            filter: blur(60px);
-            opacity: 0.15;
-        }
-        ::-webkit-scrollbar {
-            display: none;
-        }
+      :root {
+        --ink: #171717;
+        --body: #4d4d4d;
+        --mute: #8f8f8f;
+        --faint: #a1a1a1;
+        --hairline: #ebebeb;
+        --hairline-soft: #f2f2f2;
+        --canvas: #fafafa;
+        --canvas-elevated: #ffffff;
+        --link: #0070f3;
+        --link-soft: #d3e5ff;
+        --error: #ee0000;
+        --warning: #f5a623;
+        --warning-soft: #ffefcf;
+      }
+      body {
+        font-family: "Geist", "Inter", Arial, sans-serif;
+        background-color: var(--canvas);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      .font-mono {
+        font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+      }
+      .shadow-whisper {
+        box-shadow: 0px 1px 1px rgba(0, 0, 0, 0.04);
+      }
+      .shadow-floating {
+        box-shadow:
+          0px 2px 2px rgba(0, 0, 0, 0.02),
+          0px 8px 16px -4px rgba(0, 0, 0, 0.1);
+      }
+      /* Vercel Hero Mesh Gradient */
+      .mesh-gradient {
+        background: conic-gradient(
+          from 180deg at 50% 50%,
+          #007cf0 0deg,
+          #7928ca 90deg,
+          #ff0080 180deg,
+          #f9cb28 270deg,
+          #007cf0 360deg
+        );
+        filter: blur(60px);
+        opacity: 0.15;
+      }
+      ::-webkit-scrollbar {
+        display: none;
+      }
     </style>
-</head>
-<body class="min-h-screen">
-
-<div class="max-w-md mx-auto bg-[var(--canvas)] min-h-screen relative border-x border-[var(--hairline)] pb-32">
-    
-    <!-- Nav Bar with Date Stepper -->
-    <nav class="sticky top-0 z-50 bg-[var(--canvas)]/80 backdrop-blur-md border-b border-[var(--hairline)]">
+  </head>
+  <body class="min-h-screen">
+    <div
+      class="relative mx-auto min-h-screen max-w-md border-x border-[var(--hairline)] bg-[var(--canvas)] pb-32"
+    >
+      <!-- Nav Bar with Date Stepper -->
+      <nav
+        class="sticky top-0 z-50 border-b border-[var(--hairline)] bg-[var(--canvas)]/80 backdrop-blur-md"
+      >
         <div class="flex items-center justify-between px-4 py-3">
-            <!-- Left Chevron -->
-            <button class="p-2 -ml-2 text-[var(--ink)] rounded-full hover:bg-[var(--hairline-soft)] transition-colors">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            
-            <!-- Date Display -->
-            <div class="flex flex-col items-center">
-                <span class="text-base font-semibold text-[var(--ink)] tracking-[-0.2px] leading-none">Today</span>
-                <span class="font-mono text-[10px] text-[var(--mute)] mt-1 uppercase tracking-normal">Thu, Oct 24</span>
-            </div>
+          <!-- Left Chevron -->
+          <button
+            class="-ml-2 rounded-full p-2 text-[var(--ink)] transition-colors hover:bg-[var(--hairline-soft)]"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
 
-            <!-- Right Chevron -->
-            <button class="p-2 -mr-2 text-[var(--ink)] rounded-full hover:bg-[var(--hairline-soft)] transition-colors">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-        </div>
-    </nav>
+          <!-- Date Display -->
+          <div class="flex flex-col items-center">
+            <span
+              class="text-base leading-none font-semibold tracking-[-0.2px] text-[var(--ink)]"
+              >Today</span
+            >
+            <span
+              class="mt-1 font-mono text-[10px] tracking-normal text-[var(--mute)] uppercase"
+              >Thu, Oct 24</span
+            >
+          </div>
 
-    <!-- Goals & Progress Header -->
-    <header class="relative overflow-hidden px-4 pt-8 pb-6 border-b border-[var(--hairline)]">
-        <div class="absolute top-0 left-0 w-full h-3/4 mesh-gradient -z-10"></div>
-        
-        <div class="flex justify-between items-end mb-4">
-            <div>
-                <span class="font-mono uppercase text-xs text-[var(--mute)] tracking-normal">Daily Progress</span>
-                <h1 class="text-3xl font-semibold text-[var(--ink)] tracking-[-1.2px] leading-none mt-2">
-                    4h 30m <span class="text-[var(--mute)] text-xl font-normal">/ 8h</span>
-                </h1>
-            </div>
-            <div class="flex flex-col items-end gap-1">
-                <span class="font-mono text-[10px] text-[var(--error)] bg-[#ffefcf] border border-[var(--warning)]/30 rounded-[6px] px-2 py-1">+1h DEFICIT</span>
-                <span class="text-xs text-[var(--mute)]">Carry-over active</span>
-            </div>
+          <!-- Right Chevron -->
+          <button
+            class="-mr-2 rounded-full p-2 text-[var(--ink)] transition-colors hover:bg-[var(--hairline-soft)]"
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
         </div>
-        
-        <div class="w-full h-1.5 bg-[var(--hairline-soft)] rounded-full overflow-hidden mb-4">
-            <div class="h-full bg-[var(--ink)] rounded-full" style="width: 56%"></div>
+      </nav>
+
+      <!-- Goals & Progress Header -->
+      <header
+        class="relative overflow-hidden border-b border-[var(--hairline)] px-4 pt-8 pb-6"
+      >
+        <div
+          class="mesh-gradient absolute top-0 left-0 -z-10 h-3/4 w-full"
+        ></div>
+
+        <div class="mb-4 flex items-end justify-between">
+          <div>
+            <span
+              class="font-mono text-xs tracking-normal text-[var(--mute)] uppercase"
+              >Daily Progress</span
+            >
+            <h1
+              class="mt-2 text-3xl leading-none font-semibold tracking-[-1.2px] text-[var(--ink)]"
+            >
+              4h 30m
+              <span class="text-xl font-normal text-[var(--mute)]">/ 8h</span>
+            </h1>
+          </div>
+          <div class="flex flex-col items-end gap-1">
+            <span
+              class="rounded-[6px] border border-[var(--warning)]/30 bg-[#ffefcf] px-2 py-1 font-mono text-[10px] text-[var(--error)]"
+              >+1h DEFICIT</span
+            >
+            <span class="text-xs text-[var(--mute)]">Carry-over active</span>
+          </div>
+        </div>
+
+        <div
+          class="mb-4 h-1.5 w-full overflow-hidden rounded-full bg-[var(--hairline-soft)]"
+        >
+          <div
+            class="h-full rounded-full bg-[var(--ink)]"
+            style="width: 56%"
+          ></div>
         </div>
 
         <!-- Goal Chips (replacing flexible sidebar) -->
         <div class="flex gap-2 overflow-x-auto pb-1">
-            <div class="flex items-center gap-2 bg-[var(--canvas-elevated)] border border-[var(--hairline)] px-3 py-1.5 rounded-full shadow-whisper whitespace-nowrap">
-                <span class="w-1.5 h-1.5 rounded-full bg-[var(--error)]"></span>
-                <span class="text-xs font-medium text-[var(--ink)]">Freelance</span>
-                <span class="font-mono text-[10px] text-[var(--mute)]">0h / 5h</span>
-            </div>
-            <div class="flex items-center gap-2 bg-[var(--canvas-elevated)] border border-[var(--hairline)] px-3 py-1.5 rounded-full shadow-whisper whitespace-nowrap">
-                <span class="w-1.5 h-1.5 rounded-full bg-[var(--ink)]"></span>
-                <span class="text-xs font-medium text-[var(--ink)]">Learning</span>
-                <span class="font-mono text-[10px] text-[var(--mute)]">1h / 1h</span>
-            </div>
-            <div class="flex items-center gap-2 bg-[var(--canvas-elevated)] border border-[var(--hairline)] px-3 py-1.5 rounded-full shadow-whisper whitespace-nowrap">
-                <span class="w-1.5 h-1.5 rounded-full bg-[var(--mute)]"></span>
-                <span class="text-xs font-medium text-[var(--ink)]">Sleep</span>
-                <span class="font-mono text-[10px] text-[var(--mute)]">0h / 8h</span>
-            </div>
+          <div
+            class="shadow-whisper flex items-center gap-2 rounded-full border border-[var(--hairline)] bg-[var(--canvas-elevated)] px-3 py-1.5 whitespace-nowrap"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-[var(--error)]"></span>
+            <span class="text-xs font-medium text-[var(--ink)]">Freelance</span>
+            <span class="font-mono text-[10px] text-[var(--mute)]"
+              >0h / 5h</span
+            >
+          </div>
+          <div
+            class="shadow-whisper flex items-center gap-2 rounded-full border border-[var(--hairline)] bg-[var(--canvas-elevated)] px-3 py-1.5 whitespace-nowrap"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-[var(--ink)]"></span>
+            <span class="text-xs font-medium text-[var(--ink)]">Learning</span>
+            <span class="font-mono text-[10px] text-[var(--mute)]"
+              >1h / 1h</span
+            >
+          </div>
+          <div
+            class="shadow-whisper flex items-center gap-2 rounded-full border border-[var(--hairline)] bg-[var(--canvas-elevated)] px-3 py-1.5 whitespace-nowrap"
+          >
+            <span class="h-1.5 w-1.5 rounded-full bg-[var(--mute)]"></span>
+            <span class="text-xs font-medium text-[var(--ink)]">Sleep</span>
+            <span class="font-mono text-[10px] text-[var(--mute)]"
+              >0h / 8h</span
+            >
+          </div>
         </div>
-    </header>
+      </header>
 
-    <!-- Timeline Section -->
-    <main class="px-4 pt-6 space-y-4">
-        <div class="flex justify-between items-center pb-2">
-            <h2 class="font-mono uppercase text-xs text-[var(--mute)] tracking-normal">Schedule</h2>
-            <span class="font-mono text-xs text-[var(--faint)]">Solver: Idle</span>
+      <!-- Timeline Section -->
+      <main class="space-y-4 px-4 pt-6">
+        <div class="flex items-center justify-between pb-2">
+          <h2
+            class="font-mono text-xs tracking-normal text-[var(--mute)] uppercase"
+          >
+            Schedule
+          </h2>
+          <span class="font-mono text-xs text-[var(--faint)]"
+            >Solver: Idle</span
+          >
         </div>
 
         <!-- 08:00 - Pre-Transition -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--faint)] mt-3 w-10 text-right">08:00</div>
-            <div class="flex-1 bg-[#f2f2f2] border border-[var(--hairline)] rounded-[12px] p-3 flex justify-between items-center">
-                <div class="flex flex-col">
-                    <span class="text-[var(--ink)] text-sm font-medium">Morning Routine</span>
-                    <span class="text-xs text-[var(--mute)]">Transition to Office Work</span>
-                </div>
-                <span class="font-mono text-[10px] text-[var(--mute)] bg-[var(--canvas-elevated)] border border-[var(--hairline)] rounded-[6px] px-1.5 py-0.5">PRE</span>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--faint)]"
+          >
+            08:00
+          </div>
+          <div
+            class="flex flex-1 items-center justify-between rounded-[12px] border border-[var(--hairline)] bg-[#f2f2f2] p-3"
+          >
+            <div class="flex flex-col">
+              <span class="text-sm font-medium text-[var(--ink)]"
+                >Morning Routine</span
+              >
+              <span class="text-xs text-[var(--mute)]"
+                >Transition to Office Work</span
+              >
             </div>
+            <span
+              class="rounded-[6px] border border-[var(--hairline)] bg-[var(--canvas-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--mute)]"
+              >PRE</span
+            >
+          </div>
         </div>
 
         <!-- 10:00 - Strict Activity acting as Overlap Host -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--faint)] mt-3 w-10 text-right">10:00</div>
-            <div class="flex-1 bg-[var(--canvas-elevated)] border border-[var(--hairline)] rounded-[12px] p-4 shadow-whisper">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-[var(--ink)]"></span>
-                        <span class="text-[var(--ink)] text-sm font-semibold tracking-[-0.2px]">Office Work</span>
-                    </div>
-                    <span class="font-mono text-[10px] text-[var(--ink)] bg-[var(--canvas)] border border-[var(--hairline)] rounded-[6px] px-1.5 py-0.5">HOST</span>
-                </div>
-                <div class="text-xs text-[var(--body)] mt-1 ml-4">10:00 - 18:00 • Overlap Budget: 60m</div>
-                
-                <!-- Nested Allowed Interrupter (Guest) -->
-                <div class="mt-3 ml-4 border-l border-[var(--link)] pl-3">
-                    <div class="bg-[var(--link-soft)]/50 border border-[var(--link)]/20 rounded-[8px] p-2 flex justify-between items-center">
-                        <div class="flex flex-col">
-                            <span class="text-[#0761d1] text-sm font-medium">Lunch</span>
-                            <span class="text-xs text-[var(--link)]">Guest Activity • 30m used</span>
-                        </div>
-                        <span class="font-mono text-[10px] text-[var(--link)]">13:00 - 13:30</span>
-                    </div>
-                </div>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--faint)]"
+          >
+            10:00
+          </div>
+          <div
+            class="shadow-whisper flex-1 rounded-[12px] border border-[var(--hairline)] bg-[var(--canvas-elevated)] p-4"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-[var(--ink)]"></span>
+                <span
+                  class="text-sm font-semibold tracking-[-0.2px] text-[var(--ink)]"
+                  >Office Work</span
+                >
+              </div>
+              <span
+                class="rounded-[6px] border border-[var(--hairline)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--ink)]"
+                >HOST</span
+              >
             </div>
+            <div class="mt-1 ml-4 text-xs text-[var(--body)]">
+              10:00 - 18:00 • Overlap Budget: 60m
+            </div>
+
+            <!-- Nested Allowed Interrupter (Guest) -->
+            <div class="mt-3 ml-4 border-l border-[var(--link)] pl-3">
+              <div
+                class="flex items-center justify-between rounded-[8px] border border-[var(--link)]/20 bg-[var(--link-soft)]/50 p-2"
+              >
+                <div class="flex flex-col">
+                  <span class="text-sm font-medium text-[#0761d1]">Lunch</span>
+                  <span class="text-xs text-[var(--link)]"
+                    >Guest Activity • 30m used</span
+                  >
+                </div>
+                <span class="font-mono text-[10px] text-[var(--link)]"
+                  >13:00 - 13:30</span
+                >
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 18:00 - Post-Transition -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--faint)] mt-3 w-10 text-right">18:00</div>
-            <div class="flex-1 bg-[#f2f2f2] border border-[var(--hairline)] rounded-[12px] p-3 flex justify-between items-center">
-                <div class="flex flex-col">
-                    <span class="text-[var(--ink)] text-sm font-medium">Commute Home</span>
-                    <span class="text-xs text-[var(--mute)]">Transition from Office Work</span>
-                </div>
-                <span class="font-mono text-[10px] text-[var(--mute)] bg-[var(--canvas-elevated)] border border-[var(--hairline)] rounded-[6px] px-1.5 py-0.5">POST</span>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--faint)]"
+          >
+            18:00
+          </div>
+          <div
+            class="flex flex-1 items-center justify-between rounded-[12px] border border-[var(--hairline)] bg-[#f2f2f2] p-3"
+          >
+            <div class="flex flex-col">
+              <span class="text-sm font-medium text-[var(--ink)]"
+                >Commute Home</span
+              >
+              <span class="text-xs text-[var(--mute)]"
+                >Transition from Office Work</span
+              >
             </div>
+            <span
+              class="rounded-[6px] border border-[var(--hairline)] bg-[var(--canvas-elevated)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--mute)]"
+              >POST</span
+            >
+          </div>
         </div>
 
         <!-- 18:30 - One-Time Strict Activity -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--faint)] mt-3 w-10 text-right">18:30</div>
-            <div class="flex-1 bg-[var(--canvas-elevated)] border border-[var(--hairline)] rounded-[12px] p-3 flex justify-between items-center shadow-whisper">
-                <div class="flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--ink)]"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                    <span class="text-[var(--ink)] text-sm font-medium">Doctor Appointment</span>
-                </div>
-                <span class="font-mono text-[10px] text-[var(--ink)] bg-[var(--warning-soft)] border border-[var(--warning)]/30 rounded-[6px] px-1.5 py-0.5">ONE-TIME</span>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--faint)]"
+          >
+            18:30
+          </div>
+          <div
+            class="shadow-whisper flex flex-1 items-center justify-between rounded-[12px] border border-[var(--hairline)] bg-[var(--canvas-elevated)] p-3"
+          >
+            <div class="flex items-center gap-2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-[var(--ink)]"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span class="text-sm font-medium text-[var(--ink)]"
+                >Doctor Appointment</span
+              >
             </div>
+            <span
+              class="rounded-[6px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--ink)]"
+              >ONE-TIME</span
+            >
+          </div>
         </div>
 
         <!-- 19:30 - Flexible Activity (Active Focus Mode) -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--mute)] mt-3 w-10 text-right">19:30</div>
-            <div class="flex-1 bg-[var(--ink)] text-white rounded-[12px] p-4 shadow-floating relative overflow-hidden">
-                <div class="flex flex-col">
-                    <span class="text-white text-sm font-semibold tracking-[-0.2px]">Freelance</span>
-                    <span class="text-xs text-[var(--mute)]">Preferred Window: 18:00 - 23:00</span>
-                </div>
-
-                <div class="text-center my-6">
-                    <div class="font-mono text-4xl font-medium tracking-[-1px] text-white">01:45:30</div>
-                    <div class="text-xs text-[var(--mute)] mt-1">Remaining until 21:30</div>
-                </div>
-
-                <div class="grid grid-cols-3 gap-2">
-                    <button class="bg-[#2a2a2a] text-white border border-[#3a3a3a] rounded-[6px] py-2 text-xs font-medium">Extend +15m</button>
-                    <button class="bg-[#2a2a2a] text-white border border-[#3a3a3a] rounded-[6px] py-2 text-xs font-medium">Extend +30m</button>
-                    <button class="bg-white text-[var(--ink)] rounded-[6px] py-2 text-xs font-medium">Finish Early</button>
-                </div>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--mute)]"
+          >
+            19:30
+          </div>
+          <div
+            class="shadow-floating relative flex-1 overflow-hidden rounded-[12px] bg-[var(--ink)] p-4 text-white"
+          >
+            <div class="flex flex-col">
+              <span class="text-sm font-semibold tracking-[-0.2px] text-white"
+                >Freelance</span
+              >
+              <span class="text-xs text-[var(--mute)]"
+                >Preferred Window: 18:00 - 23:00</span
+              >
             </div>
+
+            <div class="my-6 text-center">
+              <div
+                class="font-mono text-4xl font-medium tracking-[-1px] text-white"
+              >
+                01:45:30
+              </div>
+              <div class="mt-1 text-xs text-[var(--mute)]">
+                Remaining until 21:30
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <button
+                class="rounded-[6px] border border-[#3a3a3a] bg-[#2a2a2a] py-2 text-xs font-medium text-white"
+              >
+                Extend +15m
+              </button>
+              <button
+                class="rounded-[6px] border border-[#3a3a3a] bg-[#2a2a2a] py-2 text-xs font-medium text-white"
+              >
+                Extend +30m
+              </button>
+              <button
+                class="rounded-[6px] bg-white py-2 text-xs font-medium text-[var(--ink)]"
+              >
+                Finish Early
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- 21:30 - Free Time (Solver Output) -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--faint)] mt-3 w-10 text-right">21:30</div>
-            <div class="flex-1 border border-dashed border-[var(--hairline)] rounded-[12px] p-3 flex justify-center items-center h-12">
-                <span class="text-[var(--faint)] text-xs font-mono uppercase tracking-normal">Free Time</span>
-            </div>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--faint)]"
+          >
+            21:30
+          </div>
+          <div
+            class="flex h-12 flex-1 items-center justify-center rounded-[12px] border border-dashed border-[var(--hairline)] p-3"
+          >
+            <span
+              class="font-mono text-xs tracking-normal text-[var(--faint)] uppercase"
+              >Free Time</span
+            >
+          </div>
         </div>
 
         <!-- 23:00 - Spanning Sleep -->
         <div class="flex items-start gap-3">
-            <div class="font-mono text-xs text-[var(--faint)] mt-3 w-10 text-right">23:00</div>
-            <div class="flex-1 bg-[var(--canvas-elevated)] border border-[var(--hairline)] rounded-[12px] p-3 flex justify-between items-center shadow-whisper">
-                <div class="flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--ink)]"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                    <span class="text-[var(--ink)] text-sm font-medium">Sleep</span>
-                </div>
-                <span class="font-mono text-[10px] text-[var(--ink)] bg-[var(--canvas)] border border-[var(--hairline)] rounded-[6px] px-1.5 py-0.5 flex items-center gap-1">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect></svg>
-                    SPANNING
-                </span>
+          <div
+            class="mt-3 w-10 text-right font-mono text-xs text-[var(--faint)]"
+          >
+            23:00
+          </div>
+          <div
+            class="shadow-whisper flex flex-1 items-center justify-between rounded-[12px] border border-[var(--hairline)] bg-[var(--canvas-elevated)] p-3"
+          >
+            <div class="flex items-center gap-2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-[var(--ink)]"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+              <span class="text-sm font-medium text-[var(--ink)]">Sleep</span>
             </div>
+            <span
+              class="flex items-center gap-1 rounded-[6px] border border-[var(--hairline)] bg-[var(--canvas)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--ink)]"
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              </svg>
+              SPANNING
+            </span>
+          </div>
         </div>
-    </main>
+      </main>
 
-    <!-- Bottom Action Bar -->
-    <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-gradient-to-t from-[var(--canvas)] via-[var(--canvas)] to-transparent z-40">
+      <!-- Bottom Action Bar -->
+      <div
+        class="fixed right-0 bottom-0 left-0 z-40 mx-auto max-w-md bg-gradient-to-t from-[var(--canvas)] via-[var(--canvas)] to-transparent p-4"
+      >
         <div class="flex gap-2">
-            <button class="flex-1 bg-[var(--ink)] text-white rounded-[6px] py-3 text-sm font-medium flex items-center justify-center gap-2 shadow-floating">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                Add Activity
-            </button>
-            <button class="flex-1 bg-[var(--canvas-elevated)] text-[var(--ink)] border border-[var(--hairline)] rounded-[6px] py-3 text-sm font-medium flex items-center justify-center gap-2 shadow-whisper">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="10" y1="16" x2="14" y2="16"></line></svg>
-                One-Time Event
-            </button>
+          <button
+            class="shadow-floating flex flex-1 items-center justify-center gap-2 rounded-[6px] bg-[var(--ink)] py-3 text-sm font-medium text-white"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Activity
+          </button>
+          <button
+            class="shadow-whisper flex flex-1 items-center justify-center gap-2 rounded-[6px] border border-[var(--hairline)] bg-[var(--canvas-elevated)] py-3 text-sm font-medium text-[var(--ink)]"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+              <line x1="12" y1="14" x2="12" y2="18"></line>
+              <line x1="10" y1="16" x2="14" y2="16"></line>
+            </svg>
+            One-Time Event
+          </button>
         </div>
+      </div>
     </div>
-
-</div>
-
-</body>
+  </body>
 </html>

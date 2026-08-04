@@ -14,7 +14,7 @@ export function SpanningActivity() {
           </span>
         ),
         variant: "outline",
-        className: "bg-muted border-border flex items-center gap-1"
+        className: "bg-muted border-border flex items-center gap-1",
       }}
       className="shadow-whisper"
     />

@@ -37,7 +37,7 @@ Expected coverage:
   allowed-guest membership; budget exhaustion.
 - `accounting.test.ts` — the FR-026 guarantee: `unionMinutes` collapses an 8-hour host plus a
   30-minute guest to **480**, not 510; host logged duration is unchanged by guests; guest minutes
-  count toward the *guest's* progress; over-target progress is reported, not capped.
+  count toward the _guest's_ progress; over-target progress is reported, not capped.
 - `time.test.ts` — `"HH:MM"` ⇄ minutes conversions and duration math.
 
 ---
@@ -46,7 +46,7 @@ Expected coverage:
 
 1. Open `http://localhost:3000` with no data → timeline renders **empty** (FR-002, AS-1).
 2. Click **Add Activity**. Enter `Morning Standup`, Constraint = `Strict`, Start `10:00`, End
-   `10:30`. Save. (The start/end *is* the activity's Strict Window rule.)
+   `10:30`. Save. (The start/end _is_ the activity's Strict Window rule.)
 3. **Expected**: returned to the timeline with no manual refresh, showing one block labeled
    "Morning Standup" spanning 10:00–10:30 (FR-007/FR-008, SC-001).
 4. **Negative**: create an activity with End `10:00` equal to Start `10:00` → save **rejected**,

@@ -1,7 +1,9 @@
 export function FreeTime() {
   return (
-    <div className="flex-1 border border-dashed border-border rounded-[12px] p-3 flex justify-center items-center h-12">
-      <span className="text-muted-foreground/80 text-xs font-mono uppercase tracking-normal">Free Time</span>
+    <div className="flex h-12 flex-1 items-center justify-center rounded-[12px] border border-dashed border-border p-3">
+      <span className="font-mono text-xs tracking-normal text-muted-foreground/80 uppercase">
+        Free Time
+      </span>
     </div>
   )
 }

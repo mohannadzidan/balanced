@@ -26,7 +26,9 @@ describe("freeGaps", () => {
   })
 
   it("clamps a range that spans past the day boundary", () => {
-    expect(freeGaps([{ startMin: 1400, endMin: 1500 }])).toEqual([{ startMin: 0, endMin: 1400 }])
+    expect(freeGaps([{ startMin: 1400, endMin: 1500 }])).toEqual([
+      { startMin: 0, endMin: 1400 },
+    ])
   })
 
   it("leaves no gap when the day is fully occupied", () => {
@@ -36,14 +38,24 @@ describe("freeGaps", () => {
 
 describe("intersectRange", () => {
   it("returns the overlap of two ranges", () => {
-    expect(intersectRange({ startMin: 100, endMin: 200 }, { startMin: 150, endMin: 250 })).toEqual({
+    expect(
+      intersectRange(
+        { startMin: 100, endMin: 200 },
+        { startMin: 150, endMin: 250 }
+      )
+    ).toEqual({
       startMin: 150,
       endMin: 200,
     })
   })
 
   it("returns null for touching ranges (no positive overlap)", () => {
-    expect(intersectRange({ startMin: 100, endMin: 200 }, { startMin: 200, endMin: 300 })).toBeNull()
+    expect(
+      intersectRange(
+        { startMin: 100, endMin: 200 },
+        { startMin: 200, endMin: 300 }
+      )
+    ).toBeNull()
   })
 })
 

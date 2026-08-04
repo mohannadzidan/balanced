@@ -210,12 +210,20 @@ export const createActivitySchema = z
   ])
   .superRefine((data, ctx) => {
     checkTransitionGroupComplete(
-      { name: data.preName, startMin: data.preStartMin, endMin: data.preEndMin },
+      {
+        name: data.preName,
+        startMin: data.preStartMin,
+        endMin: data.preEndMin,
+      },
       "pre",
       ctx
     )
     checkTransitionGroupComplete(
-      { name: data.postName, startMin: data.postStartMin, endMin: data.postEndMin },
+      {
+        name: data.postName,
+        startMin: data.postStartMin,
+        endMin: data.postEndMin,
+      },
       "post",
       ctx
     )

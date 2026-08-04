@@ -122,7 +122,9 @@ export function placeGreedy(
     const dayBound = ctx.dayBoundOf?.(activity)
     const freeIntervals = computeFreeIntervals(
       occupied,
-      dayBound ? Math.max(ctx.freezeBoundary, dayBound.start) : ctx.freezeBoundary,
+      dayBound
+        ? Math.max(ctx.freezeBoundary, dayBound.start)
+        : ctx.freezeBoundary,
       dayBound ? Math.min(ctx.lengthMinutes, dayBound.end) : ctx.lengthMinutes
     )
     const context = {

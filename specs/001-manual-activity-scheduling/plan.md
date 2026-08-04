@@ -12,7 +12,7 @@ those definitions produce for the current day. A user can view today's timeline,
 activities (with optional pre/post transitions), create Flexible activities with a daily target
 and minimum block, choose **exactly one Temporal Placement rule** per activity (Preferred Window
 = Soft, or Strict Window = Hard), manually place Flexible blocks, and enable the system-wide
-**Overlap Rule** on a Strict host so allowed guests can be scheduled *over* it within a bounded
+**Overlap Rule** on a Strict host so allowed guests can be scheduled _over_ it within a bounded
 overlap budget. This is creation-and-viewing only (no edit/delete, no solver, no recurrence).
 
 Technical approach: a Next.js 16.2 App Router app rendering the timeline as a Server Component
@@ -61,15 +61,15 @@ deferred)
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Principle | Status | Notes |
-|-----------|--------|-------|
-| I. Component-First UI (shadcn/ui) | PASS | All UI composed from `components/ui` primitives; missing ones (dialog, select, input, label, checkbox, card, badge) added via the shadcn CLI, never hand-rolled. The allowed-guest multi-select and the sidebar are **compositions** of primitives, not forks. |
-| II. Schedule Integrity & Correctness | PASS | Every Hard rule (End>Start, Strict Window, host bounds, overlap budget, allowed-guest set) is evaluated server-side before persistence. Time stored as integer minutes-from-midnight, compared numerically via a tested `lib/time.ts` — no raw string date math. Overlap accounting (FR-026/SC-007) is its own tested module so the "counted once" guarantee is verified, not assumed. Single-date scope avoids timezone-instant comparisons. |
-| III. Turso as Source of Truth | PASS | One typed data-access layer (`lib/db/queries.ts`) over one client (`lib/db/client.ts`); Server Actions and Server Components call only that layer. Schema via checked-in migrations. No ad-hoc connections or raw SQL elsewhere. |
-| IV. Type Safety End-to-End | PASS | Strict mode stays on. Zod parses every Server Action input; rule rows map to a discriminated union at the data-layer boundary (`TemporalPlacementRule` = preferred \| strict), so rule handling is exhaustive-checked by the compiler. No `any`. |
-| V. Simplicity (YAGNI) | PASS | Rules are **concrete typed tables per category**, not a configurable rule engine — the constitution's named anti-pattern is avoided while still delivering the spec's rules model. Only 2 of 3 categories are built; **Recurrence is documented but not implemented** (spec Assumptions put it out of scope). No solver, carry-over, FCM, focus mode, or edit/delete. |
+| Principle                            | Status | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| I. Component-First UI (shadcn/ui)    | PASS   | All UI composed from `components/ui` primitives; missing ones (dialog, select, input, label, checkbox, card, badge) added via the shadcn CLI, never hand-rolled. The allowed-guest multi-select and the sidebar are **compositions** of primitives, not forks.                                                                                                                                                                                |
+| II. Schedule Integrity & Correctness | PASS   | Every Hard rule (End>Start, Strict Window, host bounds, overlap budget, allowed-guest set) is evaluated server-side before persistence. Time stored as integer minutes-from-midnight, compared numerically via a tested `lib/time.ts` — no raw string date math. Overlap accounting (FR-026/SC-007) is its own tested module so the "counted once" guarantee is verified, not assumed. Single-date scope avoids timezone-instant comparisons. |
+| III. Turso as Source of Truth        | PASS   | One typed data-access layer (`lib/db/queries.ts`) over one client (`lib/db/client.ts`); Server Actions and Server Components call only that layer. Schema via checked-in migrations. No ad-hoc connections or raw SQL elsewhere.                                                                                                                                                                                                              |
+| IV. Type Safety End-to-End           | PASS   | Strict mode stays on. Zod parses every Server Action input; rule rows map to a discriminated union at the data-layer boundary (`TemporalPlacementRule` = preferred \| strict), so rule handling is exhaustive-checked by the compiler. No `any`.                                                                                                                                                                                              |
+| V. Simplicity (YAGNI)                | PASS   | Rules are **concrete typed tables per category**, not a configurable rule engine — the constitution's named anti-pattern is avoided while still delivering the spec's rules model. Only 2 of 3 categories are built; **Recurrence is documented but not implemented** (spec Assumptions put it out of scope). No solver, carry-over, FCM, focus mode, or edit/delete.                                                                         |
 
 **Stack constraints**: pnpm for all dependency ops. Next.js 16.2 APIs verified against
 `node_modules/next/dist/docs/` per `AGENTS.md` — the `'use server'` + `useActionState(prevState,

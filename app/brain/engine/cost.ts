@@ -193,7 +193,8 @@ export function violatesDominance(
   )
 
   const shrinkTerm = elasticityRule
-    ? constants.SHRINK * (activity.durationMinutes - elasticityRule.minTotalMinutes)
+    ? constants.SHRINK *
+      (activity.durationMinutes - elasticityRule.minTotalMinutes)
     : 0
   const chunkTerm =
     repeatRule && repeatRule.sharedBudget

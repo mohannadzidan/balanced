@@ -55,7 +55,9 @@ describe("SPEC-v2.1 §6.1: minSeparationMinutes drives a Mon/Wed/Fri layout", ()
     })
 
     if (result.status === "REJECTED") {
-      throw new Error(`unexpected rejection: ${JSON.stringify(result.rejection)}`)
+      throw new Error(
+        `unexpected rejection: ${JSON.stringify(result.rejection)}`
+      )
     }
 
     const placed = plannedByName(result.timeline.instances, "Gym")
@@ -104,9 +106,15 @@ describe("SPEC-v2.1 §6.1: minSeparationMinutes drives a Mon/Wed/Fri layout", ()
     })
 
     if (result.status === "REJECTED") {
-      throw new Error(`unexpected rejection: ${JSON.stringify(result.rejection)}`)
+      throw new Error(
+        `unexpected rejection: ${JSON.stringify(result.rejection)}`
+      )
     }
     const placed = plannedByName(result.timeline.instances, "Gym")
-    expect(placed.map((p) => p.date)).toEqual(["2026-07-27", "2026-07-28", "2026-07-29"])
+    expect(placed.map((p) => p.date)).toEqual([
+      "2026-07-27",
+      "2026-07-28",
+      "2026-07-29",
+    ])
   })
 })

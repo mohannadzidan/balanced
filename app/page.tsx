@@ -8,7 +8,7 @@ import { FinishEarlyProvider } from "@/components/forms/finish-early-provider"
 
 export default function Page() {
   return (
-    <div className="max-w-md mx-auto bg-background min-h-screen relative border-x border-border pb-32">
+    <div className="relative mx-auto min-h-screen max-w-md border-x border-border bg-background pb-32">
       <ChronosNav />
       <DailyProgress />
       <DevTools />

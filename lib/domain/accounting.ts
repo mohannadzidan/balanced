@@ -27,5 +27,8 @@ export function activityProgressMin(
 ): number {
   return blocks
     .filter((block) => block.activityId === activityId)
-    .reduce((total, block) => total + durationMin(block.startMin, block.endMin), 0)
+    .reduce(
+      (total, block) => total + durationMin(block.startMin, block.endMin),
+      0
+    )
 }

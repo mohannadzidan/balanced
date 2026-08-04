@@ -41,6 +41,9 @@ export function nextRollingTarget(input: RollingTargetInput): number {
 }
 
 /** Carry-over disabled: the target is always just the base target, no rolling. */
-export function nextRollingTargetNoCarryOver(baseTargetMin: number, capMin: number | null): number {
+export function nextRollingTargetNoCarryOver(
+  baseTargetMin: number,
+  capMin: number | null
+): number {
   return clampToCap(baseTargetMin, capMin)
 }

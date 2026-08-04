@@ -14,7 +14,11 @@ import type { WindowRuleConfig } from "@/lib/rules/types"
  * bounds wrap past 24:00, which callers reasoning in a single day's minutes
  * can't evaluate here.
  */
-export function windowContains(window: WindowRuleConfig, startMin: number, durationMin: number): boolean {
+export function windowContains(
+  window: WindowRuleConfig,
+  startMin: number,
+  durationMin: number
+): boolean {
   if (window.endMin <= window.startMin) return false
   return startMin >= window.startMin && startMin + durationMin <= window.endMin
 }

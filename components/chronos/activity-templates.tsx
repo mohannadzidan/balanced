@@ -23,8 +23,8 @@ export async function ActivityTemplates() {
   )
 
   return (
-    <section className="px-4 pt-6 space-y-2">
-      <h2 className="font-mono uppercase text-xs text-muted-foreground tracking-normal pb-1">
+    <section className="space-y-2 px-4 pt-6">
+      <h2 className="pb-1 font-mono text-xs tracking-normal text-muted-foreground uppercase">
         Activities
       </h2>
       <div className="space-y-2">
@@ -35,7 +35,9 @@ export async function ActivityTemplates() {
               title={activity.name}
               subtitle={
                 activity.allowedDays.length > 0
-                  ? activity.allowedDays.map((day) => weekdayLabel(day as Weekday)).join(", ")
+                  ? activity.allowedDays
+                      .map((day) => weekdayLabel(day as Weekday))
+                      .join(", ")
                   : "No days selected"
               }
               badge={
@@ -45,7 +47,10 @@ export async function ActivityTemplates() {
               }
             />
             {!activity.isTransitionOnly && (
-              <ManualScheduleSheet activityId={activity.id} activityName={activity.name} />
+              <ManualScheduleSheet
+                activityId={activity.id}
+                activityName={activity.name}
+              />
             )}
             <EditActivityRulesSheet
               activityId={activity.id}

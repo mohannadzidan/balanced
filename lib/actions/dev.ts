@@ -4,7 +4,10 @@
 
 import { revalidatePath } from "next/cache"
 
-import { resetAndRegenerateTimeline, seedOvernightSleepFixture } from "@/lib/db/dev-queries"
+import {
+  resetAndRegenerateTimeline,
+  seedOvernightSleepFixture,
+} from "@/lib/db/dev-queries"
 import { todayISO } from "@/lib/time"
 
 export async function resetAndRegenerateTimelineAction(): Promise<void> {

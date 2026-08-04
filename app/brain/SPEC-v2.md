@@ -45,18 +45,18 @@ and an identity scheme (`instance.id === activity.id`) that cannot express
 more than one instance of an activity.
 
 Drop 1 pays that debt first, under conditions where correctness is cheap to
-verify. Every change below is a *representation* change: each collapsed
+verify. Every change below is a _representation_ change: each collapsed
 case is exactly expressible in v1 semantics, so the existing test corpus is
 the regression suite and needs (almost) no edits.
 
 Four things are bought:
 
-| Change | Buys |
-| --- | --- |
-| Window merge | One predicate instead of three; deletes a rule type, a validation code, and a hot-path branch. Drop 2's window-list generalisation becomes a one-line change. |
-| Repeat merge | Chunking and recurrence become one mechanism at two levels. Drop 2 adds a boolean rather than a subsystem. |
-| Occurrence ids | The only stored-shape migration in the whole of v2, done once instead of twice. |
-| Event-layer collapse | Drop 2's scoped re-solve is implemented once instead of seven times. **This is the load-bearing one.** |
+| Change               | Buys                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Window merge         | One predicate instead of three; deletes a rule type, a validation code, and a hot-path branch. Drop 2's window-list generalisation becomes a one-line change. |
+| Repeat merge         | Chunking and recurrence become one mechanism at two levels. Drop 2 adds a boolean rather than a subsystem.                                                    |
+| Occurrence ids       | The only stored-shape migration in the whole of v2, done once instead of twice.                                                                               |
+| Event-layer collapse | Drop 2's scoped re-solve is implemented once instead of seven times. **This is the load-bearing one.**                                                        |
 
 ---
 
@@ -80,7 +80,7 @@ Three permitted exceptions, and no others:
    test asserting `"gym"` or `"gym#2"` must be updated. `expectPlacements`
    keys on name and `renderAscii` prints names, so this should be a small
    set — but it is the one place the criterion above genuinely bends, and
-   any such edit must be a *mechanical* id rewrite, never a change to an
+   any such edit must be a _mechanical_ id rewrite, never a change to an
    expected start, end, duration, status, or reason.
 3. **Validation codes.** Three codes are renamed (Section 8). Tests
    asserting on those codes change the code string and nothing else.
@@ -151,17 +151,17 @@ has to touch them anyway.
 
 Seven types become six, and one becomes a field.
 
-| v1 | Drop 1 |
-| --- | --- |
-| `FixedRule` | `FixedRule` — unchanged (see 4.5) |
-| `StrictWindowRule` | `WindowRule` with `maxDriftMinutes: 0` |
-| `FlexibleWindowRule` | `WindowRule` |
-| `Activity.allowedDays` | `WindowRule.days` |
-| `MandatoryRule` | `Activity.requiredCount` (Section 5) |
-| `ShrinkRule.minDuration` / `.minChunk` | `ElasticityRule` |
+| v1                                          | Drop 1                                 |
+| ------------------------------------------- | -------------------------------------- |
+| `FixedRule`                                 | `FixedRule` — unchanged (see 4.5)      |
+| `StrictWindowRule`                          | `WindowRule` with `maxDriftMinutes: 0` |
+| `FlexibleWindowRule`                        | `WindowRule`                           |
+| `Activity.allowedDays`                      | `WindowRule.days`                      |
+| `MandatoryRule`                             | `Activity.requiredCount` (Section 5)   |
+| `ShrinkRule.minDuration` / `.minChunk`      | `ElasticityRule`                       |
 | `ShrinkRule.chunkingAllowed` / `.maxChunks` | `RepeatRule` with `sharedBudget: true` |
-| `SequenceRule` | unchanged |
-| `OverlapRule` | unchanged |
+| `SequenceRule`                              | unchanged                              |
+| `OverlapRule`                               | unchanged                              |
 
 ### 4.1 WindowRule
 
@@ -214,7 +214,7 @@ therefore represented, not special-cased — the "no window rule at all"
 branch in `evaluateCandidate` disappears.
 
 **Drift may not soften day-eligibility.** A candidate must lie within the
-union of its windows' *day spans* regardless of drift allowance. In Drop 1
+union of its windows' _day spans_ regardless of drift allowance. In Drop 1
 this is unreachable (one day, and the frame bounds it), but the check is
 specified and implemented now because Drop 2 makes it reachable and a
 missing containment check there is a silent correctness bug.
@@ -302,7 +302,7 @@ orders most-constrained-first, so a merged fixed rule would sort to the
 front on its own and Phase 1a would disappear.
 
 **It is nonetheless excluded from Drop 1, because merging it changes
-behaviour.** Today, two colliding fixed activities are *both* marked
+behaviour.** Today, two colliding fixed activities are _both_ marked
 infeasible with a blocking diagnostic naming both (`SPEC.md` §11 case 6,
 `ALGORITHM.md` §6: "the engine never picks an arbitrary winner"). Routed
 through the hard set, backtracking would place one and skip the other. That
@@ -422,11 +422,11 @@ produce identical ids, as `SPEC.md` §16.3 criterion 6 requires.
 
 Three places key on `activityId` today and must key on `occurrenceId`:
 
-| Site | Today | Drop 1 |
-| --- | --- | --- |
-| `TimelineActivity.chunkGroupId` | `activity.id` | the `occurrenceId` |
-| `extractAnchors` / `groupKeyOf` | `activityId ?? id` | `occurrenceId` |
-| `checkEventRejection` before/after matching | `activityId` | `occurrenceId` |
+| Site                                        | Today              | Drop 1             |
+| ------------------------------------------- | ------------------ | ------------------ |
+| `TimelineActivity.chunkGroupId`             | `activity.id`      | the `occurrenceId` |
+| `extractAnchors` / `groupKeyOf`             | `activityId ?? id` | `occurrenceId`     |
+| `checkEventRejection` before/after matching | `activityId`       | `occurrenceId`     |
 
 Each is a latent Drop 2 bug being fixed early:
 
@@ -435,7 +435,7 @@ Each is a latent Drop 2 bug being fixed early:
   into one bogus block plan, charging one shrink shortfall for two
   independent sessions.
 - **`groupKeyOf`** — anchoring one occurrence would otherwise exclude
-  *every* occurrence of that activity from re-solving. This is the single
+  _every_ occurrence of that activity from re-solving. This is the single
   most likely source of a subtle v2 bug.
 - **`checkEventRejection`** — matching by activity id would let "occurrence
   1 is still placed" mask "occurrence 2 became skipped," silently
@@ -468,8 +468,8 @@ retained, derived from `frame.days[dayIndex].date`.
 ## 7. The event layer
 
 `ALGORITHM.md` §14 already names the problem: the handlers are
-*"implemented separately (and largely duplicated) per event rather than
-through one shared generic step."* Seven handlers span roughly 700 lines
+_"implemented separately (and largely duplicated) per event rather than
+through one shared generic step."_ Seven handlers span roughly 700 lines
 of `solve.ts`, of which steps 3–7 are near-identical.
 
 Drop 2 needs to change those shared steps — scoped re-solve touches every
@@ -510,16 +510,16 @@ as 4–7:
 Every handler shrinks to its preconditions and its mutation. Semantics are
 `SPEC.md` §9 and `ALGORITHM.md` §14 verbatim — nothing below is new.
 
-| Event | Precondition | Mutation | freezeBoundary | Reject |
-| --- | --- | --- | --- | --- |
-| `GENERATE_DAY` | — | none | `now` | no |
-| `TICK` | — | auto-start / auto-complete / backdate; **short-circuit unchanged if nothing changed state, revision included** | `now` | no |
-| `SKIP` | target `PLANNED` | mark `SKIPPED`, `locked: true`, reason `USER_SKIPPED` | `now` | no |
-| `RESTORE` | target `SKIPPED` | clear `locked` | `now` | yes |
-| `FINISH_EARLY` | target `ACTIVE`; `actualStart ≤ at ≤ plannedEnd` | mark `COMPLETED`, `actualEnd = at`, `completedSource: user` | `at` | no |
-| `EXTEND` | target `ACTIVE`; `minutes > 0`, grid-aligned | `plannedEnd += minutes` | `now` | yes |
-| `ADD_ADHOC` | payload validates as an activity | append instance + pseudo-activity; recompute `totalRanked` | `now` | yes |
-| `EDIT_INSTANCE_RULES` | target exists | substitute rules tagged `source: "instance"`; patch the anchor in place if anchored | `now` | yes |
+| Event                 | Precondition                                     | Mutation                                                                                                       | freezeBoundary | Reject |
+| --------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | -------------- | ------ |
+| `GENERATE_DAY`        | —                                                | none                                                                                                           | `now`          | no     |
+| `TICK`                | —                                                | auto-start / auto-complete / backdate; **short-circuit unchanged if nothing changed state, revision included** | `now`          | no     |
+| `SKIP`                | target `PLANNED`                                 | mark `SKIPPED`, `locked: true`, reason `USER_SKIPPED`                                                          | `now`          | no     |
+| `RESTORE`             | target `SKIPPED`                                 | clear `locked`                                                                                                 | `now`          | yes    |
+| `FINISH_EARLY`        | target `ACTIVE`; `actualStart ≤ at ≤ plannedEnd` | mark `COMPLETED`, `actualEnd = at`, `completedSource: user`                                                    | `at`           | no     |
+| `EXTEND`              | target `ACTIVE`; `minutes > 0`, grid-aligned     | `plannedEnd += minutes`                                                                                        | `now`          | yes    |
+| `ADD_ADHOC`           | payload validates as an activity                 | append instance + pseudo-activity; recompute `totalRanked`                                                     | `now`          | yes    |
+| `EDIT_INSTANCE_RULES` | target exists                                    | substitute rules tagged `source: "instance"`; patch the anchor in place if anchored                            | `now`          | yes    |
 
 `FINALISE_DAY` keeps its separate short path (`ALGORITHM.md` §16) and does
 not go through `planEvent`. It never touches the placement pipeline.
@@ -544,7 +544,7 @@ shape. Each already has, or must gain, a dedicated test.
    `extractAnchors` keeps honouring it across later `TICK`s.
 5. **Rejection purity.** A rejected solve returns a timeline deeply equal
    to its input, with the original revision and cost recomputed against the
-   *unchanged* instances.
+   _unchanged_ instances.
 6. **Input immutability.** `runEvent` operates on copies. Deep-freeze the
    input in tests and assert it is unchanged after every solve, including
    after a rejection.
@@ -555,19 +555,19 @@ shape. Each already has, or must gain, a dedicated test.
 
 ### 8.1 Renamed codes
 
-| v1 | Drop 1 | Condition |
-| --- | --- | --- |
-| `SHRINK_FLOOR_INVALID` | `ELASTICITY_INVALID` | `minTotal > duration`, or `minBlock > minTotal` |
-| `WINDOW_INVERTED` | `WINDOW_INVERTED` | unchanged; a non-spanning window with `end ≤ start` |
-| `NO_ALLOWED_DAYS` (warning) | `NO_ELIGIBLE_DAYS` (warning) | the union of window `days` is empty |
+| v1                          | Drop 1                       | Condition                                           |
+| --------------------------- | ---------------------------- | --------------------------------------------------- |
+| `SHRINK_FLOOR_INVALID`      | `ELASTICITY_INVALID`         | `minTotal > duration`, or `minBlock > minTotal`     |
+| `WINDOW_INVERTED`           | `WINDOW_INVERTED`            | unchanged; a non-spanning window with `end ≤ start` |
+| `NO_ALLOWED_DAYS` (warning) | `NO_ELIGIBLE_DAYS` (warning) | the union of window `days` is empty                 |
 
 ### 8.2 New codes
 
-| Code | Severity | Condition |
-| --- | --- | --- |
-| `NOT_YET_SUPPORTED` | error | `RepeatRule` with `sharedBudget: false`, `period ≠ "day"`, or `minSeparationMinutes ≠ 0` |
-| `REPEAT_DUPLICATE` | error | Two `RepeatRule`s with the same `sharedBudget` value |
-| `REQUIRED_COUNT_INVALID` | error | `requiredCount < 0`, or `> 1` in Drop 1 |
+| Code                     | Severity | Condition                                                                                |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------- |
+| `NOT_YET_SUPPORTED`      | error    | `RepeatRule` with `sharedBudget: false`, `period ≠ "day"`, or `minSeparationMinutes ≠ 0` |
+| `REPEAT_DUPLICATE`       | error    | Two `RepeatRule`s with the same `sharedBudget` value                                     |
+| `REQUIRED_COUNT_INVALID` | error    | `requiredCount < 0`, or `> 1` in Drop 1                                                  |
 
 ### 8.3 Unchanged
 
@@ -633,15 +633,15 @@ argument.
 The fluent builder absorbs the whole rule change. These all survive with
 identical signatures:
 
-| Builder call | Emits in Drop 1 |
-| --- | --- |
-| `.strict(start, end)` | `WindowRule { days: allowedDays, start, end, maxDriftMinutes: 0 }` |
-| `.flexible(start, end, {drift})` | `WindowRule { days: allowedDays, start, end, maxDriftMinutes: drift }` |
-| `.days(...d)` | sets `days` on every window (and the implicit one) |
-| `.mandatory()` | `requiredCount = 1` |
+| Builder call                                      | Emits in Drop 1                                                                                                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.strict(start, end)`                             | `WindowRule { days: allowedDays, start, end, maxDriftMinutes: 0 }`                                                                                            |
+| `.flexible(start, end, {drift})`                  | `WindowRule { days: allowedDays, start, end, maxDriftMinutes: drift }`                                                                                        |
+| `.days(...d)`                                     | sets `days` on every window (and the implicit one)                                                                                                            |
+| `.mandatory()`                                    | `requiredCount = 1`                                                                                                                                           |
 | `.shrink({floor, chunking, minChunk, maxChunks})` | `ElasticityRule { minTotalMinutes: floor, minBlockMinutes: minChunk }` + `RepeatRule { period: "day", count: maxChunks, sharedBudget: true }` when `chunking` |
-| `.fixed(start, end)` | `FixedRule` — unchanged |
-| `.sequence(...)`, `.overlap(...)` | unchanged |
+| `.fixed(start, end)`                              | `FixedRule` — unchanged                                                                                                                                       |
+| `.sequence(...)`, `.overlap(...)`                 | unchanged                                                                                                                                                     |
 
 New calls: `.window(start, end, {drift, days})` (repeatable),
 `.required(n)`, `.elastic({minTotal, minBlock})`, `.repeat({count})`.
@@ -703,15 +703,15 @@ exist only to serve them.
 Each step ends with the full existing suite green. Do not proceed past a
 red step.
 
-| # | Step | Done when |
-| --- | --- | --- |
-| 1 | `Frame` + day table; `resolveDayFrame` as an alias; `resolveWallClock(wall, frame, 0)` | Suite green, zero test edits. DST tests (1380/1440/1500) pass through the day table. |
-| 2 | `WindowRule` + min-over-windows in `resolveActivity` / `evaluateCandidate`; `allowedDays` → `days`; builder sugar | Suite green. §5.3's drift table passes verbatim against the merged predicate. |
-| 3 | `requiredCount`; `isRequired` in `skipCost`; `isHardConstrained` | Suite green. Every mandatory test passes untouched. |
-| 4 | `ElasticityRule` + `RepeatRule(sharedBudget: true)`; `shrink.ts` reads the new fields | Suite green. Worked examples 14.2, 14.6, 14.6b pass with unchanged snapshots. |
-| 5 | Occurrence id scheme; the three keying changes; migration helper | Suite green modulo **mechanical id rewrites only** (Section 2, exception 2). |
-| 6 | `planEvent` / `runEvent` collapse | Suite green. All six §7.3 invariants have a dedicated passing test. |
-| 7 | Validation: renamed and new codes | Every code in Section 8 is reached by at least one test. |
+| #   | Step                                                                                                              | Done when                                                                            |
+| --- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1   | `Frame` + day table; `resolveDayFrame` as an alias; `resolveWallClock(wall, frame, 0)`                            | Suite green, zero test edits. DST tests (1380/1440/1500) pass through the day table. |
+| 2   | `WindowRule` + min-over-windows in `resolveActivity` / `evaluateCandidate`; `allowedDays` → `days`; builder sugar | Suite green. §5.3's drift table passes verbatim against the merged predicate.        |
+| 3   | `requiredCount`; `isRequired` in `skipCost`; `isHardConstrained`                                                  | Suite green. Every mandatory test passes untouched.                                  |
+| 4   | `ElasticityRule` + `RepeatRule(sharedBudget: true)`; `shrink.ts` reads the new fields                             | Suite green. Worked examples 14.2, 14.6, 14.6b pass with unchanged snapshots.        |
+| 5   | Occurrence id scheme; the three keying changes; migration helper                                                  | Suite green modulo **mechanical id rewrites only** (Section 2, exception 2).         |
+| 6   | `planEvent` / `runEvent` collapse                                                                                 | Suite green. All six §7.3 invariants have a dedicated passing test.                  |
+| 7   | Validation: renamed and new codes                                                                                 | Every code in Section 8 is reached by at least one test.                             |
 
 ### 12.1 Acceptance criteria for Drop 1
 

@@ -34,7 +34,12 @@ type ExecutionResult = { ok: true } | { ok: false; error: string }
 
 /** One quick-start choice offered by the Finish Early prompt. */
 export type FinishEarlyOption =
-  | { kind: "pull-next"; timelineActivityId: string; name: string; durationMin: number }
+  | {
+      kind: "pull-next"
+      timelineActivityId: string
+      name: string
+      durationMin: number
+    }
   | { kind: "start-new"; activityId: string; name: string; durationMin: number }
 
 export type FinishEarlyPrompt = {
@@ -69,9 +74,14 @@ export async function createOneOffActivity(input: {
   const timeline = await getOrCreateTimeline(input.dateISO)
   const rows = await getTimelineRows(timeline.id)
 
-  const conflict = rows.some((row) => input.startTime < row.endTime && row.startTime < input.endTime)
+  const conflict = rows.some(
+    (row) => input.startTime < row.endTime && row.startTime < input.endTime
+  )
   if (conflict) {
-    return { ok: false, error: "That time overlaps an existing block on the timeline." }
+    return {
+      ok: false,
+      error: "That time overlaps an existing block on the timeline.",
+    }
   }
 
   await db.insert(timelineActivityTable).values({
@@ -114,7 +124,10 @@ export async function extendActivity(
     .where(eq(timelineActivityTable.id, timelineActivityId))
   if (!target) return { ok: false, error: "Activity not found." }
   if (target.startTime > new Date()) {
-    return { ok: false, error: `Hasn't started yet — starts at ${formatClock(target.startTime)}.` }
+    return {
+      ok: false,
+      error: `Hasn't started yet — starts at ${formatClock(target.startTime)}.`,
+    }
   }
 
   const rows = await getTimelineRows(target.timelineId)
@@ -133,7 +146,10 @@ export async function extendActivity(
       return { ok: false, error: "Would overlap a pinned block." }
     }
     const shiftedStart = cursorEnd
-    const shiftedEnd = addMinutes(row.endTime, minutesBetween(row.startTime, cursorEnd))
+    const shiftedEnd = addMinutes(
+      row.endTime,
+      minutesBetween(row.startTime, cursorEnd)
+    )
     updates.push({ id: row.id, startTime: shiftedStart, endTime: shiftedEnd })
     cursorEnd = shiftedEnd
   }
@@ -172,7 +188,9 @@ async function buildFinishEarlyPrompt(
   const upcoming = rows
     .filter(
       (row) =>
-        row.id !== finishedTimelineActivityId && row.status !== "completed" && row.startTime > actualEndTime
+        row.id !== finishedTimelineActivityId &&
+        row.status !== "completed" &&
+        row.startTime > actualEndTime
     )
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 
@@ -189,10 +207,16 @@ async function buildFinishEarlyPrompt(
     let eligible = true
     if (nextRow.sourceActivityId) {
       const rules = await getActivityRules(nextRow.sourceActivityId)
-      if (rules.window && !windowContains(rules.window, nowMin, duration)) eligible = false
+      if (rules.window && !windowContains(rules.window, nowMin, duration))
+        eligible = false
     }
     if (eligible) {
-      options.push({ kind: "pull-next", timelineActivityId: nextRow.id, name: nextRow.title, durationMin: duration })
+      options.push({
+        kind: "pull-next",
+        timelineActivityId: nextRow.id,
+        name: nextRow.title,
+        durationMin: duration,
+      })
     }
   }
 
@@ -200,12 +224,18 @@ async function buildFinishEarlyPrompt(
   // finished and the block just considered above) isn't offered again as a
   // fresh "start now" instance.
   const scheduledActivityIds = new Set(
-    rows.filter((row) => row.sourceActivityId).map((row) => row.sourceActivityId as string)
+    rows
+      .filter((row) => row.sourceActivityId)
+      .map((row) => row.sourceActivityId as string)
   )
 
   const weekday = weekdayOf(actualEndTime)
   const candidates = await db
-    .select({ id: activityTable.id, name: activityTable.name, allowedDays: activityTable.allowedDays })
+    .select({
+      id: activityTable.id,
+      name: activityTable.name,
+      allowedDays: activityTable.allowedDays,
+    })
     .from(activityTable)
     .where(eq(activityTable.isTransitionOnly, false))
 
@@ -221,12 +251,20 @@ async function buildFinishEarlyPrompt(
         : rules.window.endMin - rules.window.startMin
       : (rules.tracking?.minBlockMinutes ?? null)
     if (duration === null || duration <= 0 || duration > freedMin) continue
-    if (rules.window && !windowContains(rules.window, nowMin, duration)) continue
+    if (rules.window && !windowContains(rules.window, nowMin, duration))
+      continue
 
-    options.push({ kind: "start-new", activityId: candidate.id, name: candidate.name, durationMin: duration })
+    options.push({
+      kind: "start-new",
+      activityId: candidate.id,
+      name: candidate.name,
+      durationMin: duration,
+    })
   }
 
-  return options.length > 0 ? { freedStartIso: actualEndTime.toISOString(), freedMin, options } : null
+  return options.length > 0
+    ? { freedStartIso: actualEndTime.toISOString(), freedMin, options }
+    : null
 }
 
 /**
@@ -245,11 +283,15 @@ export async function finishActivityEarly(
     .from(timelineActivityTable)
     .where(eq(timelineActivityTable.id, timelineActivityId))
   if (!target) return { ok: false, error: "Activity not found." }
-  if (target.status === "completed") return { ok: false, error: "Already finished." }
+  if (target.status === "completed")
+    return { ok: false, error: "Already finished." }
 
   const actualStartTime = target.actualStartTime ?? target.startTime
   if (actualStartTime > new Date()) {
-    return { ok: false, error: `Hasn't started yet — starts at ${formatClock(actualStartTime)}.` }
+    return {
+      ok: false,
+      error: `Hasn't started yet — starts at ${formatClock(actualStartTime)}.`,
+    }
   }
   if (actualEndTime <= actualStartTime) {
     return { ok: false, error: "Finish time must be after the start time." }
@@ -261,10 +303,20 @@ export async function finishActivityEarly(
     // the block's displayed span — and the occupied-minutes/tracked-target
     // math a later regeneration does from `endTime` — reflect what actually
     // happened, not the original schedule.
-    .set({ actualStartTime, actualEndTime, endTime: actualEndTime, status: "completed" })
+    .set({
+      actualStartTime,
+      actualEndTime,
+      endTime: actualEndTime,
+      status: "completed",
+    })
     .where(eq(timelineActivityTable.id, target.id))
 
-  const prompt = await buildFinishEarlyPrompt(target.timelineId, target.id, target.sourceActivityId, actualEndTime)
+  const prompt = await buildFinishEarlyPrompt(
+    target.timelineId,
+    target.id,
+    target.sourceActivityId,
+    actualEndTime
+  )
   return { ok: true, prompt }
 }
 
@@ -273,13 +325,17 @@ export async function finishActivityEarly(
  * block's start (and end, preserving its duration) into the freed gap. Pinned
  * on acceptance so the next regeneration doesn't move it back.
  */
-export async function pullActivityEarlier(timelineActivityId: string, newStartTime: Date): Promise<ExecutionResult> {
+export async function pullActivityEarlier(
+  timelineActivityId: string,
+  newStartTime: Date
+): Promise<ExecutionResult> {
   const [row] = await db
     .select()
     .from(timelineActivityTable)
     .where(eq(timelineActivityTable.id, timelineActivityId))
   if (!row) return { ok: false, error: "Activity not found." }
-  if (row.status === "completed") return { ok: false, error: "Already finished." }
+  if (row.status === "completed")
+    return { ok: false, error: "Already finished." }
 
   const duration = minutesBetween(row.startTime, row.endTime)
   const newEndTime = addMinutes(newStartTime, duration)
@@ -302,7 +358,10 @@ export async function startQuickActivity(input: {
   startTime: Date
   durationMin: number
 }): Promise<ExecutionResult> {
-  const [activity] = await db.select().from(activityTable).where(eq(activityTable.id, input.activityId))
+  const [activity] = await db
+    .select()
+    .from(activityTable)
+    .where(eq(activityTable.id, input.activityId))
   if (!activity) return { ok: false, error: "Activity not found." }
 
   const timeline = await getOrCreateTimeline(input.dateISO)

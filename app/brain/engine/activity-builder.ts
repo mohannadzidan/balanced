@@ -21,7 +21,9 @@ function slugify(name: string): string {
 }
 
 function isFullWeek(days: readonly Weekday[]): boolean {
-  return ALL_DAYS.every((d) => days.includes(d)) && days.length === ALL_DAYS.length
+  return (
+    ALL_DAYS.every((d) => days.includes(d)) && days.length === ALL_DAYS.length
+  )
 }
 
 interface WindowSpec {

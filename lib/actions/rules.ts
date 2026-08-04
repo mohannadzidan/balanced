@@ -31,7 +31,10 @@ const minuteOfDayField = z.string().transform((raw, ctx) => {
 const durationHoursField = z.string().transform((raw, ctx) => {
   const hours = Number(raw.trim())
   if (!Number.isFinite(hours) || hours <= 0) {
-    ctx.addIssue({ code: "custom", message: "Enter a positive number of hours." })
+    ctx.addIssue({
+      code: "custom",
+      message: "Enter a positive number of hours.",
+    })
     return z.NEVER
   }
   return Math.round(hours * 60)
@@ -43,7 +46,11 @@ const durationHoursField = z.string().transform((raw, ctx) => {
 // Flexible windows are bounds a shorter `durationMin` floats within.
 const windowRuleSchema = z
   .discriminatedUnion("kind", [
-    z.object({ kind: z.literal("strict"), startMin: minuteOfDayField, endMin: minuteOfDayField }),
+    z.object({
+      kind: z.literal("strict"),
+      startMin: minuteOfDayField,
+      endMin: minuteOfDayField,
+    }),
     z.object({
       kind: z.literal("flexible"),
       startMin: minuteOfDayField,
@@ -55,10 +62,15 @@ const windowRuleSchema = z
     message: "Start and end time cannot be the same.",
     path: ["endMin"],
   })
-  .refine((data) => data.kind !== "flexible" || data.durationMin <= windowSpanMin(data.startMin, data.endMin), {
-    message: "Duration can't exceed the window's span.",
-    path: ["durationMin"],
-  })
+  .refine(
+    (data) =>
+      data.kind !== "flexible" ||
+      data.durationMin <= windowSpanMin(data.startMin, data.endMin),
+    {
+      message: "Duration can't exceed the window's span.",
+      path: ["durationMin"],
+    }
+  )
 
 export async function saveWindowRuleAction(
   activityId: string,
@@ -73,7 +85,10 @@ export async function saveWindowRuleAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   await upsertWindowRule(activityId, parsed.data)
@@ -86,10 +101,14 @@ export async function saveWindowRuleAction(
 const sequenceRuleSchema = z.object({
   preActivityId: z
     .string()
-    .transform((value) => (value === NONE_OPTION || value.trim() === "" ? null : value)),
+    .transform((value) =>
+      value === NONE_OPTION || value.trim() === "" ? null : value
+    ),
   postActivityId: z
     .string()
-    .transform((value) => (value === NONE_OPTION || value.trim() === "" ? null : value)),
+    .transform((value) =>
+      value === NONE_OPTION || value.trim() === "" ? null : value
+    ),
 })
 
 export async function saveSequenceRuleAction(
@@ -119,7 +138,10 @@ const overlapRuleSchema = z.object({
     .transform((raw, ctx) => {
       const value = raw.trim()
       if (!/^\d+$/.test(value)) {
-        ctx.addIssue({ code: "custom", message: "Enter a whole number of minutes." })
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter a whole number of minutes.",
+        })
         return z.NEVER
       }
       return Number(value)
@@ -139,7 +161,10 @@ export async function saveOverlapRuleAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   await upsertOverlapRule(
@@ -154,37 +179,40 @@ export async function saveOverlapRuleAction(
 }
 
 const trackingRuleSchema = z.object({
-  dailyTargetMin: z
-    .string()
-    .transform((raw, ctx) => {
-      const value = raw.trim()
-      if (!/^\d+$/.test(value) || Number(value) <= 0) {
-        ctx.addIssue({ code: "custom", message: "Enter a positive whole number of minutes." })
-        return z.NEVER
-      }
-      return Number(value)
-    }),
-  minBlockMinutes: z
-    .string()
-    .transform((raw, ctx) => {
-      const value = raw.trim()
-      if (!/^\d+$/.test(value) || Number(value) <= 0) {
-        ctx.addIssue({ code: "custom", message: "Enter a positive whole number of minutes." })
-        return z.NEVER
-      }
-      return Number(value)
-    }),
-  capMin: z
-    .string()
-    .transform((raw, ctx) => {
-      const value = raw.trim()
-      if (value === "") return null
-      if (!/^\d+$/.test(value)) {
-        ctx.addIssue({ code: "custom", message: "Enter a whole number of minutes, or leave blank." })
-        return z.NEVER
-      }
-      return Number(value)
-    }),
+  dailyTargetMin: z.string().transform((raw, ctx) => {
+    const value = raw.trim()
+    if (!/^\d+$/.test(value) || Number(value) <= 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a positive whole number of minutes.",
+      })
+      return z.NEVER
+    }
+    return Number(value)
+  }),
+  minBlockMinutes: z.string().transform((raw, ctx) => {
+    const value = raw.trim()
+    if (!/^\d+$/.test(value) || Number(value) <= 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a positive whole number of minutes.",
+      })
+      return z.NEVER
+    }
+    return Number(value)
+  }),
+  capMin: z.string().transform((raw, ctx) => {
+    const value = raw.trim()
+    if (value === "") return null
+    if (!/^\d+$/.test(value)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Enter a whole number of minutes, or leave blank.",
+      })
+      return z.NEVER
+    }
+    return Number(value)
+  }),
   carryOverEnabled: z.literal("on").optional(),
 })
 
@@ -201,10 +229,16 @@ export async function saveTrackingRuleAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
-  if (parsed.data.capMin !== null && parsed.data.capMin < parsed.data.dailyTargetMin) {
+  if (
+    parsed.data.capMin !== null &&
+    parsed.data.capMin < parsed.data.dailyTargetMin
+  ) {
     return { ok: false, error: "The cap can't be lower than the daily target." }
   }
 
@@ -220,17 +254,25 @@ export async function saveTrackingRuleAction(
   return { ok: true }
 }
 
-export async function deleteRuleAction(activityId: string, ruleType: RuleType): Promise<void> {
+export async function deleteRuleAction(
+  activityId: string,
+  ruleType: RuleType
+): Promise<void> {
   await deleteRule(activityId, ruleType)
   await regenerateForwardTimeline(todayISO())
   revalidatePath("/")
 }
 
-const vacationDaySchema = z.string().refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value), {
-  message: "Enter a valid date.",
-})
+const vacationDaySchema = z
+  .string()
+  .refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value), {
+    message: "Enter a valid date.",
+  })
 
-export async function addVacationDayAction(activityId: string, vacationDateISO: string): Promise<void> {
+export async function addVacationDayAction(
+  activityId: string,
+  vacationDateISO: string
+): Promise<void> {
   const parsed = vacationDaySchema.safeParse(vacationDateISO)
   if (!parsed.success) return
   await setVacationDay(activityId, parsed.data)
@@ -238,7 +280,10 @@ export async function addVacationDayAction(activityId: string, vacationDateISO: 
   revalidatePath("/")
 }
 
-export async function removeVacationDayAction(activityId: string, vacationDateISO: string): Promise<void> {
+export async function removeVacationDayAction(
+  activityId: string,
+  vacationDateISO: string
+): Promise<void> {
   await removeVacationDay(activityId, vacationDateISO)
   await regenerateForwardTimeline(todayISO())
   revalidatePath("/")

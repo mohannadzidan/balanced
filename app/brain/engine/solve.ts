@@ -226,7 +226,8 @@ function expandForSolve(
     if (a.activity.priorityRank !== b.activity.priorityRank) {
       return a.activity.priorityRank - b.activity.priorityRank
     }
-    if (a.bucketKey !== b.bucketKey) return a.bucketKey.localeCompare(b.bucketKey)
+    if (a.bucketKey !== b.bucketKey)
+      return a.bucketKey.localeCompare(b.bucketKey)
     return a.index - b.index
   })
 }
@@ -650,9 +651,7 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
   // An ad-hoc anchor has activityId: null (SPEC.md Section 9.5), so its key
   // for "already spoken for, exclude from re-solving" purposes is its own
   // instance id instead.
-  const anchorActivityIds = new Set(
-    anchors.map((a) => a.activityId ?? a.id)
-  )
+  const anchorActivityIds = new Set(anchors.map((a) => a.activityId ?? a.id))
   const placedAnchors = anchors.filter(
     (a) => a.plannedStart !== null && a.plannedEnd !== null
   )
@@ -851,7 +850,8 @@ function runEvent(
   )
 
   let allInstances = [...anchors, ...plan.extraInstances, ...solved]
-  if (plan.instanceTransform) allInstances = plan.instanceTransform(allInstances)
+  if (plan.instanceTransform)
+    allInstances = plan.instanceTransform(allInstances)
 
   const speculative = toResult(
     input,
@@ -1198,7 +1198,13 @@ function rejectionPlan(
   conflictingInstanceIds: readonly string[]
 ): EventPlan {
   return {
-    rejection: { code, message, conflictingInstanceIds, diagnostics: [], bestEffortTimeline: null },
+    rejection: {
+      code,
+      message,
+      conflictingInstanceIds,
+      diagnostics: [],
+      bestEffortTimeline: null,
+    },
     workingExisting: [],
     freezeBoundary: 0,
     extraActivities: [],
@@ -1302,9 +1308,7 @@ function planEvent(
     const workingExisting = input.existing.filter(
       (i) => groupKeyOf(i) !== groupKey
     )
-    const excludeIds = target.activityId
-      ? new Set([target.activityId])
-      : null
+    const excludeIds = target.activityId ? new Set([target.activityId]) : null
     return {
       ...basePlan,
       workingExisting,
@@ -1334,9 +1338,7 @@ function planEvent(
     const groupKey = groupKeyOf(target)
     return {
       ...basePlan,
-      workingExisting: input.existing.filter(
-        (i) => groupKeyOf(i) !== groupKey
-      ),
+      workingExisting: input.existing.filter((i) => groupKeyOf(i) !== groupKey),
       checkRejection: true,
     }
   }
@@ -1606,11 +1608,12 @@ export function solve(input: SolveInput): SolveResult {
   // per-bucket window filtering in `expand` already restricts to each bucket's
   // own day, so we pass the full enabled catalog through. SPEC-v2.1 §4.1:
   // empty windows bucket yields no occurrences, which composes cleanly.
-  const baseCatalog = frame.dayCount > 1
-    ? seededInput.catalog.filter((a) => a.enabled)
-    : seededInput.catalog.filter(
-        (a) => a.enabled && isEligibleOnDay(a, weekday)
-      )
+  const baseCatalog =
+    frame.dayCount > 1
+      ? seededInput.catalog.filter((a) => a.enabled)
+      : seededInput.catalog.filter(
+          (a) => a.enabled && isEligibleOnDay(a, weekday)
+        )
 
   const resolvedCache = new Map<string, ResolvedActivity>()
   const resolve = (activity: Activity): ResolvedActivity => {
@@ -1633,12 +1636,7 @@ export function solve(input: SolveInput): SolveResult {
     seededInput.existing
   )
 
-  const plan = planEvent(
-    seededInput,
-    constants,
-    todaysCatalog,
-    totalRanked
-  )
+  const plan = planEvent(seededInput, constants, todaysCatalog, totalRanked)
   return runEvent(
     seededInput,
     plan,

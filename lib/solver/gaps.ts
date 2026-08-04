@@ -9,7 +9,11 @@
 import { type TimeRange } from "@/lib/time"
 
 /** The free ranges left in `[dayStart, dayEnd)` once `occupied` is carved out. */
-export function freeGaps(occupied: TimeRange[], dayStart = 0, dayEnd = 1440): TimeRange[] {
+export function freeGaps(
+  occupied: TimeRange[],
+  dayStart = 0,
+  dayEnd = 1440
+): TimeRange[] {
   const sorted = [...occupied]
     .map((range) => ({
       startMin: Math.max(dayStart, Math.min(range.startMin, dayEnd)),
@@ -40,7 +44,10 @@ export function intersectRange(a: TimeRange, b: TimeRange): TimeRange | null {
 }
 
 /** Gaps clipped to the portions that fall inside `window` (unrestricted if `window` is `null`). */
-export function gapsWithinWindow(gaps: TimeRange[], window: TimeRange | null): TimeRange[] {
+export function gapsWithinWindow(
+  gaps: TimeRange[],
+  window: TimeRange | null
+): TimeRange[] {
   if (window === null) return gaps
   return gaps
     .map((gap) => intersectRange(gap, window))

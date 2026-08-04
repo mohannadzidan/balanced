@@ -42,12 +42,12 @@ document is silent, `SPEC.md` governs.
 Every requirement in this drop is the same generalisation applied to a
 different axis, and in every case the v1 behaviour is the degenerate case:
 
-| Axis | Before | After | Degenerate case |
-| --- | --- | --- | --- |
-| Frame | 1 day, `[0, 1440)` | N days, `[0, Σ dayLen)` | `dayCount = 1` |
-| Windows | one per rule | one **per eligible day** | 1 day → 1 window |
-| Instances | 1 per activity | N per activity per **bucket** | `{period: day, count: 1}` |
-| Re-solve scope | "rest of the day" | "rest of the current **bucket**" | bucket = day |
+| Axis           | Before             | After                            | Degenerate case           |
+| -------------- | ------------------ | -------------------------------- | ------------------------- |
+| Frame          | 1 day, `[0, 1440)` | N days, `[0, Σ dayLen)`          | `dayCount = 1`            |
+| Windows        | one per rule       | one **per eligible day**         | 1 day → 1 window          |
+| Instances      | 1 per activity     | N per activity per **bucket**    | `{period: day, count: 1}` |
+| Re-solve scope | "rest of the day"  | "rest of the current **bucket**" | bucket = day              |
 
 That symmetry is the design. It is also the test strategy: the Drop 1
 corpus remains a valid regression suite at `dayCount = 1, count = 1`, and
@@ -200,7 +200,7 @@ The second conjunct is the containment check Drop 1 specified but could not
 reach. **It is reachable now.** With a large drift allowance, a candidate
 could otherwise bleed out of Tuesday's window far enough to land on
 Wednesday — a day the activity may not be eligible for. Drift softens the
-*window*; it must never soften *day eligibility*.
+_window_; it must never soften _day eligibility_.
 
 ### 4.1 The frame's trailing edge
 
@@ -242,12 +242,12 @@ Occurrence {
 
 `RepeatRule.period` partitions the frame:
 
-| `period` | Buckets | `bucketKey` |
-| --- | --- | --- |
-| `"day"` | one per `frame.days` entry | the day's `date` |
-| `"week"` | ISO weeks intersecting the frame | `"2026-W31"` |
-| `"month"` | calendar months intersecting the frame | `"2026-07"` |
-| `"frame"` | one, `[0, lengthMinutes)` | `"frame"` |
+| `period`  | Buckets                                | `bucketKey`      |
+| --------- | -------------------------------------- | ---------------- |
+| `"day"`   | one per `frame.days` entry             | the day's `date` |
+| `"week"`  | ISO weeks intersecting the frame       | `"2026-W31"`     |
+| `"month"` | calendar months intersecting the frame | `"2026-07"`      |
+| `"frame"` | one, `[0, lengthMinutes)`              | `"frame"`        |
 
 Bucket spans are clipped to the frame. Buckets are enumerated in
 chronological order; `bucketKey` sorts lexicographically in that same
@@ -391,7 +391,7 @@ a 45-minute floor is three independent budgets, not one 180-minute budget.
 ### 7.3 Sequence
 
 **A dependent's recurrence is induced by its host.** The dependent gets one
-occurrence per *placed* host occurrence, paired by index. Commute is a
+occurrence per _placed_ host occurrence, paired by index. Commute is a
 `pre` of Work; Work recurs daily; Commute therefore recurs daily, bound to
 each Work occurrence.
 
@@ -478,7 +478,7 @@ The caller passes them as the next frame's `prelude`, translated by
 ### 8.3 The quota ledger
 
 If the caller solves week by week but an activity recurs three times per
-*month*, neither week alone knows how many sessions the month already has.
+_month_, neither week alone knows how many sessions the month already has.
 
 ```
 Plan.quotas       : { activityId, periodKey, placed }[]
@@ -490,7 +490,7 @@ bucket (Section 5.2). The engine emits the ledger; the caller round-trips
 it. **No cross-frame state lives inside the engine** — the ledger is an
 ordinary input and an ordinary output, exactly as `carryIn` was.
 
-The ledger is *mandatory for correctness* whenever a frame edge cuts a
+The ledger is _mandatory for correctness_ whenever a frame edge cuts a
 bucket. A frame whose edges cut a bucket and which receives no ledger gets
 warning `PARTIAL_BUCKET_NO_LEDGER`.
 
@@ -603,15 +603,15 @@ components.
 
 Drop 2 is net-negative in code. Remove:
 
-| Removed | Replaced by |
-| --- | --- |
-| `InstanceState.CARRIED_IN` | prelude occupancy (§8.1) |
-| `TimelineActivity.spanningFromPreviousDay` | nothing — a block simply spans |
-| `Timeline.carryIn` | `Plan.overflow` (§8.2) |
-| `FINALISE_DAY`'s clamp-and-duplicate branch | nothing (§8.4) |
-| `placeFixedSet`'s "resolve end against tomorrow's frame" hack | day-table arithmetic (§4) |
-| The `s + d ≤ lengthMinutes` feasibility check | window containment (§4) |
-| The "may this activity span midnight?" predicate | nothing — all activities may |
+| Removed                                                       | Replaced by                    |
+| ------------------------------------------------------------- | ------------------------------ |
+| `InstanceState.CARRIED_IN`                                    | prelude occupancy (§8.1)       |
+| `TimelineActivity.spanningFromPreviousDay`                    | nothing — a block simply spans |
+| `Timeline.carryIn`                                            | `Plan.overflow` (§8.2)         |
+| `FINALISE_DAY`'s clamp-and-duplicate branch                   | nothing (§8.4)                 |
+| `placeFixedSet`'s "resolve end against tomorrow's frame" hack | day-table arithmetic (§4)      |
+| The `s + d ≤ lengthMinutes` feasibility check                 | window containment (§4)        |
+| The "may this activity span midnight?" predicate              | nothing — all activities may   |
 
 Anything that still asks "does this cross midnight?" after Drop 2 lands is
 a bug. Grep for it before declaring the drop done.
@@ -651,14 +651,14 @@ now only fires on `requiredCount < 0` or `requiredCount > count`.
 
 ### 13.2 New
 
-| Code | Severity | Condition |
-| --- | --- | --- |
-| `SEPARATION_UNSATISFIABLE` | error | `count × duration + (count − 1) × minSeparation > bucket length` |
-| `FIXED_WITH_MULTI_COUNT` | error | `FixedRule` with an occurrence-level `count > 1` |
-| `SEQUENCE_REPEAT_CONFLICT` | error | A dependent declares a `RepeatRule` differing from its host's |
-| `FRAME_TOO_LONG` | error | `dayCount > 366` |
-| `REPEAT_PERIOD_EXCEEDS_FRAME` | warning | `period` is coarser than the frame; the ledger is required |
-| `PARTIAL_BUCKET_NO_LEDGER` | warning | A frame edge cuts a bucket and no `quotas` were supplied |
+| Code                          | Severity | Condition                                                        |
+| ----------------------------- | -------- | ---------------------------------------------------------------- |
+| `SEPARATION_UNSATISFIABLE`    | error    | `count × duration + (count − 1) × minSeparation > bucket length` |
+| `FIXED_WITH_MULTI_COUNT`      | error    | `FixedRule` with an occurrence-level `count > 1`                 |
+| `SEQUENCE_REPEAT_CONFLICT`    | error    | A dependent declares a `RepeatRule` differing from its host's    |
+| `FRAME_TOO_LONG`              | error    | `dayCount > 366`                                                 |
+| `REPEAT_PERIOD_EXCEEDS_FRAME` | warning  | `period` is coarser than the frame; the ledger is required       |
+| `PARTIAL_BUCKET_NO_LEDGER`    | warning  | A frame edge cuts a bucket and no `quotas` were supplied         |
 
 `SEPARATION_UNSATISFIABLE` is the recurrence analogue of `WINDOW_TOO_SHORT`
 and catches the most common authoring mistake by pure arithmetic, before
@@ -691,16 +691,16 @@ bugs across a month are invisible to inspection.
 
 Each step ends with the Drop 1 suite green at `dayCount = 1`.
 
-| # | Step | Done when |
-| --- | --- | --- |
-| 1 | `resolveFrame(date, N, tz)`; day table; window expansion per day; spanning windows | Drop 1 suite green. A spanning strict window resolves to one contiguous interval. |
-| 2 | `dayCount > 1`, repeat still pinned to `{day, 1, shared}` | **The §2 equivalence test passes.** Carry-over deletions (§11) land here. |
-| 3 | `expand()`, buckets, `sharedBudget: false`, `count > 1` | Three-times-weekly produces three occurrences in the right buckets. |
-| 4 | `minSeparationMinutes`; group placement via `placeHardSet` | Mon/Wed/Fri falls out of 3×/week at 48h separation, with no spreading code. |
-| 5 | `requiredCount > 1`; hard-set decomposition | A 30-day frame with daily required activities solves inside the node limit. |
-| 6 | Prelude, overflow, quotas, `FINALISE_FRAME` | A block spanning a frame boundary survives as one instance across two solves. |
-| 7 | Scoped re-solve and scoped rejection | `FINISH_EARLY` on day 2 of a 30-day frame leaves day 20 byte-identical. |
-| 8 | `defaultDayWindow`, `backdateHorizonMinutes`, per-day absolute exclusions | Each has a named test. |
+| #   | Step                                                                               | Done when                                                                         |
+| --- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | `resolveFrame(date, N, tz)`; day table; window expansion per day; spanning windows | Drop 1 suite green. A spanning strict window resolves to one contiguous interval. |
+| 2   | `dayCount > 1`, repeat still pinned to `{day, 1, shared}`                          | **The §2 equivalence test passes.** Carry-over deletions (§11) land here.         |
+| 3   | `expand()`, buckets, `sharedBudget: false`, `count > 1`                            | Three-times-weekly produces three occurrences in the right buckets.               |
+| 4   | `minSeparationMinutes`; group placement via `placeHardSet`                         | Mon/Wed/Fri falls out of 3×/week at 48h separation, with no spreading code.       |
+| 5   | `requiredCount > 1`; hard-set decomposition                                        | A 30-day frame with daily required activities solves inside the node limit.       |
+| 6   | Prelude, overflow, quotas, `FINALISE_FRAME`                                        | A block spanning a frame boundary survives as one instance across two solves.     |
+| 7   | Scoped re-solve and scoped rejection                                               | `FINISH_EARLY` on day 2 of a 30-day frame leaves day 20 byte-identical.           |
+| 8   | `defaultDayWindow`, `backdateHorizonMinutes`, per-day absolute exclusions          | Each has a named test.                                                            |
 
 Step 2 is the hinge. If the equivalence test does not pass there, do not
 proceed to step 3 — every later step compounds whatever it would have
@@ -721,7 +721,7 @@ caught.
 7. A scoped re-solve on a 30-day frame leaves every out-of-scope instance
    byte-identical, including ids and relaxations.
 8. Round-trip: solving a month as one frame and as four chained weekly
-   frames with the ledger produces the same occurrence *counts* per period
+   frames with the ledger produces the same occurrence _counts_ per period
    (placements may legitimately differ; counts may not).
 9. `grep` finds no remaining midnight, carry-in, or day-boundary special
    case (§11).

@@ -2,13 +2,19 @@
 
 import { revalidatePath } from "next/cache"
 
-import { finishGuestEarly, placeGuestActivity, type SpareTimePrompt } from "@/lib/db/overlap-queries"
+import {
+  finishGuestEarly,
+  placeGuestActivity,
+  type SpareTimePrompt,
+} from "@/lib/db/overlap-queries"
 
 export type FinishGuestResult =
   | { ok: true; prompt: SpareTimePrompt | null }
   | { ok: false; error: string }
 
-export async function finishGuestEarlyAction(timelineActivityId: string): Promise<FinishGuestResult> {
+export async function finishGuestEarlyAction(
+  timelineActivityId: string
+): Promise<FinishGuestResult> {
   const result = await finishGuestEarly(timelineActivityId)
   revalidatePath("/")
   return result

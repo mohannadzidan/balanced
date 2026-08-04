@@ -3,7 +3,7 @@
 All time-of-day fields are **integer minutes from midnight** (0–1439). Durations are integer
 minutes. IDs are text UUIDs. Booleans are SQLite integers (0/1). Dates are `YYYY-MM-DD` text
 (local calendar date). Design rationale for every choice here is in
-[research.md](./research.md) — §1 (rules as per-category tables), §2 (strict times *are* a rule),
+[research.md](./research.md) — §1 (rules as per-category tables), §2 (strict times _are_ a rule),
 §3 (one block table), §4 (accounting), §7 (Recurrence deferred).
 
 ## The rules model in storage
@@ -13,11 +13,11 @@ gets its own table **primary-keyed by `activity_id`**. That primary key is what 
 spec's "an activity holds at most one rule per category" — it is a database invariant, not an
 application check.
 
-| Rule trait (spec) | How it is represented |
-|-------------------|------------------------|
-| **Scope** (system-wide vs activity-level) | Activity-level rules key on `activity_id`. The Overlap Rule is system-wide — the system always understands it; `overlap_rule` stores a *host's settings* for it, not the rule's existence. |
-| **Category** (mutually exclusive, ≤1 per activity) | One table per category; `PRIMARY KEY (activity_id)` makes a second rule in the same category impossible to insert. |
-| **Classification** (Hard vs Soft) | **Derived in code, never stored**: `temporal_placement_rule.kind='strict'` ⇒ Hard, `'preferred'` ⇒ Soft; all Overlap Rule checks are Hard. Storing it would permit a row claiming a Preferred Window is Hard. |
+| Rule trait (spec)                                  | How it is represented                                                                                                                                                                                         |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Scope** (system-wide vs activity-level)          | Activity-level rules key on `activity_id`. The Overlap Rule is system-wide — the system always understands it; `overlap_rule` stores a _host's settings_ for it, not the rule's existence.                    |
+| **Category** (mutually exclusive, ≤1 per activity) | One table per category; `PRIMARY KEY (activity_id)` makes a second rule in the same category impossible to insert.                                                                                            |
+| **Classification** (Hard vs Soft)                  | **Derived in code, never stored**: `temporal_placement_rule.kind='strict'` ⇒ Hard, `'preferred'` ⇒ Soft; all Overlap Rule checks are Hard. Storing it would permit a row claiming a Preferred Window is Hard. |
 
 ## Entity overview
 
@@ -41,14 +41,14 @@ A reusable global definition (FR-006). `constraint_type` is `'strict'` or `'flex
 Note what is **not** here: no `start_min`/`end_min` (they are the Temporal Placement rule, §2 of
 research) and no `is_container` flag (it is the Overlap Rule's presence).
 
-| Field | Type | Notes / Rules |
-|-------|------|---------------|
-| `id` | TEXT PK | UUID |
-| `name` | TEXT NOT NULL | required (FR-004) |
-| `constraint_type` | TEXT NOT NULL | `'strict'` \| `'flexible'` (FR-004) |
-| `daily_target_min` | INTEGER NULL | flexible only; required when flexible (FR-012) |
-| `min_block_min` | INTEGER NULL | flexible only; required when flexible (FR-012); also sets a guest block's duration (FR-022) |
-| `created_date` | TEXT NOT NULL | `YYYY-MM-DD`; the day this definition belongs to (interim stand-in for Recurrence — see below) |
+| Field              | Type          | Notes / Rules                                                                                  |
+| ------------------ | ------------- | ---------------------------------------------------------------------------------------------- |
+| `id`               | TEXT PK       | UUID                                                                                           |
+| `name`             | TEXT NOT NULL | required (FR-004)                                                                              |
+| `constraint_type`  | TEXT NOT NULL | `'strict'` \| `'flexible'` (FR-004)                                                            |
+| `daily_target_min` | INTEGER NULL  | flexible only; required when flexible (FR-012)                                                 |
+| `min_block_min`    | INTEGER NULL  | flexible only; required when flexible (FR-012); also sets a guest block's duration (FR-022)    |
+| `created_date`     | TEXT NOT NULL | `YYYY-MM-DD`; the day this definition belongs to (interim stand-in for Recurrence — see below) |
 
 **Validation rules**
 
@@ -60,25 +60,25 @@ research) and no `is_container` flag (it is the Overlap Rule's presence).
 
 **State**: none — create + view only this feature (no edit/delete).
 
-## 2. TemporalPlacementRule *(category: Temporal Placement — required)*
+## 2. TemporalPlacementRule _(category: Temporal Placement — required)_
 
 The exclusive Preferred-vs-Strict Window choice (FR-013). One row per activity, always present.
 
 `temporal_placement_rule`
 
-| Field | Type | Notes / Rules |
-|-------|------|---------------|
-| `activity_id` | TEXT **PK**, FK → Activity(id) | PK ⇒ at most one rule in this category |
-| `kind` | TEXT NOT NULL | `'preferred'` (Soft) \| `'strict'` (Hard) |
-| `start_min` | INTEGER NOT NULL | window start |
-| `end_min` | INTEGER NOT NULL | MUST be `> start_min` (FR-005 for strict activities) |
+| Field         | Type                           | Notes / Rules                                        |
+| ------------- | ------------------------------ | ---------------------------------------------------- |
+| `activity_id` | TEXT **PK**, FK → Activity(id) | PK ⇒ at most one rule in this category               |
+| `kind`        | TEXT NOT NULL                  | `'preferred'` (Soft) \| `'strict'` (Hard)            |
+| `start_min`   | INTEGER NOT NULL               | window start                                         |
+| `end_min`     | INTEGER NOT NULL               | MUST be `> start_min` (FR-005 for strict activities) |
 
 **How the window is consumed differs by constraint type** (research §2):
 
-| Activity type | `kind` | Meaning |
-|---------------|--------|---------|
-| Strict | always `'strict'` | The activity's block **fills the entire window**; `start_min`/`end_min` are its exact fixed times (Story 1). |
-| Flexible | `'preferred'` or `'strict'` | Blocks are `min_block_min` long and **float inside** the window. `'strict'` ⇒ a block outside is rejected; `'preferred'` ⇒ a block outside is persisted and flagged (FR-016 / FR-017). |
+| Activity type | `kind`                      | Meaning                                                                                                                                                                                |
+| ------------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Strict        | always `'strict'`           | The activity's block **fills the entire window**; `start_min`/`end_min` are its exact fixed times (Story 1).                                                                           |
+| Flexible      | `'preferred'` or `'strict'` | Blocks are `min_block_min` long and **float inside** the window. `'strict'` ⇒ a block outside is rejected; `'preferred'` ⇒ a block outside is persisted and flagged (FR-016 / FR-017). |
 
 **Rules**
 
@@ -87,23 +87,23 @@ The exclusive Preferred-vs-Strict Window choice (FR-013). One row per activity, 
   whose times are fixed.
 - Classification is derived: `kind='strict'` ⇒ **Hard**, `kind='preferred'` ⇒ **Soft**.
 
-## 3. OverlapRule (host settings) *(category: Overlap — optional)*
+## 3. OverlapRule (host settings) _(category: Overlap — optional)_
 
 The system-wide Overlap Rule as instantiated on a **host** (FR-019, FR-020). Its presence is what
 makes an activity a host — this replaces the old `is_container` boolean.
 
 `overlap_rule`
 
-| Field | Type | Notes / Rules |
-|-------|------|---------------|
-| `host_activity_id` | TEXT **PK**, FK → Activity(id) | the host; PK ⇒ at most one Overlap rule per activity |
-| `budget_min` | INTEGER NOT NULL | total overlap budget in minutes ("Interruptible Minutes") |
+| Field              | Type                           | Notes / Rules                                             |
+| ------------------ | ------------------------------ | --------------------------------------------------------- |
+| `host_activity_id` | TEXT **PK**, FK → Activity(id) | the host; PK ⇒ at most one Overlap rule per activity      |
+| `budget_min`       | INTEGER NOT NULL               | total overlap budget in minutes ("Interruptible Minutes") |
 
 `overlap_allowed_guest` (the allowed-guest set)
 
-| Field | Type | Notes / Rules |
-|-------|------|---------------|
-| `host_activity_id` | TEXT NOT NULL FK → Activity(id) | the host |
+| Field               | Type                            | Notes / Rules                    |
+| ------------------- | ------------------------------- | -------------------------------- |
+| `host_activity_id`  | TEXT NOT NULL FK → Activity(id) | the host                         |
 | `guest_activity_id` | TEXT NOT NULL FK → Activity(id) | an allowed **flexible** activity |
 
 **Rules**
@@ -124,14 +124,14 @@ makes an activity a host — this replaces the old `is_container` boolean.
 
 A named pre- or post-block linked to exactly one parent Activity (FR-009, FR-010).
 
-| Field | Type | Notes / Rules |
-|-------|------|---------------|
-| `id` | TEXT PK | UUID |
-| `activity_id` | TEXT NOT NULL FK → Activity(id) | parent |
-| `position` | TEXT NOT NULL | `'pre'` \| `'post'` |
-| `name` | TEXT NOT NULL | required |
-| `start_min` | INTEGER NOT NULL | required |
-| `end_min` | INTEGER NOT NULL | MUST be `> start_min` |
+| Field         | Type                            | Notes / Rules         |
+| ------------- | ------------------------------- | --------------------- |
+| `id`          | TEXT PK                         | UUID                  |
+| `activity_id` | TEXT NOT NULL FK → Activity(id) | parent                |
+| `position`    | TEXT NOT NULL                   | `'pre'` \| `'post'`   |
+| `name`        | TEXT NOT NULL                   | required              |
+| `start_min`   | INTEGER NOT NULL                | required              |
+| `end_min`     | INTEGER NOT NULL                | MUST be `> start_min` |
 
 **Rules**
 
@@ -143,17 +143,17 @@ A named pre- or post-block linked to exactly one parent Activity (FR-009, FR-010
 ## 5. ScheduledBlock
 
 A manually placed occurrence of a **Flexible** activity on the day's timeline. A row with a
-non-null `host_activity_id` **is** the spec's *Overlapping Guest Block* — the same shape, one
+non-null `host_activity_id` **is** the spec's _Overlapping Guest Block_ — the same shape, one
 table (research §3).
 
-| Field | Type | Notes / Rules |
-|-------|------|---------------|
-| `id` | TEXT PK | UUID |
-| `activity_id` | TEXT NOT NULL FK → Activity(id) | MUST reference a flexible activity |
-| `date` | TEXT NOT NULL | `YYYY-MM-DD` (current date) |
-| `start_min` | INTEGER NOT NULL | user-supplied start |
-| `end_min` | INTEGER NOT NULL | computed = `start_min + activity.min_block_min` (FR-015) |
-| `host_activity_id` | TEXT NULL FK → Activity(id) | NULL ⇒ standalone block; non-NULL ⇒ **guest block** overlapping that host |
+| Field              | Type                            | Notes / Rules                                                             |
+| ------------------ | ------------------------------- | ------------------------------------------------------------------------- |
+| `id`               | TEXT PK                         | UUID                                                                      |
+| `activity_id`      | TEXT NOT NULL FK → Activity(id) | MUST reference a flexible activity                                        |
+| `date`             | TEXT NOT NULL                   | `YYYY-MM-DD` (current date)                                               |
+| `start_min`        | INTEGER NOT NULL                | user-supplied start                                                       |
+| `end_min`          | INTEGER NOT NULL                | computed = `start_min + activity.min_block_min` (FR-015)                  |
+| `host_activity_id` | TEXT NULL FK → Activity(id)     | NULL ⇒ standalone block; non-NULL ⇒ **guest block** overlapping that host |
 
 ### 5a. Standalone block (`host_activity_id IS NULL`) — FR-015–FR-018
 
@@ -176,7 +176,7 @@ All three checks are **Hard**; any failure rejects without persisting (FR-023):
 - The block is permitted to intersect **its own host's span only**; that is the sanctioned-overlap
   exemption to 5a's general overlap check.
 
-## Deferred: Recurrence *(category — documented, not built)*
+## Deferred: Recurrence _(category — documented, not built)_
 
 The spec's Rules Model defines a third category whose exclusive options are **Recurring**
 (allowed-days set, re-evaluated each matching day, participates in carry-over) and **One-Time**
@@ -198,11 +198,11 @@ with a date-match / allowed-days-match. Purely additive; no existing column chan
 Three distinct quantities, deliberately never conflated (research §4, implemented in
 `lib/domain/accounting.ts`):
 
-| Quantity | Definition | Guest block's effect |
-|----------|------------|----------------------|
-| **Activity progress** (sidebar, FR-014/FR-018) | Σ of that activity's own `scheduled_block` durations for the date | Counts toward the **guest** activity's progress; contributes **nothing** to the host |
-| **Host logged duration** (FR-026, SC-007) | The host's own span, `end_min − start_min` from its Temporal Placement rule | **Unchanged** — guests never add minutes to it |
-| **Total logged time for the day** | **Union measure** of all block intervals, *not* their sum | Overlapping minutes collapse: 10:00–18:00 host + 13:00–13:30 guest = **8h**, never 8h30m |
+| Quantity                                       | Definition                                                                  | Guest block's effect                                                                     |
+| ---------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Activity progress** (sidebar, FR-014/FR-018) | Σ of that activity's own `scheduled_block` durations for the date           | Counts toward the **guest** activity's progress; contributes **nothing** to the host     |
+| **Host logged duration** (FR-026, SC-007)      | The host's own span, `end_min − start_min` from its Temporal Placement rule | **Unchanged** — guests never add minutes to it                                           |
+| **Total logged time for the day**              | **Union measure** of all block intervals, _not_ their sum                   | Overlapping minutes collapse: 10:00–18:00 host + 13:00–13:30 guest = **8h**, never 8h30m |
 
 Over-target progress is allowed and simply displayed (spec Edge Case) — no cap this feature.
 
@@ -222,37 +222,45 @@ Discriminated unions keep both the constraint type and the rule variant compiler
 silent fallthrough:
 
 ```ts
-type PreferredWindow = { kind: "preferred"; startMin: number; endMin: number }; // Soft
-type StrictWindow    = { kind: "strict";    startMin: number; endMin: number }; // Hard
-type TemporalPlacementRule = PreferredWindow | StrictWindow;
+type PreferredWindow = { kind: "preferred"; startMin: number; endMin: number } // Soft
+type StrictWindow = { kind: "strict"; startMin: number; endMin: number } // Hard
+type TemporalPlacementRule = PreferredWindow | StrictWindow
 
 type OverlapRule = {
-  hostActivityId: string;
-  budgetMin: number;
-  allowedGuestIds: string[];
-};
+  hostActivityId: string
+  budgetMin: number
+  allowedGuestIds: string[]
+}
 
 type StrictActivity = {
-  id: string; name: string; constraintType: "strict";
-  placement: StrictWindow;           // block fills the whole window
-  overlap: OverlapRule | null;       // present ⇒ this activity is a host
-  createdDate: string;
-};
+  id: string
+  name: string
+  constraintType: "strict"
+  placement: StrictWindow // block fills the whole window
+  overlap: OverlapRule | null // present ⇒ this activity is a host
+  createdDate: string
+}
 
 type FlexibleActivity = {
-  id: string; name: string; constraintType: "flexible";
-  dailyTargetMin: number; minBlockMin: number;
-  placement: TemporalPlacementRule;  // blocks float inside the window
-  createdDate: string;
-};
+  id: string
+  name: string
+  constraintType: "flexible"
+  dailyTargetMin: number
+  minBlockMin: number
+  placement: TemporalPlacementRule // blocks float inside the window
+  createdDate: string
+}
 
-type Activity = StrictActivity | FlexibleActivity;
+type Activity = StrictActivity | FlexibleActivity
 
 type ScheduledBlock = {
-  id: string; activityId: string; date: string;
-  startMin: number; endMin: number;
-  hostActivityId: string | null;     // non-null ⇒ guest block overlapping that host
-};
+  id: string
+  activityId: string
+  date: string
+  startMin: number
+  endMin: number
+  hostActivityId: string | null // non-null ⇒ guest block overlapping that host
+}
 ```
 
 `Transition` is a plain typed record. Raw DB row shapes live in `lib/db/schema.ts` and are mapped

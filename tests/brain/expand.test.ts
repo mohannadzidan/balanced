@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest"
 import { expand } from "@/app/brain/engine/expand"
-import type { Activity, Rule, RepeatRule, Weekday, WindowRule } from "@/app/brain/engine/types"
+import type {
+  Activity,
+  Rule,
+  RepeatRule,
+  Weekday,
+  WindowRule,
+} from "@/app/brain/engine/types"
 import { resolveFrame } from "@/app/brain/engine/time"
 
 function act(
@@ -52,7 +58,10 @@ describe("app/brain/engine/expand", () => {
 
   it("Mon/Wed/Fri bucketing with period: 'day'", () => {
     const catalog = [
-      act("Gym", 60, 1, [win("09:00", "10:00", 0, ["MON", "WED", "FRI"]), rep("day", 1)]),
+      act("Gym", 60, 1, [
+        win("09:00", "10:00", 0, ["MON", "WED", "FRI"]),
+        rep("day", 1),
+      ]),
     ]
 
     const occs = expand(catalog, frame)
@@ -74,7 +83,10 @@ describe("app/brain/engine/expand", () => {
 
   it("empty bucket yields nothing (§5.2)", () => {
     const catalog = [
-      act("WeekendOnly", 60, 1, [win("09:00", "10:00", 0, ["SAT"]), rep("day", 1)]),
+      act("WeekendOnly", 60, 1, [
+        win("09:00", "10:00", 0, ["SAT"]),
+        rep("day", 1),
+      ]),
     ]
 
     // Frame is Wed-Sun; Saturday (08-01) is eligible, so one occurrence — but
@@ -88,8 +100,14 @@ describe("app/brain/engine/expand", () => {
   it("determinism and sort order (§5.3)", () => {
     const catalog = [
       act("LowRank", 60, 2, [win("09:00", "10:00", 0, ["WED"]), rep("day", 1)]),
-      act("HighRank", 60, 1, [win("09:00", "10:00", 0, ["WED"]), rep("day", 1)]),
-      act("SameRank", 60, 1, [win("09:00", "10:00", 0, ["WED"]), rep("day", 1)]),
+      act("HighRank", 60, 1, [
+        win("09:00", "10:00", 0, ["WED"]),
+        rep("day", 1),
+      ]),
+      act("SameRank", 60, 1, [
+        win("09:00", "10:00", 0, ["WED"]),
+        rep("day", 1),
+      ]),
     ]
 
     const occs = expand(catalog, frame)
@@ -121,7 +139,10 @@ describe("app/brain/engine/expand", () => {
   it("requiredCount marks the first N occurrences in a bucket as required", () => {
     const catalog = [
       {
-        ...act("Gym", 60, 1, [win("09:00", "10:00", 0, ["WED"]), rep("day", 3)]),
+        ...act("Gym", 60, 1, [
+          win("09:00", "10:00", 0, ["WED"]),
+          rep("day", 3),
+        ]),
         requiredCount: 2,
       },
     ]
@@ -142,7 +163,11 @@ describe("app/brain/engine/expand", () => {
     }
     const recurrence = rep("day", 1)
     const catalog = [
-      act("Gym", 60, 1, [win("09:00", "10:00", 0, ["WED", "FRI"]), chunk, recurrence]),
+      act("Gym", 60, 1, [
+        win("09:00", "10:00", 0, ["WED", "FRI"]),
+        chunk,
+        recurrence,
+      ]),
     ]
 
     const occs = expand(catalog, frame)
@@ -160,7 +185,10 @@ describe("app/brain/engine/expand", () => {
 
   it("period: 'week' buckets by ISO week (§5.1)", () => {
     const catalog = [
-      act("Weekly", 60, 1, [win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]), rep("week", 1)]),
+      act("Weekly", 60, 1, [
+        win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]),
+        rep("week", 1),
+      ]),
     ]
 
     const occs = expand(catalog, frame)
@@ -173,7 +201,10 @@ describe("app/brain/engine/expand", () => {
 
   it("period: 'month' buckets by calendar month, split across a boundary", () => {
     const catalog = [
-      act("Monthly", 60, 1, [win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]), rep("month", 1)]),
+      act("Monthly", 60, 1, [
+        win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]),
+        rep("month", 1),
+      ]),
     ]
 
     const occs = expand(catalog, frame)
@@ -186,7 +217,10 @@ describe("app/brain/engine/expand", () => {
 
   it("period: 'frame' produces exactly one bucket for the whole frame", () => {
     const catalog = [
-      act("OnceEver", 60, 1, [win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]), rep("frame", 1)]),
+      act("OnceEver", 60, 1, [
+        win("09:00", "10:00", 0, ["WED", "THU", "FRI", "SAT", "SUN"]),
+        rep("frame", 1),
+      ]),
     ]
 
     const occs = expand(catalog, frame)
@@ -222,7 +256,13 @@ describe("app/brain/engine/expand", () => {
     const occs = expand(catalog, frame)
 
     expect(occs).toHaveLength(5) // frame is Wed 07-29 .. Sun 08-02: all 5 days
-    const dates = ["2026-07-29", "2026-07-30", "2026-07-31", "2026-08-01", "2026-08-02"]
+    const dates = [
+      "2026-07-29",
+      "2026-07-30",
+      "2026-07-31",
+      "2026-08-01",
+      "2026-08-02",
+    ]
     expect(occs.map((o) => o.bucketKey)).toEqual(dates)
     occs.forEach((occ, i) => {
       expect(occ.index).toBe(1)

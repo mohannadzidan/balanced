@@ -1,7 +1,12 @@
 import { and, eq, ne } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { activityTable, overlapAllowedGuestTable, ruleTable, trackingLedgerTable } from "@/lib/db/schema"
+import {
+  activityTable,
+  overlapAllowedGuestTable,
+  ruleTable,
+  trackingLedgerTable,
+} from "@/lib/db/schema"
 import type {
   ActivityRules,
   OverlapRuleConfig,
@@ -11,7 +16,9 @@ import type {
   WindowRuleConfig,
 } from "@/lib/rules/types"
 
-export async function getActivityRules(activityId: string): Promise<ActivityRules> {
+export async function getActivityRules(
+  activityId: string
+): Promise<ActivityRules> {
   const rows = await db
     .select()
     .from(ruleTable)
@@ -83,11 +90,16 @@ export async function upsertOverlapRule(
     })
     .returning({ id: ruleTable.id })
 
-  await db.delete(overlapAllowedGuestTable).where(eq(overlapAllowedGuestTable.ruleId, row.id))
+  await db
+    .delete(overlapAllowedGuestTable)
+    .where(eq(overlapAllowedGuestTable.ruleId, row.id))
 
   if (guestActivityIds.length > 0) {
     await db.insert(overlapAllowedGuestTable).values(
-      guestActivityIds.map((guestActivityId) => ({ ruleId: row.id, guestActivityId }))
+      guestActivityIds.map((guestActivityId) => ({
+        ruleId: row.id,
+        guestActivityId,
+      }))
     )
   }
 }
@@ -112,20 +124,37 @@ export async function upsertTrackingRule(
 
   await db
     .insert(trackingLedgerTable)
-    .values({ activityId, rollingTargetMinutes: config.dailyTargetMin, rollingAchievedMinutes: 0 })
+    .values({
+      activityId,
+      rollingTargetMinutes: config.dailyTargetMin,
+      rollingAchievedMinutes: 0,
+    })
     .onConflictDoUpdate({
       target: trackingLedgerTable.activityId,
-      set: { rollingTargetMinutes: config.dailyTargetMin, updatedAt: new Date() },
+      set: {
+        rollingTargetMinutes: config.dailyTargetMin,
+        updatedAt: new Date(),
+      },
     })
 }
 
-export async function deleteRule(activityId: string, ruleType: RuleType): Promise<void> {
+export async function deleteRule(
+  activityId: string,
+  ruleType: RuleType
+): Promise<void> {
   await db
     .delete(ruleTable)
-    .where(and(eq(ruleTable.activityId, activityId), eq(ruleTable.ruleType, ruleType)))
+    .where(
+      and(
+        eq(ruleTable.activityId, activityId),
+        eq(ruleTable.ruleType, ruleType)
+      )
+    )
 
   if (ruleType === "tracking") {
-    await db.delete(trackingLedgerTable).where(eq(trackingLedgerTable.activityId, activityId))
+    await db
+      .delete(trackingLedgerTable)
+      .where(eq(trackingLedgerTable.activityId, activityId))
   }
 }
 

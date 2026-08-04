@@ -54,7 +54,8 @@ function bucketsForPeriod(
     }))
   }
 
-  const keyOf = period === "week" ? isoWeekKey : (date: string) => date.slice(0, 7)
+  const keyOf =
+    period === "week" ? isoWeekKey : (date: string) => date.slice(0, 7)
   const spans = new Map<string, { start: number; end: number }>()
   for (const day of frame.days) {
     const key = keyOf(day.date)
@@ -224,7 +225,8 @@ export function expand(
     if (a.activity.priorityRank !== b.activity.priorityRank) {
       return a.activity.priorityRank - b.activity.priorityRank
     }
-    if (a.bucketKey !== b.bucketKey) return a.bucketKey.localeCompare(b.bucketKey)
+    if (a.bucketKey !== b.bucketKey)
+      return a.bucketKey.localeCompare(b.bucketKey)
     return a.index - b.index
   })
 }

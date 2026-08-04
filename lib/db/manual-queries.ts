@@ -1,7 +1,11 @@
 import { eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { activityTable, ruleTable, timelineActivityTable } from "@/lib/db/schema"
+import {
+  activityTable,
+  ruleTable,
+  timelineActivityTable,
+} from "@/lib/db/schema"
 import { getOrCreateTimeline } from "@/lib/db/timeline-queries"
 import { windowContains } from "@/lib/rules/window"
 import type { WindowRuleConfig } from "@/lib/rules/types"
@@ -32,16 +36,27 @@ export async function manualScheduleActivity(input: {
     return { ok: false, error: "End time must be after start time." }
   }
 
-  const [activity] = await db.select().from(activityTable).where(eq(activityTable.id, input.activityId))
+  const [activity] = await db
+    .select()
+    .from(activityTable)
+    .where(eq(activityTable.id, input.activityId))
   if (!activity) return { ok: false, error: "Activity not found." }
 
-  const rules = await db.select().from(ruleTable).where(eq(ruleTable.activityId, input.activityId))
-  const window = rules.find((rule) => rule.ruleType === "window")?.config as WindowRuleConfig | undefined
+  const rules = await db
+    .select()
+    .from(ruleTable)
+    .where(eq(ruleTable.activityId, input.activityId))
+  const window = rules.find((rule) => rule.ruleType === "window")?.config as
+    | WindowRuleConfig
+    | undefined
 
   // Strict and Flexible windows are both hard containers: a manually chosen
   // slot can never start or end outside them, even though Flexible only
   // requires *some* position inside the bounds rather than the full span.
-  if (window && !windowContains(window, input.startMin, input.endMin - input.startMin)) {
+  if (
+    window &&
+    !windowContains(window, input.startMin, input.endMin - input.startMin)
+  ) {
     const kindLabel = window.kind === "strict" ? "Strict Window" : "Window"
     return { ok: false, error: `Falls outside this activity's ${kindLabel}.` }
   }
@@ -51,13 +66,21 @@ export async function manualScheduleActivity(input: {
 
   const timeline = await getOrCreateTimeline(input.dateISO)
   const existing = await db
-    .select({ startTime: timelineActivityTable.startTime, endTime: timelineActivityTable.endTime })
+    .select({
+      startTime: timelineActivityTable.startTime,
+      endTime: timelineActivityTable.endTime,
+    })
     .from(timelineActivityTable)
     .where(eq(timelineActivityTable.timelineId, timeline.id))
 
-  const conflict = existing.some((row) => startTime < row.endTime && row.startTime < endTime)
+  const conflict = existing.some(
+    (row) => startTime < row.endTime && row.startTime < endTime
+  )
   if (conflict) {
-    return { ok: false, error: "That time overlaps an existing block on the timeline." }
+    return {
+      ok: false,
+      error: "That time overlaps an existing block on the timeline.",
+    }
   }
 
   await db.insert(timelineActivityTable).values({

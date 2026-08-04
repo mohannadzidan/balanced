@@ -23,7 +23,7 @@ export function resolveConstants(
 /** SPEC-v2.1 §4.1: tailroom = max(0, max over windows of (w.end − lengthMinutes)) */
 export function computeTailroom(
   windows: readonly ResolvedWindow[],
-  lengthMinutes: number,
+  lengthMinutes: number
 ): number {
   let maxExcess = 0
   for (const w of windows) {

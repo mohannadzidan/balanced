@@ -63,15 +63,22 @@ function windowSummary(rule: ActivityRules["window"]): string {
   const range = `${formatHHMM(rule.startMin)}–${formatHHMM(rule.endMin)}${spansMidnight ? " (+1 day)" : ""}`
   if (rule.kind === "strict") return `Strict · ${range}`
   const hours = rule.durationMin / 60
-  const durationLabel = Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`
+  const durationLabel = Number.isInteger(hours)
+    ? `${hours}h`
+    : `${hours.toFixed(1)}h`
   return `Preferred · ${durationLabel} within ${range}`
 }
 
-function sequenceSummary(rule: ActivityRules["sequence"], nameById: Map<string, string>): string {
+function sequenceSummary(
+  rule: ActivityRules["sequence"],
+  nameById: Map<string, string>
+): string {
   if (!rule) return ""
   const parts: string[] = []
-  if (rule.preActivityId) parts.push(`Pre: ${nameById.get(rule.preActivityId) ?? "Unknown"}`)
-  if (rule.postActivityId) parts.push(`Post: ${nameById.get(rule.postActivityId) ?? "Unknown"}`)
+  if (rule.preActivityId)
+    parts.push(`Pre: ${nameById.get(rule.preActivityId) ?? "Unknown"}`)
+  if (rule.postActivityId)
+    parts.push(`Post: ${nameById.get(rule.postActivityId) ?? "Unknown"}`)
   return parts.length > 0 ? parts.join(" · ") : "No links set"
 }
 
@@ -98,11 +105,17 @@ function WindowRuleForm({
 }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-  const [kind, setKind] = useState<"strict" | "flexible">(initial?.kind ?? "flexible")
+  const [kind, setKind] = useState<"strict" | "flexible">(
+    initial?.kind ?? "flexible"
+  )
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await saveWindowRuleAction(activityId, emptyState, formData)
+      const result = await saveWindowRuleAction(
+        activityId,
+        emptyState,
+        formData
+      )
       if (result.ok) {
         setError(null)
         onSaved()
@@ -120,7 +133,9 @@ function WindowRuleForm({
           id={`${activityId}-window-kind`}
           name="kind"
           value={kind}
-          onChange={(event) => setKind(event.target.value as "strict" | "flexible")}
+          onChange={(event) =>
+            setKind(event.target.value as "strict" | "flexible")
+          }
           className={selectClassName}
         >
           <option value="flexible">Preferred (soft)</option>
@@ -129,7 +144,9 @@ function WindowRuleForm({
       </div>
       <div className="flex gap-2">
         <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${activityId}-window-start`}>{kind === "flexible" ? "Bounds start" : "Start"}</Label>
+          <Label htmlFor={`${activityId}-window-start`}>
+            {kind === "flexible" ? "Bounds start" : "Start"}
+          </Label>
           <Input
             id={`${activityId}-window-start`}
             name="startMin"
@@ -139,7 +156,9 @@ function WindowRuleForm({
           />
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${activityId}-window-end`}>{kind === "flexible" ? "Bounds end" : "End"}</Label>
+          <Label htmlFor={`${activityId}-window-end`}>
+            {kind === "flexible" ? "Bounds end" : "End"}
+          </Label>
           <Input
             id={`${activityId}-window-end`}
             name="endMin"
@@ -151,18 +170,23 @@ function WindowRuleForm({
       </div>
       {kind === "flexible" && (
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${activityId}-window-duration`}>Duration (hours)</Label>
+          <Label htmlFor={`${activityId}-window-duration`}>
+            Duration (hours)
+          </Label>
           <Input
             id={`${activityId}-window-duration`}
             name="durationHours"
             type="number"
             min={0.25}
             step={0.25}
-            defaultValue={initial?.kind === "flexible" ? initial.durationMin / 60 : 8}
+            defaultValue={
+              initial?.kind === "flexible" ? initial.durationMin / 60 : 8
+            }
             required
           />
           <p className="text-xs text-muted-foreground">
-            How long the block actually runs — it can land anywhere inside the bounds above.
+            How long the block actually runs — it can land anywhere inside the
+            bounds above.
           </p>
         </div>
       )}
@@ -190,7 +214,11 @@ function SequenceRuleForm({
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await saveSequenceRuleAction(activityId, emptyState, formData)
+      const result = await saveSequenceRuleAction(
+        activityId,
+        emptyState,
+        formData
+      )
       if (result.ok) {
         setError(null)
         onSaved()
@@ -258,7 +286,11 @@ function OverlapRuleForm({
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await saveOverlapRuleAction(activityId, emptyState, formData)
+      const result = await saveOverlapRuleAction(
+        activityId,
+        emptyState,
+        formData
+      )
       if (result.ok) {
         setError(null)
         onSaved()
@@ -291,11 +323,16 @@ function OverlapRuleForm({
         ) : (
           <div className="flex flex-col gap-1.5">
             {otherActivities.map((activity) => (
-              <label key={activity.id} className="flex items-center gap-1.5 text-sm text-foreground">
+              <label
+                key={activity.id}
+                className="flex items-center gap-1.5 text-sm text-foreground"
+              >
                 <Checkbox
                   name="guestActivityIds"
                   value={activity.id}
-                  defaultChecked={initial?.guestActivityIds.includes(activity.id) ?? false}
+                  defaultChecked={
+                    initial?.guestActivityIds.includes(activity.id) ?? false
+                  }
                 />
                 {activity.name}
               </label>
@@ -341,7 +378,10 @@ function VacationDaysManager({
       {initialVacationDays.length > 0 && (
         <ul className="flex flex-col gap-1">
           {initialVacationDays.map((date) => (
-            <li key={date} className="flex items-center justify-between text-sm text-foreground">
+            <li
+              key={date}
+              className="flex items-center justify-between text-sm text-foreground"
+            >
               {date}
               <Button
                 type="button"
@@ -363,7 +403,12 @@ function VacationDaysManager({
           onChange={(event) => setNewDate(event.target.value)}
           className="flex-1"
         />
-        <Button type="button" size="sm" disabled={pending || !newDate} onClick={handleAdd}>
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending || !newDate}
+          onClick={handleAdd}
+        >
           Add
         </Button>
       </div>
@@ -387,7 +432,11 @@ function TrackingRuleForm({
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await saveTrackingRuleAction(activityId, emptyState, formData)
+      const result = await saveTrackingRuleAction(
+        activityId,
+        emptyState,
+        formData
+      )
       if (result.ok) {
         setError(null)
         onSaved()
@@ -439,7 +488,10 @@ function TrackingRuleForm({
           />
         </div>
         <label className="flex items-center gap-1.5 text-sm text-foreground">
-          <Checkbox name="carryOverEnabled" defaultChecked={initial?.carryOverEnabled ?? true} />
+          <Checkbox
+            name="carryOverEnabled"
+            defaultChecked={initial?.carryOverEnabled ?? true}
+          />
           Carry deficits/surpluses forward
         </label>
         {error && <p className="text-sm text-destructive">{error}</p>}
@@ -448,7 +500,10 @@ function TrackingRuleForm({
         </Button>
       </form>
       {initial && (
-        <VacationDaysManager activityId={activityId} initialVacationDays={initialVacationDays} />
+        <VacationDaysManager
+          activityId={activityId}
+          initialVacationDays={initialVacationDays}
+        />
       )}
     </div>
   )
@@ -470,7 +525,11 @@ function ActivityDetailsForm({
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await updateActivityDetailsAction(activityId, emptyActivityState, formData)
+      const result = await updateActivityDetailsAction(
+        activityId,
+        emptyActivityState,
+        formData
+      )
       if (result.ok) {
         setError(null)
       } else {
@@ -480,16 +539,27 @@ function ActivityDetailsForm({
   }
 
   return (
-    <form action={handleSubmit} className="flex flex-col gap-3 rounded-lg border border-border p-3">
+    <form
+      action={handleSubmit}
+      className="flex flex-col gap-3 rounded-lg border border-border p-3"
+    >
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${activityId}-name`}>Name</Label>
-        <Input id={`${activityId}-name`} name="name" defaultValue={initialName} required />
+        <Input
+          id={`${activityId}-name`}
+          name="name"
+          defaultValue={initialName}
+          required
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label>Allowed days</Label>
         <div className="flex flex-wrap gap-3">
           {WEEKDAYS.map((day) => (
-            <label key={day} className="flex items-center gap-1.5 text-sm text-foreground">
+            <label
+              key={day}
+              className="flex items-center gap-1.5 text-sm text-foreground"
+            >
               <Checkbox
                 name="allowedDays"
                 value={day}
@@ -501,12 +571,16 @@ function ActivityDetailsForm({
         </div>
       </div>
       <label className="flex items-start gap-1.5 text-sm text-foreground">
-        <Checkbox name="isTransitionOnly" className="mt-0.5" defaultChecked={initialIsTransitionOnly} />
+        <Checkbox
+          name="isTransitionOnly"
+          className="mt-0.5"
+          defaultChecked={initialIsTransitionOnly}
+        />
         <span>
           Transition only
           <span className="block text-xs text-muted-foreground">
-            Only ever scheduled as part of another activity&apos;s Sequence Rule — never scheduled
-            on its own.
+            Only ever scheduled as part of another activity&apos;s Sequence Rule
+            — never scheduled on its own.
           </span>
         </span>
       </label>
@@ -540,7 +614,13 @@ function DeleteActivityButton({
   }
 
   return (
-    <Button type="button" variant="destructive" size="sm" onClick={handleClick} disabled={pending}>
+    <Button
+      type="button"
+      variant="destructive"
+      size="sm"
+      onClick={handleClick}
+      disabled={pending}
+    >
       {pending ? "Deleting…" : "Delete Activity"}
     </Button>
   )
@@ -558,7 +638,10 @@ function DeleteRuleButton({
   const [pending, startTransition] = useTransition()
 
   function handleClick() {
-    if (typeof window !== "undefined" && !window.confirm(`Remove the ${RULE_LABELS[type]}?`)) {
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(`Remove the ${RULE_LABELS[type]}?`)
+    ) {
       return
     }
     startTransition(async () => {
@@ -568,7 +651,13 @@ function DeleteRuleButton({
   }
 
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={handleClick} disabled={pending}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      onClick={handleClick}
+      disabled={pending}
+    >
       {pending ? "Removing…" : "Delete"}
     </Button>
   )
@@ -590,7 +679,13 @@ function RuleForm({
   onSaved: () => void
 }) {
   if (type === "window") {
-    return <WindowRuleForm activityId={activityId} initial={initialRules.window} onSaved={onSaved} />
+    return (
+      <WindowRuleForm
+        activityId={activityId}
+        initial={initialRules.window}
+        onSaved={onSaved}
+      />
+    )
   }
   if (type === "sequence") {
     return (
@@ -641,8 +736,12 @@ export function EditActivityRulesSheet({
 }) {
   const [activeRuleType, setActiveRuleType] = useState<RuleType | null>(null)
 
-  const nameById = new Map(otherActivities.map((activity) => [activity.id, activity.name]))
-  const configuredTypes = RULE_TYPES.filter((type) => initialRules[type] !== null)
+  const nameById = new Map(
+    otherActivities.map((activity) => [activity.id, activity.name])
+  )
+  const configuredTypes = RULE_TYPES.filter(
+    (type) => initialRules[type] !== null
+  )
   const eligibleTypes = RULE_TYPES.filter((type) => initialRules[type] === null)
 
   function close() {
@@ -651,7 +750,8 @@ export function EditActivityRulesSheet({
 
   function summaryFor(type: RuleType): string {
     if (type === "window") return windowSummary(initialRules.window)
-    if (type === "sequence") return sequenceSummary(initialRules.sequence, nameById)
+    if (type === "sequence")
+      return sequenceSummary(initialRules.sequence, nameById)
     if (type === "overlap") return overlapSummary(initialRules.overlap)
     return trackingSummary(initialRules.tracking)
   }
@@ -692,19 +792,29 @@ export function EditActivityRulesSheet({
             <div key={type} className="rounded-lg border border-border p-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">{RULE_LABELS[type]}</p>
-                  <p className="text-xs text-muted-foreground">{summaryFor(type)}</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {RULE_LABELS[type]}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {summaryFor(type)}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => setActiveRuleType(activeRuleType === type ? null : type)}
+                    onClick={() =>
+                      setActiveRuleType(activeRuleType === type ? null : type)
+                    }
                   >
                     {activeRuleType === type ? "Cancel" : "Edit"}
                   </Button>
-                  <DeleteRuleButton activityId={activityId} type={type} onDeleted={close} />
+                  <DeleteRuleButton
+                    activityId={activityId}
+                    type={type}
+                    onDeleted={close}
+                  />
                 </div>
               </div>
               {activeRuleType === type && (
@@ -726,7 +836,11 @@ export function EditActivityRulesSheet({
             <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3">
               <Label>Add a rule</Label>
               <Select
-                value={activeRuleType && eligibleTypes.includes(activeRuleType) ? activeRuleType : undefined}
+                value={
+                  activeRuleType && eligibleTypes.includes(activeRuleType)
+                    ? activeRuleType
+                    : undefined
+                }
                 onValueChange={(value) => setActiveRuleType(value as RuleType)}
               >
                 <SelectTrigger className="w-full">
@@ -754,11 +868,16 @@ export function EditActivityRulesSheet({
               )}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">All rule types are configured.</p>
+            <p className="text-xs text-muted-foreground">
+              All rule types are configured.
+            </p>
           )}
 
           <div className="border-t border-border pt-3">
-            <DeleteActivityButton activityId={activityId} activityName={activityName} />
+            <DeleteActivityButton
+              activityId={activityId}
+              activityName={activityName}
+            />
           </div>
         </div>
       </SheetContent>

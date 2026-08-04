@@ -4,9 +4,11 @@ import { cn } from "@/lib/utils"
 
 export function ActionBar() {
   return (
-    <div className={cn(
-      "fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-gradient-to-t from-background via-background to-transparent z-40"
-    )}>
+    <div
+      className={cn(
+        "fixed right-0 bottom-0 left-0 z-40 mx-auto max-w-md bg-gradient-to-t from-background via-background to-transparent p-4"
+      )}
+    >
       <div className="flex gap-2">
         <AddActivitySheet />
         <OneOffEventSheet />

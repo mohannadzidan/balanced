@@ -19,10 +19,7 @@ describe("SPEC-v2.1 §3.2: Frame.defaultDayWindow", () => {
       defaultDayWindow: { startWall: "09:00", endWall: "17:00" },
     }
 
-    const reading = activity("Reading")
-      .rank(1)
-      .minutes(60)
-      .build()
+    const reading = activity("Reading").rank(1).minutes(60).build()
 
     const result = solve({
       dayFrame: frame,
@@ -34,7 +31,9 @@ describe("SPEC-v2.1 §3.2: Frame.defaultDayWindow", () => {
     })
     expect(result.status).not.toBe("REJECTED")
 
-    const planned = result.timeline.instances.filter((i) => i.name === "Reading")
+    const planned = result.timeline.instances.filter(
+      (i) => i.name === "Reading"
+    )
     expect(planned).toHaveLength(7)
 
     for (let i = 0; i < 7; i++) {
@@ -48,10 +47,7 @@ describe("SPEC-v2.1 §3.2: Frame.defaultDayWindow", () => {
 
   it("with no defaultDayWindow, an unwindowed activity over a 7-day frame still lands (v1 behavior)", () => {
     const frame = resolveFrame("2026-07-27", 7, "UTC")
-    const reading = activity("Reading")
-      .rank(1)
-      .minutes(60)
-      .build()
+    const reading = activity("Reading").rank(1).minutes(60).build()
 
     const result = solve({
       dayFrame: frame,
@@ -62,7 +58,9 @@ describe("SPEC-v2.1 §3.2: Frame.defaultDayWindow", () => {
       event: { type: "GENERATE_DAY" },
     })
     expect(result.status).not.toBe("REJECTED")
-    expect(result.timeline.instances.filter((i) => i.name === "Reading")).toHaveLength(7)
+    expect(
+      result.timeline.instances.filter((i) => i.name === "Reading")
+    ).toHaveLength(7)
   })
 })
 
@@ -96,7 +94,9 @@ describe("SPEC-v2.1 §3.3: Frame.backdateHorizonMinutes", () => {
       event: { type: "GENERATE_DAY" },
     })
     expect(seeded.status).not.toBe("REJECTED")
-    expect(seeded.timeline.instances.filter((i) => i.name === "Standup")).toHaveLength(30)
+    expect(
+      seeded.timeline.instances.filter((i) => i.name === "Standup")
+    ).toHaveLength(30)
 
     // TICK at now=10*1440 + 9*60 = 14580 (mid-day 10). With a 1-minute
     // horizon, every standup whose plannedEnd < 14580 - 1 = 14579 lapses.
@@ -114,7 +114,10 @@ describe("SPEC-v2.1 §3.3: Frame.backdateHorizonMinutes", () => {
     expect(ticked.status).not.toBe("REJECTED")
 
     const lapsed = ticked.timeline.instances.filter(
-      (i) => i.name === "Standup" && i.state === "SKIPPED" && i.skipReason === "LAPSED"
+      (i) =>
+        i.name === "Standup" &&
+        i.state === "SKIPPED" &&
+        i.skipReason === "LAPSED"
     )
     const completed = ticked.timeline.instances.filter(
       (i) => i.name === "Standup" && i.state === "COMPLETED"
@@ -141,7 +144,9 @@ describe("SPEC-v2.1 §3.3: Frame.backdateHorizonMinutes", () => {
       carryIn: [],
       event: { type: "GENERATE_DAY" },
     })
-    expect(seeded.timeline.instances.filter((i) => i.name === "Standup")).toHaveLength(7)
+    expect(
+      seeded.timeline.instances.filter((i) => i.name === "Standup")
+    ).toHaveLength(7)
 
     const ticked = solve({
       dayFrame: frame,

@@ -42,7 +42,12 @@ Each call's `result.timeline.instances` becomes the next call's `existing`.
 ## Quick start
 
 ```ts
-import { activity, resolveDayFrame, solve, validateCatalog } from "@/app/brain/brain"
+import {
+  activity,
+  resolveDayFrame,
+  solve,
+  validateCatalog,
+} from "@/app/brain/brain"
 
 const dayFrame = resolveDayFrame("2026-07-27", "America/New_York")
 
@@ -117,21 +122,21 @@ const gym = activity("Gym")
   .build()
 ```
 
-| Method | Adds | Notes |
-| --- | --- | --- |
-| `.id(id)` | — | Overrides the auto-generated (slugified-name) id |
-| `.rank(n)` | — | **Required.** Priority rank for cost weighting and hard-set ordering — lower wins ties |
-| `.minutes(m)` | — | Full, unshrunk duration. Default `30` |
-| `.days(...days)` | — | Restricts eligible weekdays (`Weekday`). Default: every day |
-| `.disabled()` | — | Excludes the activity from solving entirely |
-| `.fixed(start, end)` | `FixedRule` | Immovable wall-clock span; may span midnight |
-| `.strict(start, end)` | `StrictWindowRule` | Must be placed entirely inside the window, no drift |
-| `.flexible(start, end, { drift? })` | `FlexibleWindowRule` | Preferred window; may drift outside by `drift` minutes (default `0`) |
-| `.mandatory()` | `MandatoryRule` | Placed via bounded-backtracking hard-set search instead of the greedy pass |
-| `.shrink({ floor, chunking?, minChunk?, maxChunks? })` | `ShrinkRule` | Permits shrinking to `floor` minutes and/or splitting into `minChunk`-minute-or-larger chunks (up to `maxChunks`, default `3`) when it doesn't fit whole |
-| `.sequence(role, linkedActivityId, { maxGap? })` | `SequenceRule` | Must run immediately before (`"pre"`) or after (`"post"`) another activity, within `maxGap` minutes (default `0`) |
-| `.overlap({ budget, guests, exclusions? })` | `OverlapRule` | May host the listed guest activity ids nested inside it, within a time budget |
-| `.build()` | — | Returns the immutable `Activity`. Throws if `.rank()` wasn't called |
+| Method                                                 | Adds                 | Notes                                                                                                                                                    |
+| ------------------------------------------------------ | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.id(id)`                                              | —                    | Overrides the auto-generated (slugified-name) id                                                                                                         |
+| `.rank(n)`                                             | —                    | **Required.** Priority rank for cost weighting and hard-set ordering — lower wins ties                                                                   |
+| `.minutes(m)`                                          | —                    | Full, unshrunk duration. Default `30`                                                                                                                    |
+| `.days(...days)`                                       | —                    | Restricts eligible weekdays (`Weekday`). Default: every day                                                                                              |
+| `.disabled()`                                          | —                    | Excludes the activity from solving entirely                                                                                                              |
+| `.fixed(start, end)`                                   | `FixedRule`          | Immovable wall-clock span; may span midnight                                                                                                             |
+| `.strict(start, end)`                                  | `StrictWindowRule`   | Must be placed entirely inside the window, no drift                                                                                                      |
+| `.flexible(start, end, { drift? })`                    | `FlexibleWindowRule` | Preferred window; may drift outside by `drift` minutes (default `0`)                                                                                     |
+| `.mandatory()`                                         | `MandatoryRule`      | Placed via bounded-backtracking hard-set search instead of the greedy pass                                                                               |
+| `.shrink({ floor, chunking?, minChunk?, maxChunks? })` | `ShrinkRule`         | Permits shrinking to `floor` minutes and/or splitting into `minChunk`-minute-or-larger chunks (up to `maxChunks`, default `3`) when it doesn't fit whole |
+| `.sequence(role, linkedActivityId, { maxGap? })`       | `SequenceRule`       | Must run immediately before (`"pre"`) or after (`"post"`) another activity, within `maxGap` minutes (default `0`)                                        |
+| `.overlap({ budget, guests, exclusions? })`            | `OverlapRule`        | May host the listed guest activity ids nested inside it, within a time budget                                                                            |
+| `.build()`                                             | —                    | Returns the immutable `Activity`. Throws if `.rank()` wasn't called                                                                                      |
 
 Rule compatibility and other structural mistakes are not checked by the
 builder itself — run `validateActivity`/`validateCatalog` (below) before
@@ -186,37 +191,38 @@ function solve(input: SolveInput): SolveResult
 
 ### `SolveInput`
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `dayFrame` | `DayFrame` | From `resolveDayFrame()` |
-| `now` | `number` | Minutes since local midnight (the day frame's start) |
-| `catalog` | `readonly Activity[]` | Never mutated or written to by the engine |
-| `existing` | `readonly TimelineActivity[]` | The previous call's `timeline.instances`, or `[]` to start fresh |
-| `carryIn` | `readonly TimelineActivity[]` | Midnight-spanning residue from yesterday's `FINALISE_DAY`, or `[]` |
-| `event` | `Event` | The one thing this call is doing — see below |
-| `constants?` | `Partial<CostConstants>` | Overrides any subset of `DEFAULT_COST_CONSTANTS` |
-| `options?` | `SolveOptions` | `{ trace?: boolean }` — attaches a `SolveTrace` to the result for debugging |
-| `revision?` | `number` | Echo of `existing`'s revision; a no-op `TICK` returns it unchanged |
-| `finalised?` | `boolean` | Pass `true` once a prior `FINALISE_DAY` closed this day frame |
+| Field        | Type                          | Notes                                                                       |
+| ------------ | ----------------------------- | --------------------------------------------------------------------------- |
+| `dayFrame`   | `DayFrame`                    | From `resolveDayFrame()`                                                    |
+| `now`        | `number`                      | Minutes since local midnight (the day frame's start)                        |
+| `catalog`    | `readonly Activity[]`         | Never mutated or written to by the engine                                   |
+| `existing`   | `readonly TimelineActivity[]` | The previous call's `timeline.instances`, or `[]` to start fresh            |
+| `carryIn`    | `readonly TimelineActivity[]` | Midnight-spanning residue from yesterday's `FINALISE_DAY`, or `[]`          |
+| `event`      | `Event`                       | The one thing this call is doing — see below                                |
+| `constants?` | `Partial<CostConstants>`      | Overrides any subset of `DEFAULT_COST_CONSTANTS`                            |
+| `options?`   | `SolveOptions`                | `{ trace?: boolean }` — attaches a `SolveTrace` to the result for debugging |
+| `revision?`  | `number`                      | Echo of `existing`'s revision; a no-op `TICK` returns it unchanged          |
+| `finalised?` | `boolean`                     | Pass `true` once a prior `FINALISE_DAY` closed this day frame               |
 
 ### `SolveResult`
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `status` | `"OK" \| "DEGRADED" \| "REJECTED"` | See below |
-| `timeline` | `Timeline` | The new schedule (or, on `REJECTED`, the *input* timeline, unchanged) |
-| `rejection` | `RejectionError \| null` | Non-null only when `status === "REJECTED"` |
-| `diagnostics` | `readonly Diagnostic[]` | Same as `timeline.diagnostics`, exposed at the top level for convenience |
-| `cost` | `CostBreakdown` | Same as `timeline.cost` |
-| `trace` | `SolveTrace \| null` | Present only when `options.trace` was set |
+| Field         | Type                               | Notes                                                                    |
+| ------------- | ---------------------------------- | ------------------------------------------------------------------------ |
+| `status`      | `"OK" \| "DEGRADED" \| "REJECTED"` | See below                                                                |
+| `timeline`    | `Timeline`                         | The new schedule (or, on `REJECTED`, the _input_ timeline, unchanged)    |
+| `rejection`   | `RejectionError \| null`           | Non-null only when `status === "REJECTED"`                               |
+| `diagnostics` | `readonly Diagnostic[]`            | Same as `timeline.diagnostics`, exposed at the top level for convenience |
+| `cost`        | `CostBreakdown`                    | Same as `timeline.cost`                                                  |
+| `trace`       | `SolveTrace \| null`               | Present only when `options.trace` was set                                |
 
 **`status` meanings:**
+
 - **`OK`** — every activity that could reasonably be placed, was.
 - **`DEGRADED`** — the day is still fully solved and returned, but something
   had to give (an activity was auto-skipped, shrunk, or drifted) and
   `diagnostics` explains why. This is normal, not an error — a day must
   always be producible, even a bad one.
-- **`REJECTED`** — the requested *event* would make things strictly worse
+- **`REJECTED`** — the requested _event_ would make things strictly worse
   than before it (see rejection codes below). `timeline` is the untouched
   input; nothing was mutated. This only happens for events that represent a
   user's explicit intent (e.g. `EXTEND`, `ADD_ADHOC`, `RESTORE`) — events
@@ -231,42 +237,42 @@ no separate "can I do this?" call — attempt the event and check
 
 One `Event` per `solve()` call:
 
-| Event | Effect |
-| --- | --- |
-| `{ type: "GENERATE_DAY" }` | Build the day from scratch. Never rejected. |
-| `{ type: "TICK" }` | Advance to `now`: auto-start, auto-complete, backdating. Idempotent — calling it twice with the same `now` is a no-op the second time (revision doesn't advance). |
-| `{ type: "FINISH_EARLY", instanceId, at }` | Marks an `ACTIVE` instance completed at `at`, freezes everything up to `at`, and re-solves the remainder from scratch — freed time may be reused by something previously shrunk or skipped. Never rejected. |
-| `{ type: "EXTEND", instanceId, minutes }` | Pushes an `ACTIVE` instance's planned end out by `minutes` (must be a positive multiple of the cost grid) and re-solves the remainder; later blocks may nudge, shrink, or drop. |
-| `{ type: "ADD_ADHOC", payload }` | Adds a one-off `TimelineActivity` (`isAdhoc: true`, `activityId: null`) without touching `catalog`. `payload` carries the full rule vocabulary. |
-| `{ type: "EDIT_INSTANCE_RULES", instanceId, rules }` | Overrides one instance's rules for today only, without touching its template — e.g. temporarily letting an ad-hoc be a guest of today's Work block. The override persists across subsequent solves of the same instance. |
-| `{ type: "SKIP", instanceId }` | Marks a `PLANNED` instance user-skipped and frees its time. Never rejected. |
-| `{ type: "RESTORE", instanceId }` | Lifts a user skip and re-solves the activity back in. Can reject — restoring one activity can legitimately displace and reject a different one (e.g. a sequence dependent). |
-| `{ type: "FINALISE_DAY" }` | Requires `now >= dayFrame.lengthMinutes`. Backdates any residue, computes `timeline.carryIn` for tomorrow, sets `timeline.finalised = true`. Every further event against this timeline is rejected with `SPANS_FROZEN_REGION`. |
+| Event                                                | Effect                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `{ type: "GENERATE_DAY" }`                           | Build the day from scratch. Never rejected.                                                                                                                                                                                    |
+| `{ type: "TICK" }`                                   | Advance to `now`: auto-start, auto-complete, backdating. Idempotent — calling it twice with the same `now` is a no-op the second time (revision doesn't advance).                                                              |
+| `{ type: "FINISH_EARLY", instanceId, at }`           | Marks an `ACTIVE` instance completed at `at`, freezes everything up to `at`, and re-solves the remainder from scratch — freed time may be reused by something previously shrunk or skipped. Never rejected.                    |
+| `{ type: "EXTEND", instanceId, minutes }`            | Pushes an `ACTIVE` instance's planned end out by `minutes` (must be a positive multiple of the cost grid) and re-solves the remainder; later blocks may nudge, shrink, or drop.                                                |
+| `{ type: "ADD_ADHOC", payload }`                     | Adds a one-off `TimelineActivity` (`isAdhoc: true`, `activityId: null`) without touching `catalog`. `payload` carries the full rule vocabulary.                                                                                |
+| `{ type: "EDIT_INSTANCE_RULES", instanceId, rules }` | Overrides one instance's rules for today only, without touching its template — e.g. temporarily letting an ad-hoc be a guest of today's Work block. The override persists across subsequent solves of the same instance.       |
+| `{ type: "SKIP", instanceId }`                       | Marks a `PLANNED` instance user-skipped and frees its time. Never rejected.                                                                                                                                                    |
+| `{ type: "RESTORE", instanceId }`                    | Lifts a user skip and re-solves the activity back in. Can reject — restoring one activity can legitimately displace and reject a different one (e.g. a sequence dependent).                                                    |
+| `{ type: "FINALISE_DAY" }`                           | Requires `now >= dayFrame.lengthMinutes`. Backdates any residue, computes `timeline.carryIn` for tomorrow, sets `timeline.finalised = true`. Every further event against this timeline is rejected with `SPANS_FROZEN_REGION`. |
 
 `AdhocPayload` shape: `{ name, durationMinutes, priorityRank, rules, date }`.
 
 ### Rejection codes (`RejectionError.code`)
 
 Only meaningful when `status === "REJECTED"`. Comparison is always against
-the *input* timeline, not feasibility in the abstract — an activity already
+the _input_ timeline, not feasibility in the abstract — an activity already
 skipped before the event doesn't trigger a rejection just because it's
 still skipped after.
 
-| Code | Condition |
-| --- | --- |
-| `FIXED_COLLISION` | Two fixed blocks would overlap |
-| `MANDATORY_UNPLACEABLE` | A mandatory activity, previously placed, becomes skipped |
-| `STRICT_WINDOW_VIOLATED` | A strict-window activity, previously placed, becomes unplaceable |
-| `GUEST_WINDOW_VIOLATED` | Moving a host pushes a nested guest outside its own strict window |
-| `SEQUENCE_UNSATISFIABLE` | A sequence dependent can no longer be placed adjacently, and its host isn't itself skipped |
-| `SPANS_FROZEN_REGION` | The operation would alter a completed, carried-in, or finalised region |
-| `UNKNOWN_INSTANCE` | `instanceId` isn't in `existing` |
+| Code                      | Condition                                                                                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FIXED_COLLISION`         | Two fixed blocks would overlap                                                                                                                                                                              |
+| `MANDATORY_UNPLACEABLE`   | A mandatory activity, previously placed, becomes skipped                                                                                                                                                    |
+| `STRICT_WINDOW_VIOLATED`  | A strict-window activity, previously placed, becomes unplaceable                                                                                                                                            |
+| `GUEST_WINDOW_VIOLATED`   | Moving a host pushes a nested guest outside its own strict window                                                                                                                                           |
+| `SEQUENCE_UNSATISFIABLE`  | A sequence dependent can no longer be placed adjacently, and its host isn't itself skipped                                                                                                                  |
+| `SPANS_FROZEN_REGION`     | The operation would alter a completed, carried-in, or finalised region                                                                                                                                      |
+| `UNKNOWN_INSTANCE`        | `instanceId` isn't in `existing`                                                                                                                                                                            |
 | `INVALID_STATE_FOR_EVENT` | The instance isn't in the state the event requires (e.g. `SKIP` on something not `PLANNED`), or an `ADD_ADHOC`/`EDIT_INSTANCE_RULES` payload is structurally invalid (bad rule combination, colliding rank) |
 
 `RejectionError` also carries `message` (human-readable),
 `conflictingInstanceIds`, `diagnostics` (the blocking diagnostics from the
 discarded speculative solve), and `bestEffortTimeline` — what the rejected
-solve *would* have produced, free to inspect since it was computed anyway
+solve _would_ have produced, free to inspect since it was computed anyway
 (handy for "here's what would happen" previews).
 
 ---

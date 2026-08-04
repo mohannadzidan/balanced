@@ -49,9 +49,14 @@ function clampedEndMin(window: WindowRuleConfig): number {
   return window.endMin <= window.startMin ? 1440 : window.endMin
 }
 
-async function getOrCreateTimeline(dateISO: string): Promise<{ id: string; lastGeneratedAt: Date | null }> {
+async function getOrCreateTimeline(
+  dateISO: string
+): Promise<{ id: string; lastGeneratedAt: Date | null }> {
   const [existing] = await db
-    .select({ id: timelineTable.id, lastGeneratedAt: timelineTable.lastGeneratedAt })
+    .select({
+      id: timelineTable.id,
+      lastGeneratedAt: timelineTable.lastGeneratedAt,
+    })
     .from(timelineTable)
     .where(eq(timelineTable.date, dateISO))
   if (existing) return existing
@@ -59,7 +64,10 @@ async function getOrCreateTimeline(dateISO: string): Promise<{ id: string; lastG
   await db.insert(timelineTable).values({ date: dateISO }).onConflictDoNothing()
 
   const [row] = await db
-    .select({ id: timelineTable.id, lastGeneratedAt: timelineTable.lastGeneratedAt })
+    .select({
+      id: timelineTable.id,
+      lastGeneratedAt: timelineTable.lastGeneratedAt,
+    })
     .from(timelineTable)
     .where(eq(timelineTable.date, dateISO))
   return row
@@ -111,7 +119,8 @@ async function generateTimelineActivities(
     if (row.sourceActivityId) {
       alreadyScheduledMinutes.set(
         row.sourceActivityId,
-        (alreadyScheduledMinutes.get(row.sourceActivityId) ?? 0) + Math.max(0, endMin - startMin)
+        (alreadyScheduledMinutes.get(row.sourceActivityId) ?? 0) +
+          Math.max(0, endMin - startMin)
       )
       // A row that started before today (a midnight-spanning carryover, e.g.
       // last night's Sleep overflowing into this morning) still blocks that
@@ -135,7 +144,9 @@ async function generateTimelineActivities(
     })
     .from(activityTable)
 
-  const activityById = new Map(activities.map((activity) => [activity.id, activity]))
+  const activityById = new Map(
+    activities.map((activity) => [activity.id, activity])
+  )
 
   const rules = await db.select().from(ruleTable)
   const windowByActivityId = new Map<string, WindowRuleConfig>()
@@ -143,23 +154,37 @@ async function generateTimelineActivities(
   const overlapByActivityId = new Map<string, OverlapRuleConfig>()
   const trackingByActivityId = new Map<string, TrackingRuleConfig>()
   for (const rule of rules) {
-    if (rule.ruleType === "window") windowByActivityId.set(rule.activityId, rule.config as WindowRuleConfig)
-    if (rule.ruleType === "sequence") sequenceByActivityId.set(rule.activityId, rule.config as SequenceRuleConfig)
-    if (rule.ruleType === "overlap") overlapByActivityId.set(rule.activityId, rule.config as OverlapRuleConfig)
-    if (rule.ruleType === "tracking") trackingByActivityId.set(rule.activityId, rule.config as TrackingRuleConfig)
+    if (rule.ruleType === "window")
+      windowByActivityId.set(rule.activityId, rule.config as WindowRuleConfig)
+    if (rule.ruleType === "sequence")
+      sequenceByActivityId.set(
+        rule.activityId,
+        rule.config as SequenceRuleConfig
+      )
+    if (rule.ruleType === "overlap")
+      overlapByActivityId.set(rule.activityId, rule.config as OverlapRuleConfig)
+    if (rule.ruleType === "tracking")
+      trackingByActivityId.set(
+        rule.activityId,
+        rule.config as TrackingRuleConfig
+      )
   }
 
   const todaysActivities = activities.filter(
-    (activity) => !activity.isTransitionOnly && activity.allowedDays.includes(weekday)
+    (activity) =>
+      !activity.isTransitionOnly && activity.allowedDays.includes(weekday)
   )
 
   const strictHosts = todaysActivities.filter(
-    (activity) => !activitiesWithSurvivingRow.has(activity.id) && windowByActivityId.get(activity.id)?.kind === "strict"
+    (activity) =>
+      !activitiesWithSurvivingRow.has(activity.id) &&
+      windowByActivityId.get(activity.id)?.kind === "strict"
   )
   const strictIds = new Set(strictHosts.map((activity) => activity.id))
 
   const tracked = todaysActivities.filter(
-    (activity) => !strictIds.has(activity.id) && trackingByActivityId.has(activity.id)
+    (activity) =>
+      !strictIds.has(activity.id) && trackingByActivityId.has(activity.id)
   )
   const trackedIds = new Set(tracked.map((activity) => activity.id))
 
@@ -173,7 +198,8 @@ async function generateTimelineActivities(
 
   const rows: NewTimelineRow[] = []
   // Hosts (by their activityId) that need an overlap-rule clone once their row lands.
-  const hostsNeedingOverlapClone: { activityId: string; rowIndex: number }[] = []
+  const hostsNeedingOverlapClone: { activityId: string; rowIndex: number }[] =
+    []
 
   function placeTransition(activityId: string, range: TimeRange) {
     const activity = activityById.get(activityId)
@@ -208,7 +234,10 @@ async function generateTimelineActivities(
       status: "upcoming",
     })
     if (overlapByActivityId.has(host.id)) {
-      hostsNeedingOverlapClone.push({ activityId: host.id, rowIndex: rows.length - 1 })
+      hostsNeedingOverlapClone.push({
+        activityId: host.id,
+        rowIndex: rows.length - 1,
+      })
     }
 
     const sequence = sequenceByActivityId.get(host.id)
@@ -219,7 +248,8 @@ async function generateTimelineActivities(
         if (duration > 0) {
           const endMin = hostStart
           const startMin = Math.max(0, endMin - duration)
-          if (endMin > startMin) placeTransition(sequence.preActivityId, { startMin, endMin })
+          if (endMin > startMin)
+            placeTransition(sequence.preActivityId, { startMin, endMin })
         }
       }
     }
@@ -230,7 +260,8 @@ async function generateTimelineActivities(
         if (duration > 0) {
           const startMin = hostEnd
           const endMin = Math.min(1440, startMin + duration)
-          if (endMin > startMin) placeTransition(sequence.postActivityId, { startMin, endMin })
+          if (endMin > startMin)
+            placeTransition(sequence.postActivityId, { startMin, endMin })
         }
       }
     }
@@ -240,11 +271,16 @@ async function generateTimelineActivities(
   for (const activity of flexiblePreferred) {
     const window = windowByActivityId.get(activity.id)!
     if (window.kind !== "flexible") continue // filter above guarantees this; narrows the type
-    const clampedWindow = { startMin: window.startMin, endMin: clampedEndMin(window) }
+    const clampedWindow = {
+      startMin: window.startMin,
+      endMin: clampedEndMin(window),
+    }
     // Runtime-defensive: `config` is unchecked JSON, so a pre-existing row saved
     // before `durationMin` existed falls back to the window's own full span.
     const durationMin =
-      typeof window.durationMin === "number" ? window.durationMin : clampedWindow.endMin - clampedWindow.startMin
+      typeof window.durationMin === "number"
+        ? window.durationMin
+        : clampedWindow.endMin - clampedWindow.startMin
     const spansMidnight = window.endMin <= window.startMin
 
     if (spansMidnight) {
@@ -253,7 +289,9 @@ async function generateTimelineActivities(
       // Find where that run starts (the latest gap that reaches all the way
       // to 24:00) and let the block run its full duration past it, into
       // tomorrow, rather than clamping/shrinking it to fit before midnight.
-      const runToMidnight = freeGaps(occupied).find((gap) => gap.endMin === 1440 && gap.startMin < 1440)
+      const runToMidnight = freeGaps(occupied).find(
+        (gap) => gap.endMin === 1440 && gap.startMin < 1440
+      )
       if (!runToMidnight) continue // midnight itself is already claimed by something else today
       const startMin = Math.max(runToMidnight.startMin, window.startMin)
       if (startMin >= 1440) continue
@@ -265,14 +303,24 @@ async function generateTimelineActivities(
         sourceActivityId: activity.id,
         title: activity.name,
         startTime: dateAtMinute(dateISO, startMin),
-        endTime: overflowMin > 0 ? addDaysMinuteRollover(dateISO, overflowMin) : dateAtMinute(dateISO, startMin + durationMin),
+        endTime:
+          overflowMin > 0
+            ? addDaysMinuteRollover(dateISO, overflowMin)
+            : dateAtMinute(dateISO, startMin + durationMin),
         status: "upcoming",
-        warningMessage: startMin > window.startMin ? `Pushed later — starts at ${formatHHMM(startMin)} instead of its preferred start.` : undefined,
+        warningMessage:
+          startMin > window.startMin
+            ? `Pushed later — starts at ${formatHHMM(startMin)} instead of its preferred start.`
+            : undefined,
       })
       continue
     }
 
-    const result = placeFlexibleBlock(clampedWindow, durationMin, freeGaps(occupied))
+    const result = placeFlexibleBlock(
+      clampedWindow,
+      durationMin,
+      freeGaps(occupied)
+    )
     if (!result) continue
     occupied.push(result.block)
     rows.push({
@@ -294,8 +342,15 @@ async function generateTimelineActivities(
   const trackedWithTargets = await Promise.all(
     tracked.map(async (activity) => {
       const config = trackingByActivityId.get(activity.id)!
-      const fullTargetMin = await evaluateAndAdvanceLedger(activity.id, config, dateISO)
-      const targetMin = Math.max(0, fullTargetMin - (alreadyScheduledMinutes.get(activity.id) ?? 0))
+      const fullTargetMin = await evaluateAndAdvanceLedger(
+        activity.id,
+        config,
+        dateISO
+      )
+      const targetMin = Math.max(
+        0,
+        fullTargetMin - (alreadyScheduledMinutes.get(activity.id) ?? 0)
+      )
       return { activity, config, targetMin }
     })
   )
@@ -330,18 +385,26 @@ async function generateTimelineActivities(
   }
 
   if (rows.length > 0) {
-    const inserted = await db.insert(timelineActivityTable).values(rows).returning({ id: timelineActivityTable.id })
+    const inserted = await db
+      .insert(timelineActivityTable)
+      .values(rows)
+      .returning({ id: timelineActivityTable.id })
 
     for (const { activityId, rowIndex } of hostsNeedingOverlapClone) {
       const overlap = overlapByActivityId.get(activityId)
       if (!overlap) continue
-      await db
-        .insert(timelineRuleTable)
-        .values({ timelineActivityId: inserted[rowIndex].id, ruleType: "overlap", config: overlap })
+      await db.insert(timelineRuleTable).values({
+        timelineActivityId: inserted[rowIndex].id,
+        ruleType: "overlap",
+        config: overlap,
+      })
     }
   }
 
-  await db.update(timelineTable).set({ lastGeneratedAt: new Date() }).where(eq(timelineTable.id, timelineId))
+  await db
+    .update(timelineTable)
+    .set({ lastGeneratedAt: new Date() })
+    .where(eq(timelineTable.id, timelineId))
 }
 
 /** `endMin` on a window that spans midnight, expressed as a minute-of-day on the following calendar day (via `addDaysISO`). */
@@ -349,7 +412,9 @@ function addDaysMinuteRollover(dateISO: string, endMin: number): Date {
   return dateAtMinute(addDaysISO(dateISO, 1), endMin)
 }
 
-export async function getTodayTimelineActivities(dateISO: string): Promise<TimelineActivityView[]> {
+export async function getTodayTimelineActivities(
+  dateISO: string
+): Promise<TimelineActivityView[]> {
   const timeline = await getOrCreateTimeline(dateISO)
   await generateTimelineActivities(timeline, dateISO)
 
@@ -377,7 +442,9 @@ export async function getTodayTimelineActivities(dateISO: string): Promise<Timel
  * activities/rules as they now stand. A no-op if today's timeline hasn't
  * been generated yet — the next visit generates it fresh anyway.
  */
-export async function regenerateForwardTimeline(dateISO: string): Promise<void> {
+export async function regenerateForwardTimeline(
+  dateISO: string
+): Promise<void> {
   const [timeline] = await db
     .select({ id: timelineTable.id })
     .from(timelineTable)
@@ -395,7 +462,10 @@ export async function regenerateForwardTimeline(dateISO: string): Promise<void> 
       )
     )
 
-  await generateTimelineActivities({ id: timeline.id, lastGeneratedAt: null }, dateISO)
+  await generateTimelineActivities(
+    { id: timeline.id, lastGeneratedAt: null },
+    dateISO
+  )
 }
 
 export { getOrCreateTimeline }

@@ -30,7 +30,10 @@ describe("activityProgressMin", () => {
   })
 
   it("sums the activity's own block durations", () => {
-    const blocks = [block("freelance", 1140, 1260), block("freelance", 480, 540)]
+    const blocks = [
+      block("freelance", 1140, 1260),
+      block("freelance", 480, 540),
+    ]
     expect(activityProgressMin("freelance", blocks)).toBe(180)
   })
 

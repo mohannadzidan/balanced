@@ -34,11 +34,7 @@ function bestChunkInInterval(
   context: PlacementContext
 ): ChunkCandidate | null {
   if (length <= 0) return null
-  const starts = enumerateCandidateStarts(
-    length,
-    [interval],
-    context.grid
-  )
+  const starts = enumerateCandidateStarts(length, [interval], context.grid)
     .filter((s) => s >= context.freezeBoundary)
     .filter(
       (s) =>
@@ -214,7 +210,14 @@ export function planChunks(
 
   let best: ChunkPlan | null = null
   for (let k = 2; k <= repeat.count; k++) {
-    const plan = fillChunks(resolved, searchIntervals, target, k, minChunk, context)
+    const plan = fillChunks(
+      resolved,
+      searchIntervals,
+      target,
+      k,
+      minChunk,
+      context
+    )
     if (
       plan &&
       plan.scheduledMinutes >= floor &&

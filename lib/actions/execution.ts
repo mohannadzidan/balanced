@@ -14,7 +14,11 @@ import {
 } from "@/lib/db/execution-queries"
 import { parseHHMM, todayISO } from "@/lib/time"
 
-export type { FinishEarlyOption, FinishEarlyPrompt, FinishEarlyResult } from "@/lib/db/execution-queries"
+export type {
+  FinishEarlyOption,
+  FinishEarlyPrompt,
+  FinishEarlyResult,
+} from "@/lib/db/execution-queries"
 
 export type ExecutionFormState = { ok: true } | { ok: false; error: string }
 
@@ -56,7 +60,10 @@ export async function createOneOffActivityAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   const dateISO = todayISO()
@@ -72,7 +79,9 @@ export async function createOneOffActivityAction(
   return { ok: true }
 }
 
-export async function finishEarlyAction(timelineActivityId: string): Promise<FinishEarlyResult> {
+export async function finishEarlyAction(
+  timelineActivityId: string
+): Promise<FinishEarlyResult> {
   const result = await finishActivityEarly(timelineActivityId)
   revalidatePath("/")
   return result
@@ -83,7 +92,10 @@ export async function acceptPullNextAction(
   timelineActivityId: string,
   newStartIso: string
 ): Promise<ExecutionFormState> {
-  const result = await pullActivityEarlier(timelineActivityId, new Date(newStartIso))
+  const result = await pullActivityEarlier(
+    timelineActivityId,
+    new Date(newStartIso)
+  )
   revalidatePath("/")
   return result
 }
@@ -113,7 +125,9 @@ export async function extendActivityAction(
   return result
 }
 
-export async function togglePinAction(timelineActivityId: string): Promise<void> {
+export async function togglePinAction(
+  timelineActivityId: string
+): Promise<void> {
   await togglePinned(timelineActivityId)
   revalidatePath("/")
 }

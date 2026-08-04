@@ -147,7 +147,11 @@ export interface Activity {
 // --- TimelineActivity (instance) -------------------------------------------
 
 export type InstanceState =
-  "PLANNED" | "ACTIVE" | "COMPLETED" | "SKIPPED" | "CARRIED_IN"
+  | "PLANNED"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "SKIPPED"
+  | "CARRIED_IN"
 
 export type CompletedSource = "user" | "auto" | "backdated"
 

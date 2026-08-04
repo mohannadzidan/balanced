@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest"
 
-import { nextRollingTarget, nextRollingTargetNoCarryOver } from "@/lib/tracking/carryover"
+import {
+  nextRollingTarget,
+  nextRollingTargetNoCarryOver,
+} from "@/lib/tracking/carryover"
 
 describe("nextRollingTarget", () => {
   it("uses the base target when there is nothing to evaluate yet", () => {
-    expect(nextRollingTarget({ baseTargetMin: 120, capMin: null, evaluation: null })).toBe(120)
+    expect(
+      nextRollingTarget({ baseTargetMin: 120, capMin: null, evaluation: null })
+    ).toBe(120)
   })
 
   it("raises the target by yesterday's deficit", () => {

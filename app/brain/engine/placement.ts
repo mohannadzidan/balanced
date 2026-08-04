@@ -42,7 +42,11 @@ export function violatesSeparation(
   minSeparationMinutes: number,
   siblingStarts: readonly number[] | undefined
 ): boolean {
-  if (minSeparationMinutes <= 0 || !siblingStarts || siblingStarts.length === 0) {
+  if (
+    minSeparationMinutes <= 0 ||
+    !siblingStarts ||
+    siblingStarts.length === 0
+  ) {
     return false
   }
   for (const s of siblingStarts) {
@@ -212,7 +216,8 @@ function inferSkipReason(
     context.grid
   ).filter((s) => s >= context.freezeBoundary)
   if (rawStarts.length === 0) return "NO_FREE_SPACE"
-  if (resolved.windows.some((w) => w.maxDriftMinutes > 0)) return "DRIFT_EXCEEDED"
+  if (resolved.windows.some((w) => w.maxDriftMinutes > 0))
+    return "DRIFT_EXCEEDED"
   if (resolved.windows.length > 0) return "WINDOW_UNSATISFIABLE"
   return "NO_FREE_SPACE"
 }

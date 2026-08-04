@@ -41,7 +41,10 @@ export function applyBackdating(
 
     if (inst.plannedEnd <= now) {
       changed = true
-      if (horizonMinutes !== undefined && inst.plannedEnd < now - horizonMinutes) {
+      if (
+        horizonMinutes !== undefined &&
+        inst.plannedEnd < now - horizonMinutes
+      ) {
         return {
           ...inst,
           state: "SKIPPED",

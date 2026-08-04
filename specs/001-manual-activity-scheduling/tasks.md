@@ -35,10 +35,10 @@ it exists — `pnpm test` passing, then a commit. Do not batch tasks before veri
 
 **Purpose**: Dependencies, tooling, and UI primitives needed by every story
 
-- [X] T001 Add runtime dependencies with `pnpm add @libsql/client zod` and confirm they land in `package.json` / `pnpm-lock.yaml` (research §8, §9)
-- [X] T002 Add `pnpm add -D vitest`, create `vitest.config.ts` at the repository root (include `tests/**/*.test.ts`, node environment), and add `"test": "vitest run"` to the `scripts` block of `package.json`
-- [X] T003 [P] Add the shadcn primitives with `pnpm dlx shadcn@latest add dialog select input label checkbox card badge` — they must land in `components/ui/` via the CLI, never hand-written (Constitution I, research §11)
-- [X] T004 [P] Create `.env.example` documenting `TURSO_DATABASE_URL` (e.g. `file:local.db`) and `TURSO_AUTH_TOKEN`, and add `.env.local` plus `local.db*` to `.gitignore`
+- [x] T001 Add runtime dependencies with `pnpm add @libsql/client zod` and confirm they land in `package.json` / `pnpm-lock.yaml` (research §8, §9)
+- [x] T002 Add `pnpm add -D vitest`, create `vitest.config.ts` at the repository root (include `tests/**/*.test.ts`, node environment), and add `"test": "vitest run"` to the `scripts` block of `package.json`
+- [x] T003 [P] Add the shadcn primitives with `pnpm dlx shadcn@latest add dialog select input label checkbox card badge` — they must land in `components/ui/` via the CLI, never hand-written (Constitution I, research §11)
+- [x] T004 [P] Create `.env.example` documenting `TURSO_DATABASE_URL` (e.g. `file:local.db`) and `TURSO_AUTH_TOKEN`, and add `.env.local` plus `local.db*` to `.gitignore`
 
 ---
 
@@ -49,16 +49,16 @@ that every user story builds on
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [X] T005 [P] Implement `lib/time.ts`: `parseHHMM`/`formatHHMM` (`"HH:MM"` ⇄ minutes-from-midnight 0–1439), `durationMin`, `rangesOverlap`, `rangeContains`, and `todayISO()` returning the local `YYYY-MM-DD` date — all numeric, no string date math (Constitution II, research §10)
-- [X] T006 [P] Define the domain types in `lib/domain/types.ts` exactly as specified in data-model.md "Domain types": `PreferredWindow`, `StrictWindow`, `TemporalPlacementRule` (discriminated on `kind`), `OverlapRule`, `StrictActivity`, `FlexibleActivity`, `Activity`, `Transition`, `ScheduledBlock`
-- [X] T007 [P] Write the schema migration `lib/db/migrations/0001_init.sql` creating all six tables per data-model.md — `activity`, `temporal_placement_rule` (PK `activity_id`), `overlap_rule` (PK `host_activity_id`), `overlap_allowed_guest` (composite PK + `CHECK (guest_activity_id <> host_activity_id)`), `transition` (`UNIQUE (activity_id, position)`), `scheduled_block` — with `ON DELETE CASCADE` FKs and the four indexes listed under "Referential integrity & indexing"
-- [X] T008 [P] Create `lib/db/client.ts` exporting the single configured libSQL client from `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — the only connection point in the codebase (Constitution III)
-- [X] T009 Write `tests/unit/time.test.ts` covering `"HH:MM"` ⇄ minutes round-trips, boundary values (0, 1439), duration math, and the overlap/containment predicates
-- [X] T010 Declare the raw row types (one per table, SQLite-shaped: integers for booleans, text for dates) in `lib/db/schema.ts`
-- [X] T011 Create `scripts/migrate.ts` that applies pending `lib/db/migrations/*.sql` files in filename order against the configured client, add `"db:migrate": "tsx scripts/migrate.ts"` (or a node-run equivalent) to `package.json`, and verify it creates all six tables against `file:local.db`
-- [X] T012 Create `lib/domain/validation.ts` with the shared `ActionState` type from contracts/server-actions.md and reusable Zod field schemas (`minuteOfDay` = int 0–1439, non-empty `name`, positive-int duration, FormData coercion helpers)
-- [X] T013 Create `lib/domain/rules.ts` with the `RuleVerdict` type (`{ ok: true } | { ok: false; classification: "hard" | "soft"; message: string }`), the `ok()`/`hard()`/`soft()` constructors, and `checkEndAfterStart(startMin, endMin)` returning a **hard** verdict when `endMin <= startMin` (research §5, FR-005)
-- [X] T014 Write `tests/unit/rules.test.ts` covering the verdict constructors and `checkEndAfterStart` (equal times and reversed times both reject as hard; a valid range passes)
+- [x] T005 [P] Implement `lib/time.ts`: `parseHHMM`/`formatHHMM` (`"HH:MM"` ⇄ minutes-from-midnight 0–1439), `durationMin`, `rangesOverlap`, `rangeContains`, and `todayISO()` returning the local `YYYY-MM-DD` date — all numeric, no string date math (Constitution II, research §10)
+- [x] T006 [P] Define the domain types in `lib/domain/types.ts` exactly as specified in data-model.md "Domain types": `PreferredWindow`, `StrictWindow`, `TemporalPlacementRule` (discriminated on `kind`), `OverlapRule`, `StrictActivity`, `FlexibleActivity`, `Activity`, `Transition`, `ScheduledBlock`
+- [x] T007 [P] Write the schema migration `lib/db/migrations/0001_init.sql` creating all six tables per data-model.md — `activity`, `temporal_placement_rule` (PK `activity_id`), `overlap_rule` (PK `host_activity_id`), `overlap_allowed_guest` (composite PK + `CHECK (guest_activity_id <> host_activity_id)`), `transition` (`UNIQUE (activity_id, position)`), `scheduled_block` — with `ON DELETE CASCADE` FKs and the four indexes listed under "Referential integrity & indexing"
+- [x] T008 [P] Create `lib/db/client.ts` exporting the single configured libSQL client from `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — the only connection point in the codebase (Constitution III)
+- [x] T009 Write `tests/unit/time.test.ts` covering `"HH:MM"` ⇄ minutes round-trips, boundary values (0, 1439), duration math, and the overlap/containment predicates
+- [x] T010 Declare the raw row types (one per table, SQLite-shaped: integers for booleans, text for dates) in `lib/db/schema.ts`
+- [x] T011 Create `scripts/migrate.ts` that applies pending `lib/db/migrations/*.sql` files in filename order against the configured client, add `"db:migrate": "tsx scripts/migrate.ts"` (or a node-run equivalent) to `package.json`, and verify it creates all six tables against `file:local.db`
+- [x] T012 Create `lib/domain/validation.ts` with the shared `ActionState` type from contracts/server-actions.md and reusable Zod field schemas (`minuteOfDay` = int 0–1439, non-empty `name`, positive-int duration, FormData coercion helpers)
+- [x] T013 Create `lib/domain/rules.ts` with the `RuleVerdict` type (`{ ok: true } | { ok: false; classification: "hard" | "soft"; message: string }`), the `ok()`/`hard()`/`soft()` constructors, and `checkEndAfterStart(startMin, endMin)` returning a **hard** verdict when `endMin <= startMin` (research §5, FR-005)
+- [x] T014 Write `tests/unit/rules.test.ts` covering the verdict constructors and `checkEndAfterStart` (equal times and reversed times both reject as hard; a valid range passes)
 
 **Checkpoint**: Schema applies, time and verdict primitives are tested — user story work can begin
 
@@ -75,16 +75,16 @@ no manual refresh. Submit End = Start → rejected, nothing persisted.
 
 ### Implementation for User Story 1
 
-- [X] T015 [US1] Implement `getDayView(date)` in `lib/db/queries.ts` returning `{ activities, transitions, blocks }` — this slice reads `activity` joined to `temporal_placement_rule` for `created_date = date` and maps rows to `Activity` domain objects with `placement` attached; `transitions` and `blocks` return empty arrays until US2/US3 (contracts/data-access.md)
-- [X] T016 [US1] Implement `insertActivityWithRules` in `lib/db/queries.ts` writing the `activity` row and its required `temporal_placement_rule` row as **one atomic libSQL batch** — an activity without its placement rule must be unrepresentable (contracts/data-access.md "Atomic multi-row writes")
-- [X] T017 [P] [US1] Add the strict-variant `createActivitySchema` to `lib/domain/validation.ts`: `name`, `constraintType: "strict"`, `placementKind: "strict"`, `placementStartMin`/`placementEndMin`, discriminated on `constraintType` so flexible-only fields are unrepresentable here (contracts/server-actions.md §1)
-- [X] T018 [P] [US1] Add `checkStrictActivityPlacement` to `lib/domain/rules.ts` — enforces `placementEndMin > placementStartMin` and that a strict activity's rule `kind` is `"strict"`, returning **hard** verdicts (data-model.md §2)
-- [X] T019 [US1] Extend `tests/unit/rules.test.ts` with strict-placement cases: End ≤ Start rejects hard (FR-005, AS-4); `kind: "preferred"` on a strict activity rejects hard; a valid 10:00–10:30 window passes
-- [X] T020 [US1] Implement the `createActivity(prev, formData)` Server Action in `app/actions.ts` (`'use server'`): Zod `safeParse` → rule verdicts → `insertActivityWithRules` → `revalidatePath("/")`, returning `ActionState` per contracts/server-actions.md (errors returned, never thrown; no partial writes)
-- [X] T021 [P] [US1] Create `components/timeline/timeline-block.tsx` rendering one block (label + `HH:MM–HH:MM` via `lib/time.ts`) with a variant prop, using `components/ui/card` and `components/ui/badge`
-- [X] T022 [US1] Create `components/timeline/timeline.tsx` — takes the `getDayView` result, derives one block per strict activity from its Strict Window, sorts by `startMin`, renders them via `timeline-block.tsx`, and renders the empty state when there are no blocks (FR-001, FR-002, FR-008, research §12)
-- [X] T023 [US1] Create `components/forms/add-activity-dialog.tsx` (client component) — shadcn `dialog`/`input`/`label`/`select`, Name + Constraint Type ("Strict") + Start/End time fields, submitting to `createActivity` via `useActionState(action, initialState)` and rendering `fieldErrors`/`formErrors` from state
-- [X] T024 [US1] Rewrite `app/page.tsx` as a Server Component: call `getDayView(todayISO())`, render `<Timeline>` plus the Add Activity dialog trigger, replacing the Next.js starter content
+- [x] T015 [US1] Implement `getDayView(date)` in `lib/db/queries.ts` returning `{ activities, transitions, blocks }` — this slice reads `activity` joined to `temporal_placement_rule` for `created_date = date` and maps rows to `Activity` domain objects with `placement` attached; `transitions` and `blocks` return empty arrays until US2/US3 (contracts/data-access.md)
+- [x] T016 [US1] Implement `insertActivityWithRules` in `lib/db/queries.ts` writing the `activity` row and its required `temporal_placement_rule` row as **one atomic libSQL batch** — an activity without its placement rule must be unrepresentable (contracts/data-access.md "Atomic multi-row writes")
+- [x] T017 [P] [US1] Add the strict-variant `createActivitySchema` to `lib/domain/validation.ts`: `name`, `constraintType: "strict"`, `placementKind: "strict"`, `placementStartMin`/`placementEndMin`, discriminated on `constraintType` so flexible-only fields are unrepresentable here (contracts/server-actions.md §1)
+- [x] T018 [P] [US1] Add `checkStrictActivityPlacement` to `lib/domain/rules.ts` — enforces `placementEndMin > placementStartMin` and that a strict activity's rule `kind` is `"strict"`, returning **hard** verdicts (data-model.md §2)
+- [x] T019 [US1] Extend `tests/unit/rules.test.ts` with strict-placement cases: End ≤ Start rejects hard (FR-005, AS-4); `kind: "preferred"` on a strict activity rejects hard; a valid 10:00–10:30 window passes
+- [x] T020 [US1] Implement the `createActivity(prev, formData)` Server Action in `app/actions.ts` (`'use server'`): Zod `safeParse` → rule verdicts → `insertActivityWithRules` → `revalidatePath("/")`, returning `ActionState` per contracts/server-actions.md (errors returned, never thrown; no partial writes)
+- [x] T021 [P] [US1] Create `components/timeline/timeline-block.tsx` rendering one block (label + `HH:MM–HH:MM` via `lib/time.ts`) with a variant prop, using `components/ui/card` and `components/ui/badge`
+- [x] T022 [US1] Create `components/timeline/timeline.tsx` — takes the `getDayView` result, derives one block per strict activity from its Strict Window, sorts by `startMin`, renders them via `timeline-block.tsx`, and renders the empty state when there are no blocks (FR-001, FR-002, FR-008, research §12)
+- [x] T023 [US1] Create `components/forms/add-activity-dialog.tsx` (client component) — shadcn `dialog`/`input`/`label`/`select`, Name + Constraint Type ("Strict") + Start/End time fields, submitting to `createActivity` via `useActionState(action, initialState)` and rendering `fieldErrors`/`formErrors` from state
+- [x] T024 [US1] Rewrite `app/page.tsx` as a Server Component: call `getDayView(todayISO())`, render `<Timeline>` plus the Add Activity dialog trigger, replacing the Next.js starter content
 
 **Checkpoint**: User Story 1 is fully functional — empty timeline, create a Strict activity, see it
 immediately (SC-001)
@@ -102,14 +102,14 @@ only a pre-transition → exactly two blocks persist and render.
 
 ### Implementation for User Story 2
 
-- [X] T025 [US2] Extend `insertActivityWithRules` in `lib/db/queries.ts` to write 0–2 `transition` rows inside the same atomic batch as the activity and its placement rule (FR-010)
-- [X] T026 [US2] Extend `getDayView` in `lib/db/queries.ts` to populate the `transitions` array for the day's activities, mapped to the `Transition` domain type
-- [X] T027 [P] [US2] Extend `createActivitySchema` in `lib/domain/validation.ts` with optional `preName`/`preStartMin`/`preEndMin` and `postName`/`postStartMin`/`postEndMin` groups (each all-or-nothing, at most one of each position)
-- [X] T028 [P] [US2] Add `checkTransitions` to `lib/domain/rules.ts` returning a **hard** verdict when any supplied transition has `endMin <= startMin`, with no adjacency enforcement against the parent activity (data-model.md §4, Edge Case)
-- [X] T029 [US2] Extend `tests/unit/rules.test.ts` with transition cases: invalid range rejects hard; a gap between transition and parent is accepted; pre-only input is valid
-- [X] T030 [US2] Extend `createActivity` in `app/actions.ts` to evaluate `checkTransitions` and pass the parsed transitions through to `insertActivityWithRules`
-- [X] T031 [US2] Add "Add Pre-Transition" / "Add Post-Transition" checkboxes to `components/forms/add-activity-dialog.tsx`, each revealing Name/Start/End fields when enabled (FR-009)
-- [X] T032 [US2] Merge transitions into the ordered block list in `components/timeline/timeline.tsx` and add a visually distinct `transition` variant in `components/timeline/timeline-block.tsx` (FR-011, SC-008)
+- [x] T025 [US2] Extend `insertActivityWithRules` in `lib/db/queries.ts` to write 0–2 `transition` rows inside the same atomic batch as the activity and its placement rule (FR-010)
+- [x] T026 [US2] Extend `getDayView` in `lib/db/queries.ts` to populate the `transitions` array for the day's activities, mapped to the `Transition` domain type
+- [x] T027 [P] [US2] Extend `createActivitySchema` in `lib/domain/validation.ts` with optional `preName`/`preStartMin`/`preEndMin` and `postName`/`postStartMin`/`postEndMin` groups (each all-or-nothing, at most one of each position)
+- [x] T028 [P] [US2] Add `checkTransitions` to `lib/domain/rules.ts` returning a **hard** verdict when any supplied transition has `endMin <= startMin`, with no adjacency enforcement against the parent activity (data-model.md §4, Edge Case)
+- [x] T029 [US2] Extend `tests/unit/rules.test.ts` with transition cases: invalid range rejects hard; a gap between transition and parent is accepted; pre-only input is valid
+- [x] T030 [US2] Extend `createActivity` in `app/actions.ts` to evaluate `checkTransitions` and pass the parsed transitions through to `insertActivityWithRules`
+- [x] T031 [US2] Add "Add Pre-Transition" / "Add Post-Transition" checkboxes to `components/forms/add-activity-dialog.tsx`, each revealing Name/Start/End fields when enabled (FR-009)
+- [x] T032 [US2] Merge transitions into the ordered block list in `components/timeline/timeline.tsx` and add a visually distinct `transition` variant in `components/timeline/timeline-block.tsx` (FR-011, SC-008)
 
 **Checkpoint**: User Stories 1 AND 2 both work independently
 
@@ -138,7 +138,7 @@ Window activity outside its window → **rejected**. Overlapping an existing blo
 - [ ] T040 [US3] Create `tests/unit/accounting.test.ts` covering `activityProgressMin`: zero blocks ⇒ 0; two blocks sum; over-target totals are returned uncapped (Edge Case)
 - [ ] T041 [US3] Implement the `scheduleFlexibleBlock(prev, formData)` Server Action in `app/actions.ts`: parse → load the flexible activity → compute `endMin = startMin + minBlockMin` → `evaluatePlacement` → `checkNoOverlap` against `getOccupiedRanges` → persist on pass or soft violation (returning `warnings`), reject on hard → `revalidatePath("/")` (contracts/server-actions.md §2)
 - [ ] T042 [US3] Extend `createActivity` in `app/actions.ts` to handle the flexible branch (daily target, min block, chosen placement kind) through the same atomic insert
-- [ ] T043 [US3] Extend `components/forms/add-activity-dialog.tsx`: selecting Constraint Type "Flexible" replaces Start/End with Daily Target, Minimum Block, and an **exclusive** Temporal Placement choice (Preferred *or* Strict window — selecting one clears the other) (FR-012, FR-013, AS-1/AS-2)
+- [ ] T043 [US3] Extend `components/forms/add-activity-dialog.tsx`: selecting Constraint Type "Flexible" replaces Start/End with Daily Target, Minimum Block, and an **exclusive** Temporal Placement choice (Preferred _or_ Strict window — selecting one clears the other) (FR-012, FR-013, AS-1/AS-2)
 - [ ] T044 [P] [US3] Create `components/timeline/flexible-sidebar.tsx` listing each Flexible activity with `activityProgressMin` versus its daily target as "Xh / Yh" (FR-014, SC-003)
 - [ ] T045 [P] [US3] Create `components/forms/schedule-flexible-dialog.tsx` — pick a flexible activity, enter a start time, submit to `scheduleFlexibleBlock` via `useActionState`, and surface returned `warnings` distinctly from `formErrors`
 - [ ] T046 [US3] Render standalone flexible blocks in `components/timeline/timeline.tsx` and add the derived soft-violation badge in `components/timeline/timeline-block.tsx` — a block outside its activity's Preferred Window is badged at render time, never stored (FR-017, SC-004, research §5)
@@ -169,7 +169,7 @@ rejected.
 - [ ] T052 [P] [US4] Add to `lib/domain/rules.ts` — all returning **hard** verdicts (FR-023): `checkGuestAllowed(hostOverlapRule, guestActivityId)`, `checkWithinHostBounds(hostPlacement, startMin, endMin)`, `checkWithinBudget(durationMin, remainingBudgetMin)`, and `checkOverlapRuleEligibility` (host must be strict, guests must be flexible, no self-reference)
 - [ ] T053 [US4] Extend `tests/unit/rules.test.ts`: guest not in the allowed set rejects; a 30m guest starting 17:45 against an 18:00 host end rejects (Edge Case); duration exceeding remaining budget rejects; a self-referencing guest rejects; an empty allowed-guest set is a valid host configuration
 - [ ] T054 [P] [US4] Extend `lib/domain/accounting.ts` with `remainingOverlapBudgetMin(overlapRule, guestBlocks)`, `hostLoggedDurationMin(host)` (its own span, never adjusted by guests), and `unionMinutes(ranges)` (union measure, not a sum)
-- [ ] T055 [US4] Extend `tests/unit/accounting.test.ts` with the FR-026 / SC-007 guarantee: 10:00–18:00 host + 13:00–13:30 guest ⇒ `unionMinutes` = **480**, not 510; `hostLoggedDurationMin` unchanged by guests; the guest's 30 minutes count toward the *guest's* progress; remaining budget decreases by exactly the guest duration
+- [ ] T055 [US4] Extend `tests/unit/accounting.test.ts` with the FR-026 / SC-007 guarantee: 10:00–18:00 host + 13:00–13:30 guest ⇒ `unionMinutes` = **480**, not 510; `hostLoggedDurationMin` unchanged by guests; the guest's 30 minutes count toward the _guest's_ progress; remaining budget decreases by exactly the guest duration
 - [ ] T056 [US4] Extend `createActivity` in `app/actions.ts` to evaluate the Overlap Rule checks and persist the host's budget and allowed-guest set (rejecting overlap fields on a flexible activity)
 - [ ] T057 [US4] Implement the `scheduleGuestBlock(prev, formData)` Server Action in `app/actions.ts`: load host (strict + `overlap_rule`) and guest (flexible), compute `endMin = startMin + guest.minBlockMin`, run the allowed-guest / host-bounds / remaining-budget checks, insert with `host_activity_id` set, `revalidatePath("/")` — the general overlap check does not apply to the host's own span (contracts/server-actions.md §3)
 - [ ] T058 [US4] Add the Overlap Rule section to `components/forms/add-activity-dialog.tsx` for Strict activities: an "Allow overlap" checkbox revealing "Interruptible Minutes" and an "Allowed Interrupters" multi-select composed from shadcn `checkbox`/`card` listing existing Flexible activities, excluding the activity being created (FR-019, research §11)
@@ -269,10 +269,10 @@ Task: "Create components/forms/schedule-flexible-dialog.tsx"
 ### Incremental Delivery
 
 1. Setup + Foundational → schema applies, pure primitives tested
-2. + US1 → timeline + Strict activities (**MVP**) → validate → commit
-3. + US2 → transitions → validate → commit
-4. + US3 → flexible activities, sidebar, Hard/Soft enforcement → validate → commit
-5. + US4 → Overlap Rule, guest blocks, count-once accounting → validate → commit
+2. - US1 → timeline + Strict activities (**MVP**) → validate → commit
+3. - US2 → transitions → validate → commit
+4. - US3 → flexible activities, sidebar, Hard/Soft enforcement → validate → commit
+5. - US4 → Overlap Rule, guest blocks, count-once accounting → validate → commit
 6. Polish (T063–T068)
 
 ### Risk-First Note

@@ -5,7 +5,11 @@
 import { eq } from "drizzle-orm"
 
 import { db } from "@/lib/db"
-import { activityTable, timelineActivityTable, timelineTable } from "@/lib/db/schema"
+import {
+  activityTable,
+  timelineActivityTable,
+  timelineTable,
+} from "@/lib/db/schema"
 import { getOrCreateTimeline } from "@/lib/db/timeline-queries"
 import { addDaysISO } from "@/lib/time"
 
@@ -17,10 +21,15 @@ function dateAtMinute(dateISO: string, minuteOfDay: number): Date {
 }
 
 /** Seeds a synthetic overnight Sleep block (yesterday 02:00 -> today 10:00), pinned so it survives regeneration — simulates a midnight-spanning anchor ahead of Phase 09. */
-export async function seedOvernightSleepFixture(dateISO: string): Promise<void> {
+export async function seedOvernightSleepFixture(
+  dateISO: string
+): Promise<void> {
   const timeline = await getOrCreateTimeline(dateISO)
   const yesterdayISO = addDaysISO(dateISO, -1)
-  const [sleepActivity] = await db.select().from(activityTable).where(eq(activityTable.name, "Sleep"))
+  const [sleepActivity] = await db
+    .select()
+    .from(activityTable)
+    .where(eq(activityTable.name, "Sleep"))
 
   await db.insert(timelineActivityTable).values({
     timelineId: timeline.id,
@@ -40,9 +49,16 @@ export async function seedOvernightSleepFixture(dateISO: string): Promise<void> 
  * occupied/immovable and builds everything else around it (rather than also
  * placing a separate, un-anchored Sleep block).
  */
-export async function resetAndRegenerateTimeline(dateISO: string): Promise<void> {
+export async function resetAndRegenerateTimeline(
+  dateISO: string
+): Promise<void> {
   const timeline = await getOrCreateTimeline(dateISO)
-  await db.delete(timelineActivityTable).where(eq(timelineActivityTable.timelineId, timeline.id))
-  await db.update(timelineTable).set({ lastGeneratedAt: null }).where(eq(timelineTable.id, timeline.id))
+  await db
+    .delete(timelineActivityTable)
+    .where(eq(timelineActivityTable.timelineId, timeline.id))
+  await db
+    .update(timelineTable)
+    .set({ lastGeneratedAt: null })
+    .where(eq(timelineTable.id, timeline.id))
   await seedOvernightSleepFixture(dateISO)
 }

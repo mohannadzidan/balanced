@@ -3,7 +3,10 @@
 import { useState, useTransition } from "react"
 
 import { Button } from "@/components/ui/button"
-import { acceptSpareTimeActivityAction, finishGuestEarlyAction } from "@/lib/actions/overlap"
+import {
+  acceptSpareTimeActivityAction,
+  finishGuestEarlyAction,
+} from "@/lib/actions/overlap"
 import type { SpareTimePrompt } from "@/lib/db/overlap-queries"
 
 export function GuestActivityActions({
@@ -53,7 +56,8 @@ export function GuestActivityActions({
     return (
       <div className="mt-2 rounded-lg border border-dashed border-border p-2">
         <p className="text-xs text-foreground">
-          You have {prompt.freedMin}m spare. Tackle a quick activity, or just rest?
+          You have {prompt.freedMin}m spare. Tackle a quick activity, or just
+          rest?
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {prompt.quickActivities.map((activity) => (
@@ -63,12 +67,20 @@ export function GuestActivityActions({
               variant="outline"
               size="sm"
               disabled={pending}
-              onClick={() => handleAccept(activity.id, activity.suggestedDurationMin)}
+              onClick={() =>
+                handleAccept(activity.id, activity.suggestedDurationMin)
+              }
             >
               {activity.name} ({activity.suggestedDurationMin}m)
             </Button>
           ))}
-          <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => setPrompt(null)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={pending}
+            onClick={() => setPrompt(null)}
+          >
             Just rest
           </Button>
         </div>
@@ -81,7 +93,13 @@ export function GuestActivityActions({
 
   return (
     <div className="mt-2">
-      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={handleFinishEarly}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={handleFinishEarly}
+      >
         Finish Early
       </Button>
       {error && <p className="mt-1 text-xs text-destructive">{error}</p>}

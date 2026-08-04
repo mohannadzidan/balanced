@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache"
 import { z } from "zod"
 
-import { createActivity, deleteActivity, updateActivity } from "@/lib/db/activity-queries"
+import {
+  createActivity,
+  deleteActivity,
+  updateActivity,
+} from "@/lib/db/activity-queries"
 import { upsertWindowRule } from "@/lib/db/rule-queries"
 import { regenerateForwardTimeline } from "@/lib/db/timeline-queries"
 import { parseHHMM, todayISO, windowSpanMin } from "@/lib/time"
@@ -22,7 +26,10 @@ const minuteOfDayField = z.string().transform((raw, ctx) => {
 const durationHoursField = z.string().transform((raw, ctx) => {
   const hours = Number(raw.trim())
   if (!Number.isFinite(hours) || hours <= 0) {
-    ctx.addIssue({ code: "custom", message: "Enter a positive number of hours." })
+    ctx.addIssue({
+      code: "custom",
+      message: "Enter a positive number of hours.",
+    })
     return z.NEVER
   }
   return Math.round(hours * 60)
@@ -32,7 +39,10 @@ const durationHoursField = z.string().transform((raw, ctx) => {
 const transitionDurationField = z.string().transform((raw, ctx) => {
   const minutes = Number(raw.trim())
   if (!Number.isFinite(minutes) || minutes <= 0 || !Number.isInteger(minutes)) {
-    ctx.addIssue({ code: "custom", message: "Enter a positive whole number of minutes." })
+    ctx.addIssue({
+      code: "custom",
+      message: "Enter a positive whole number of minutes.",
+    })
     return z.NEVER
   }
   return minutes
@@ -51,7 +61,11 @@ const createActivitySchema = z
   })
   .and(
     z.discriminatedUnion("windowKind", [
-      z.object({ windowKind: z.literal("strict"), windowStartMin: minuteOfDayField, windowEndMin: minuteOfDayField }),
+      z.object({
+        windowKind: z.literal("strict"),
+        windowStartMin: minuteOfDayField,
+        windowEndMin: minuteOfDayField,
+      }),
       z.object({
         windowKind: z.literal("flexible"),
         windowStartMin: minuteOfDayField,
@@ -66,8 +80,13 @@ const createActivitySchema = z
   })
   .refine(
     (data) =>
-      data.windowKind !== "flexible" || data.windowDurationMin <= windowSpanMin(data.windowStartMin, data.windowEndMin),
-    { message: "Duration can't exceed the window's span.", path: ["windowDurationMin"] }
+      data.windowKind !== "flexible" ||
+      data.windowDurationMin <=
+        windowSpanMin(data.windowStartMin, data.windowEndMin),
+    {
+      message: "Duration can't exceed the window's span.",
+      path: ["windowDurationMin"],
+    }
   )
   .refine(
     (data) => {
@@ -77,12 +96,14 @@ const createActivitySchema = z
       }
       return true
     },
-    { message: "Transition duration must be a positive whole number of minutes.", path: ["transitionDurationMin"] }
+    {
+      message:
+        "Transition duration must be a positive whole number of minutes.",
+      path: ["transitionDurationMin"],
+    }
   )
 
-export type ActivityFormState =
-  | { ok: true }
-  | { ok: false; error: string }
+export type ActivityFormState = { ok: true } | { ok: false; error: string }
 
 export async function createActivityAction(
   _prevState: ActivityFormState,
@@ -105,7 +126,10 @@ export async function createActivityAction(
   const parsed = createActivitySchema.safeParse(baseData)
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   const transitionDurationMin = isTransitionOnly
@@ -130,7 +154,11 @@ export async function createActivityAction(
   await upsertWindowRule(
     activity.id,
     parsed.data.windowKind === "strict"
-      ? { kind: "strict", startMin: parsed.data.windowStartMin, endMin: parsed.data.windowEndMin }
+      ? {
+          kind: "strict",
+          startMin: parsed.data.windowStartMin,
+          endMin: parsed.data.windowEndMin,
+        }
       : {
           kind: "flexible",
           startMin: parsed.data.windowStartMin,
@@ -162,7 +190,10 @@ export async function updateActivityDetailsAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   await updateActivity(activityId, {

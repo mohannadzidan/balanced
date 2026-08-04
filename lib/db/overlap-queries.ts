@@ -15,17 +15,27 @@ function minutesBetween(a: Date, b: Date): number {
 }
 
 /** Which timeline activities are guests, and which host each belongs to — for nested rendering. */
-export async function getGuestLinks(
-  timelineId: string
-): Promise<{ guestIdToHostId: Map<string, string>; hostIdToGuestIds: Map<string, string[]> }> {
+export async function getGuestLinks(timelineId: string): Promise<{
+  guestIdToHostId: Map<string, string>
+  hostIdToGuestIds: Map<string, string[]>
+}> {
   const rows = await db
     .select({
       guestId: timelineOverlapGuestTable.timelineGuestActivityId,
       hostId: timelineRuleTable.timelineActivityId,
     })
     .from(timelineOverlapGuestTable)
-    .innerJoin(timelineRuleTable, eq(timelineRuleTable.id, timelineOverlapGuestTable.timelineRuleId))
-    .innerJoin(timelineActivityTable, eq(timelineActivityTable.id, timelineOverlapGuestTable.timelineGuestActivityId))
+    .innerJoin(
+      timelineRuleTable,
+      eq(timelineRuleTable.id, timelineOverlapGuestTable.timelineRuleId)
+    )
+    .innerJoin(
+      timelineActivityTable,
+      eq(
+        timelineActivityTable.id,
+        timelineOverlapGuestTable.timelineGuestActivityId
+      )
+    )
     .where(eq(timelineActivityTable.timelineId, timelineId))
 
   const guestIdToHostId = new Map(rows.map((row) => [row.guestId, row.hostId]))
@@ -38,10 +48,16 @@ export async function getGuestLinks(
   return { guestIdToHostId, hostIdToGuestIds }
 }
 
-export type OverlapBudget = { ruleId: string; budgetMin: number; remainingMin: number }
+export type OverlapBudget = {
+  ruleId: string
+  budgetMin: number
+  remainingMin: number
+}
 
 /** The host's cloned Overlap Rule and how much of its budget is still unspent. */
-export async function getOverlapBudgetForHost(hostTimelineActivityId: string): Promise<OverlapBudget | null> {
+export async function getOverlapBudgetForHost(
+  hostTimelineActivityId: string
+): Promise<OverlapBudget | null> {
   const [rule] = await db
     .select()
     .from(timelineRuleTable)
@@ -57,13 +73,28 @@ export async function getOverlapBudgetForHost(hostTimelineActivityId: string): P
   let usedMin = 0
   if (links.length > 0) {
     const guestRows = await db
-      .select({ startTime: timelineActivityTable.startTime, endTime: timelineActivityTable.endTime })
+      .select({
+        startTime: timelineActivityTable.startTime,
+        endTime: timelineActivityTable.endTime,
+      })
       .from(timelineActivityTable)
-      .where(inArray(timelineActivityTable.id, links.map((link) => link.guestId)))
-    usedMin = guestRows.reduce((sum, row) => sum + minutesBetween(row.startTime, row.endTime), 0)
+      .where(
+        inArray(
+          timelineActivityTable.id,
+          links.map((link) => link.guestId)
+        )
+      )
+    usedMin = guestRows.reduce(
+      (sum, row) => sum + minutesBetween(row.startTime, row.endTime),
+      0
+    )
   }
 
-  return { ruleId: rule.id, budgetMin: config.budgetMin, remainingMin: Math.max(0, config.budgetMin - usedMin) }
+  return {
+    ruleId: rule.id,
+    budgetMin: config.budgetMin,
+    remainingMin: Math.max(0, config.budgetMin - usedMin),
+  }
 }
 
 type ExecutionResult = { ok: true } | { ok: false; error: string }
@@ -84,7 +115,10 @@ export async function placeGuestActivity(input: {
 
   const durationMin = minutesBetween(input.startTime, input.endTime)
   if (durationMin > budget.remainingMin) {
-    return { ok: false, error: `Only ${budget.remainingMin}m of overlap budget remains.` }
+    return {
+      ok: false,
+      error: `Only ${budget.remainingMin}m of overlap budget remains.`,
+    }
   }
 
   const [host] = await db
@@ -96,7 +130,10 @@ export async function placeGuestActivity(input: {
     return { ok: false, error: "Must fall within the host's time span." }
   }
 
-  const [activity] = await db.select().from(activityTable).where(eq(activityTable.id, input.guestActivityId))
+  const [activity] = await db
+    .select()
+    .from(activityTable)
+    .where(eq(activityTable.id, input.guestActivityId))
   if (!activity) return { ok: false, error: "Guest activity not found." }
 
   const [guestRow] = await db
@@ -114,7 +151,10 @@ export async function placeGuestActivity(input: {
     })
     .returning({ id: timelineActivityTable.id })
 
-  await db.insert(timelineOverlapGuestTable).values({ timelineRuleId: budget.ruleId, timelineGuestActivityId: guestRow.id })
+  await db.insert(timelineOverlapGuestTable).values({
+    timelineRuleId: budget.ruleId,
+    timelineGuestActivityId: guestRow.id,
+  })
 
   return { ok: true }
 }
@@ -135,13 +175,16 @@ export type SpareTimePrompt = {
 export async function finishGuestEarly(
   guestTimelineActivityId: string,
   actualEndTime: Date = new Date()
-): Promise<{ ok: true; prompt: SpareTimePrompt | null } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; prompt: SpareTimePrompt | null } | { ok: false; error: string }
+> {
   const [guest] = await db
     .select()
     .from(timelineActivityTable)
     .where(eq(timelineActivityTable.id, guestTimelineActivityId))
   if (!guest) return { ok: false, error: "Activity not found." }
-  if (guest.status === "completed") return { ok: false, error: "Already finished." }
+  if (guest.status === "completed")
+    return { ok: false, error: "Already finished." }
 
   const actualStartTime = guest.actualStartTime ?? guest.startTime
   if (actualStartTime > new Date()) {
@@ -160,7 +203,12 @@ export async function finishGuestEarly(
     // reflects what actually happened — `guest.endTime` below still refers to
     // the pre-update (originally scheduled) value, which is what "freed"
     // must be measured against.
-    .set({ actualStartTime, actualEndTime, endTime: actualEndTime, status: "completed" })
+    .set({
+      actualStartTime,
+      actualEndTime,
+      endTime: actualEndTime,
+      status: "completed",
+    })
     .where(eq(timelineActivityTable.id, guest.id))
 
   const freedMin = minutesBetween(actualEndTime, guest.endTime)
@@ -172,7 +220,10 @@ export async function finishGuestEarly(
     .where(eq(timelineOverlapGuestTable.timelineGuestActivityId, guest.id))
   if (!link) return { ok: true, prompt: null }
 
-  const [rule] = await db.select().from(timelineRuleTable).where(eq(timelineRuleTable.id, link.timelineRuleId))
+  const [rule] = await db
+    .select()
+    .from(timelineRuleTable)
+    .where(eq(timelineRuleTable.id, link.timelineRuleId))
   if (!rule) return { ok: true, prompt: null }
 
   const hostTimelineActivityId = rule.timelineActivityId
@@ -190,8 +241,13 @@ export async function finishGuestEarly(
   const usableMin = Math.min(freedMin, budget?.remainingMin ?? 0)
   if (usableMin <= 0) return { ok: true, prompt: null }
 
-  const candidateActivities = await db.select().from(activityTable).where(inArray(activityTable.id, guestActivityIds))
-  const candidateRules = await Promise.all(candidateActivities.map((activity) => getActivityRules(activity.id)))
+  const candidateActivities = await db
+    .select()
+    .from(activityTable)
+    .where(inArray(activityTable.id, guestActivityIds))
+  const candidateRules = await Promise.all(
+    candidateActivities.map((activity) => getActivityRules(activity.id))
+  )
 
   const quickActivities = candidateActivities
     .map((activity, index) => {
@@ -202,10 +258,18 @@ export async function finishGuestEarly(
           : rules.window.endMin - rules.window.startMin
         : null
       const minDuration = rules.tracking?.minBlockMinutes ?? windowDuration
-      if (minDuration === null || minDuration <= 0 || minDuration > usableMin) return null
-      return { id: activity.id, name: activity.name, suggestedDurationMin: Math.min(minDuration, usableMin) }
+      if (minDuration === null || minDuration <= 0 || minDuration > usableMin)
+        return null
+      return {
+        id: activity.id,
+        name: activity.name,
+        suggestedDurationMin: Math.min(minDuration, usableMin),
+      }
     })
-    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
+    .filter(
+      (candidate): candidate is NonNullable<typeof candidate> =>
+        candidate !== null
+    )
 
   if (quickActivities.length === 0) return { ok: true, prompt: null }
 

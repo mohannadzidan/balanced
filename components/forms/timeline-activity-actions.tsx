@@ -28,8 +28,18 @@ export function TimelineActivityActions({
 
   return (
     <div className="mt-2">
-      <Button type="button" variant="ghost" size="icon-sm" disabled={pending} onClick={handleTogglePin}>
-        {isPinned ? <Pin className="h-4 w-4" /> : <PinOff className="h-4 w-4" />}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        disabled={pending}
+        onClick={handleTogglePin}
+      >
+        {isPinned ? (
+          <Pin className="h-4 w-4" />
+        ) : (
+          <PinOff className="h-4 w-4" />
+        )}
         <span className="sr-only">{isPinned ? "Unpin" : "Pin"}</span>
       </Button>
     </div>

@@ -62,7 +62,12 @@ export async function deleteActivity(id: string): Promise<void> {
   await db.delete(activityTable).where(eq(activityTable.id, id))
 }
 
-export async function listActivitiesByIds(ids: string[]): Promise<{ id: string; name: string }[]> {
+export async function listActivitiesByIds(
+  ids: string[]
+): Promise<{ id: string; name: string }[]> {
   if (ids.length === 0) return []
-  return db.select({ id: activityTable.id, name: activityTable.name }).from(activityTable).where(inArray(activityTable.id, ids))
+  return db
+    .select({ id: activityTable.id, name: activityTable.name })
+    .from(activityTable)
+    .where(inArray(activityTable.id, ids))
 }

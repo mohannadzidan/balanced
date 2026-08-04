@@ -24,13 +24,18 @@ export function AddActivitySheet() {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-  const [windowKind, setWindowKind] = useState<"strict" | "flexible">("flexible")
+  const [windowKind, setWindowKind] = useState<"strict" | "flexible">(
+    "flexible"
+  )
   const [isTransitionOnly, setIsTransitionOnly] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
 
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await createActivityAction({ ok: false, error: "" }, formData)
+      const result = await createActivityAction(
+        { ok: false, error: "" },
+        formData
+      )
       if (result.ok) {
         formRef.current?.reset()
         setError(null)
@@ -46,7 +51,7 @@ export function AddActivitySheet() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
         render={
-          <Button className="flex-1 flex items-center justify-center gap-2 shadow-floating" />
+          <Button className="shadow-floating flex flex-1 items-center justify-center gap-2" />
         }
       >
         <Plus className="h-4 w-4" />
@@ -63,19 +68,32 @@ export function AddActivitySheet() {
         <SheetHeader>
           <SheetTitle>Add Activity</SheetTitle>
           <SheetDescription>
-            Create a reusable blueprint. Attach rules afterward to define when and how it gets scheduled.
+            Create a reusable blueprint. Attach rules afterward to define when
+            and how it gets scheduled.
           </SheetDescription>
         </SheetHeader>
-        <form ref={formRef} action={handleSubmit} className="flex flex-col gap-4 px-4">
+        <form
+          ref={formRef}
+          action={handleSubmit}
+          className="flex flex-col gap-4 px-4"
+        >
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="activity-name">Name</Label>
-            <Input id="activity-name" name="name" placeholder="Office Work" required />
+            <Input
+              id="activity-name"
+              name="name"
+              placeholder="Office Work"
+              required
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Allowed days</Label>
             <div className="flex flex-wrap gap-3">
               {WEEKDAYS.map((day) => (
-                <label key={day} className="flex items-center gap-1.5 text-sm text-foreground">
+                <label
+                  key={day}
+                  className="flex items-center gap-1.5 text-sm text-foreground"
+                >
                   <Checkbox name="allowedDays" value={day} />
                   {weekdayLabel(day)}
                 </label>
@@ -88,7 +106,9 @@ export function AddActivitySheet() {
               id="activity-window-kind"
               name="windowKind"
               value={windowKind}
-              onChange={(event) => setWindowKind(event.target.value as "strict" | "flexible")}
+              onChange={(event) =>
+                setWindowKind(event.target.value as "strict" | "flexible")
+              }
               className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <option value="flexible">Preferred (soft)</option>
@@ -97,12 +117,28 @@ export function AddActivitySheet() {
           </div>
           <div className="flex gap-2">
             <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="activity-window-start">{windowKind === "flexible" ? "Bounds start" : "Start"}</Label>
-              <Input id="activity-window-start" name="windowStartMin" type="time" defaultValue="09:00" required />
+              <Label htmlFor="activity-window-start">
+                {windowKind === "flexible" ? "Bounds start" : "Start"}
+              </Label>
+              <Input
+                id="activity-window-start"
+                name="windowStartMin"
+                type="time"
+                defaultValue="09:00"
+                required
+              />
             </div>
             <div className="flex flex-1 flex-col gap-1.5">
-              <Label htmlFor="activity-window-end">{windowKind === "flexible" ? "Bounds end" : "End"}</Label>
-              <Input id="activity-window-end" name="windowEndMin" type="time" defaultValue="10:00" required />
+              <Label htmlFor="activity-window-end">
+                {windowKind === "flexible" ? "Bounds end" : "End"}
+              </Label>
+              <Input
+                id="activity-window-end"
+                name="windowEndMin"
+                type="time"
+                defaultValue="10:00"
+                required
+              />
             </div>
           </div>
           {windowKind === "flexible" && !isTransitionOnly && (
@@ -118,7 +154,8 @@ export function AddActivitySheet() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                How long the block actually runs — it can land anywhere inside the bounds above.
+                How long the block actually runs — it can land anywhere inside
+                the bounds above.
               </p>
             </div>
           )}
@@ -132,8 +169,9 @@ export function AddActivitySheet() {
             <span>
               Transition only
               <span className="block text-xs text-muted-foreground">
-                Only ever scheduled as part of another activity&apos;s Sequence Rule (e.g. Commute
-                before Office Work) — never scheduled on its own.
+                Only ever scheduled as part of another activity&apos;s Sequence
+                Rule (e.g. Commute before Office Work) — never scheduled on its
+                own.
               </span>
             </span>
           </label>
@@ -150,8 +188,9 @@ export function AddActivitySheet() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Fixed duration in minutes. The transition will start this many minutes before (pre)
-                or after (post) the main activity it&apos;s attached to.
+                Fixed duration in minutes. The transition will start this many
+                minutes before (pre) or after (post) the main activity it&apos;s
+                attached to.
               </p>
             </div>
           )}

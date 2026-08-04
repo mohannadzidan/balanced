@@ -124,7 +124,13 @@ describe("SPEC-v2.1 §7.1: FixedRule resolves per bucket", () => {
     const placed = plannedByName(result.timeline.instances, "Standup")
     expect(placed).toHaveLength(5)
 
-    const dates = ["2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"]
+    const dates = [
+      "2026-07-27",
+      "2026-07-28",
+      "2026-07-29",
+      "2026-07-30",
+      "2026-07-31",
+    ]
     expect(placed.map((p) => p.date)).toEqual(dates)
     expect(placed.map((p) => p.bucketKey)).toEqual(dates)
 

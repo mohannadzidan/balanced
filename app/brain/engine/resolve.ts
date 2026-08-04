@@ -67,27 +67,28 @@ export function resolveActivity(
   const day = dayFrame.days[0]
   const rules = windowRulesOf(activity)
   const dw = dayFrame.defaultDayWindow
-  const windows = rules.length > 0
-    ? rules.map((rule) => ({
-        start: resolveWallClock(rule.startWall, dayFrame),
-        end: resolveWallClock(rule.endWall, dayFrame),
-        maxDriftMinutes: rule.maxDriftMinutes,
-        dayIndex: 0,
-        daySpanStart: day.startOffset,
-        daySpanEnd: day.startOffset + day.lengthMinutes,
-      }))
-    : dw
-      ? [
-          {
-            start: resolveWallClock(dw.startWall, dayFrame),
-            end: resolveWallClock(dw.endWall, dayFrame),
-            maxDriftMinutes: 0,
-            dayIndex: 0,
-            daySpanStart: day.startOffset,
-            daySpanEnd: day.startOffset + day.lengthMinutes,
-          },
-        ]
-      : []
+  const windows =
+    rules.length > 0
+      ? rules.map((rule) => ({
+          start: resolveWallClock(rule.startWall, dayFrame),
+          end: resolveWallClock(rule.endWall, dayFrame),
+          maxDriftMinutes: rule.maxDriftMinutes,
+          dayIndex: 0,
+          daySpanStart: day.startOffset,
+          daySpanEnd: day.startOffset + day.lengthMinutes,
+        }))
+      : dw
+        ? [
+            {
+              start: resolveWallClock(dw.startWall, dayFrame),
+              end: resolveWallClock(dw.endWall, dayFrame),
+              maxDriftMinutes: 0,
+              dayIndex: 0,
+              daySpanStart: day.startOffset,
+              daySpanEnd: day.startOffset + day.lengthMinutes,
+            },
+          ]
+        : []
   return { activity, windows }
 }
 
@@ -208,7 +209,8 @@ export function evaluateCandidate(
     if (driftMinutes < minDrift) minDrift = driftMinutes
     if (driftMinutes <= window.maxDriftMinutes) driftFeasible = true
   }
-  const feasible = driftFeasible && isContainedInEligibleDaySpan(windows, start, end)
+  const feasible =
+    driftFeasible && isContainedInEligibleDaySpan(windows, start, end)
   return { feasible, driftMinutes: minDrift }
 }
 
@@ -245,14 +247,23 @@ function isContainedInEligibleDaySpan(
  * cross-reference (§7.1: `resolveFixedPlacement` now resolves against each
  * occurrence's own bucket day), so it no longer disqualifies ghosting.
  */
-export function isGhostable(activity: Activity, catalog: readonly Activity[]): boolean {
-  if (activity.rules.some((r) => r.type === "overlap" || r.type === "sequence")) {
+export function isGhostable(
+  activity: Activity,
+  catalog: readonly Activity[]
+): boolean {
+  if (
+    activity.rules.some((r) => r.type === "overlap" || r.type === "sequence")
+  ) {
     return false
   }
   for (const other of catalog) {
-    const overlap = other.rules.find((r): r is OverlapRule => r.type === "overlap")
+    const overlap = other.rules.find(
+      (r): r is OverlapRule => r.type === "overlap"
+    )
     if (overlap?.allowedGuestIds.includes(activity.id)) return false
-    const sequence = other.rules.find((r): r is SequenceRule => r.type === "sequence")
+    const sequence = other.rules.find(
+      (r): r is SequenceRule => r.type === "sequence"
+    )
     if (sequence?.linkedActivityId === activity.id) return false
   }
   return true

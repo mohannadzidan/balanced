@@ -28,7 +28,13 @@ describe("SPEC-v2.1 §7.4: per-day absolute exclusions", () => {
       budgetMinutes: 60,
       allowedGuestIds: [],
       exclusionWindows: [
-        { id: "lunch", name: "Lunch", anchor: "absolute", startWall: "12:00", endWall: "13:00" },
+        {
+          id: "lunch",
+          name: "Lunch",
+          anchor: "absolute",
+          startWall: "12:00",
+          endWall: "13:00",
+        },
       ],
     }
 
@@ -36,7 +42,9 @@ describe("SPEC-v2.1 §7.4: per-day absolute exclusions", () => {
     const day3 = resolveAbsoluteExclusions(rule, frame, 3)
 
     expect(day0).toEqual([{ start: 12 * 60, end: 13 * 60 }])
-    expect(day3).toEqual([{ start: 3 * 1440 + 12 * 60, end: 3 * 1440 + 13 * 60 }])
+    expect(day3).toEqual([
+      { start: 3 * 1440 + 12 * 60, end: 3 * 1440 + 13 * 60 },
+    ])
   })
 
   it("default dayIndex=0 reproduces the v1 once-per-frame resolution", () => {
@@ -47,7 +55,13 @@ describe("SPEC-v2.1 §7.4: per-day absolute exclusions", () => {
       budgetMinutes: 60,
       allowedGuestIds: [],
       exclusionWindows: [
-        { id: "lunch", name: "Lunch", anchor: "absolute", startWall: "12:00", endWall: "13:00" },
+        {
+          id: "lunch",
+          name: "Lunch",
+          anchor: "absolute",
+          startWall: "12:00",
+          endWall: "13:00",
+        },
       ],
     }
 

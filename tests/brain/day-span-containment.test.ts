@@ -4,7 +4,11 @@
 // off an eligible day onto one the activity was never eligible for at all.
 
 import { describe, expect, it } from "vitest"
-import { evaluateCandidate, resolveActivity, resolveWindows } from "@/app/brain/engine/resolve"
+import {
+  evaluateCandidate,
+  resolveActivity,
+  resolveWindows,
+} from "@/app/brain/engine/resolve"
 import type { ResolvedActivity } from "@/app/brain/engine/resolve"
 import { resolveFrame } from "@/app/brain/engine/time"
 import { activity } from "./support/fixtures"

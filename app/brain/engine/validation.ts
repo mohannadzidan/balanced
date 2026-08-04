@@ -37,7 +37,9 @@ function pairForbidden(a: RuleType, b: RuleType): boolean {
 function isFixedWithChunkingRepeat(a: Rule, b: Rule): boolean {
   const fixed = a.type === "fixed" ? a : b.type === "fixed" ? b : null
   const repeat = a.type === "repeat" ? a : b.type === "repeat" ? b : null
-  return fixed !== null && repeat !== null && (repeat as RepeatRule).sharedBudget
+  return (
+    fixed !== null && repeat !== null && (repeat as RepeatRule).sharedBudget
+  )
 }
 
 /**
@@ -363,9 +365,7 @@ export function validateActivity(
   // most as many required occurrences as the activity declares" — anything
   // beyond that is an authoring mistake.
   const repeatCount = activity.rules
-    .filter(
-      (r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget
-    )
+    .filter((r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget)
     .reduce((max, r) => Math.max(max, r.count), 1)
   if (activity.requiredCount < 0 || activity.requiredCount > repeatCount) {
     issues.push(
@@ -544,8 +544,8 @@ export function validateSeparation(
           "error",
           "SEPARATION_UNSATISFIABLE",
           activity.id,
-          `"${activity.name}" requires ${count} × ${duration}m + ${count - 1} × ${sep}m separation (>${smallestBucketLength}m smallest bucket)`,
-        ),
+          `"${activity.name}" requires ${count} × ${duration}m + ${count - 1} × ${sep}m separation (>${smallestBucketLength}m smallest bucket)`
+        )
       )
     }
   }
@@ -570,7 +570,7 @@ export function validateFrame(frame: DayFrame): ValidationIssue[] {
         "FRAME_TOO_LONG",
         null,
         `Frame spans ${frame.dayCount} days; the cap is 366.`
-      ),
+      )
     )
   }
 
@@ -584,7 +584,7 @@ export function validateFrame(frame: DayFrame): ValidationIssue[] {
           "FRAME_DEFAULT_WINDOW_INVALID",
           null,
           `Frame.defaultDayWindow must use "HH:MM" wall-clock form for startWall and endWall; got ${JSON.stringify(dw)}.`
-        ),
+        )
       )
     }
   }
@@ -600,7 +600,7 @@ export function validateFrame(frame: DayFrame): ValidationIssue[] {
         "FRAME_BACKDATE_HORIZON_INVALID",
         null,
         `Frame.backdateHorizonMinutes must be a non-negative number; got ${frame.backdateHorizonMinutes}.`
-      ),
+      )
     )
   }
 

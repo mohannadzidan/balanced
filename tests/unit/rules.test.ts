@@ -110,7 +110,11 @@ describe("checkStrictActivityPlacement", () => {
 
   it("accepts a valid 10:00-10:30 strict window", () => {
     expect(
-      checkStrictActivityPlacement({ kind: "strict", startMin: 600, endMin: 630 })
+      checkStrictActivityPlacement({
+        kind: "strict",
+        startMin: 600,
+        endMin: 630,
+      })
     ).toEqual({ ok: true })
   })
 })
@@ -177,13 +181,21 @@ describe("evaluatePlacement", () => {
 
   it("accepts a block fully inside the window", () => {
     expect(
-      evaluatePlacement({ kind: "preferred", startMin: 1080, endMin: 1380 }, 1140, 1260)
+      evaluatePlacement(
+        { kind: "preferred", startMin: 1080, endMin: 1380 },
+        1140,
+        1260
+      )
     ).toEqual({ ok: true })
   })
 
   it("accepts a block touching both window endpoints", () => {
     expect(
-      evaluatePlacement({ kind: "strict", startMin: 1080, endMin: 1380 }, 1080, 1380)
+      evaluatePlacement(
+        { kind: "strict", startMin: 1080, endMin: 1380 },
+        1080,
+        1380
+      )
     ).toEqual({ ok: true })
   })
 })

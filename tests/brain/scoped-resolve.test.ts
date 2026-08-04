@@ -109,7 +109,9 @@ describe("SPEC-v2.1 §9 / §15 row 7: scoped re-solve preserves out-of-scope ins
       event: { type: "GENERATE_DAY" },
     })
     expect(initial.status).not.toBe("REJECTED")
-    expect(initial.timeline.instances.filter((i) => i.state === "PLANNED")).toHaveLength(30)
+    expect(
+      initial.timeline.instances.filter((i) => i.state === "PLANNED")
+    ).toHaveLength(30)
 
     // Sanity: with scope: "frame", the call doesn't reject and produces 30
     // placements (they're mandatory + already-fixed so positions are stable).
@@ -124,6 +126,10 @@ describe("SPEC-v2.1 §9 / §15 row 7: scoped re-solve preserves out-of-scope ins
       options: { scope: "frame" },
     })
     expect(replanned.status).not.toBe("REJECTED")
-    expect(replanned.timeline.instances.filter((i) => i.state === "PLANNED" || i.state === "COMPLETED")).toHaveLength(30)
+    expect(
+      replanned.timeline.instances.filter(
+        (i) => i.state === "PLANNED" || i.state === "COMPLETED"
+      )
+    ).toHaveLength(30)
   })
 })

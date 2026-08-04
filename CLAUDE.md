@@ -1,4 +1,3 @@
-
 ## Core Principles
 
 ### I. Component-First UI (shadcn/ui)

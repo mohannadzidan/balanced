@@ -15,35 +15,35 @@ import type { SolveInput, SolveResult } from "@/app/brain/engine/types"
  * instances that backdating never got to run on.
  */
 export function solveChecked(input: SolveInput): SolveResult {
-	const result = solve(input)
+  const result = solve(input)
 
-	if (result.status === "REJECTED") {
-		return result
-	}
+  if (result.status === "REJECTED") {
+    return result
+  }
 
-	// Check invariants on the main timeline
-	const violations = checkInvariants(result.timeline)
-	if (violations.length > 0) {
-		const messages = violations.map(
-			(v) => `[${v.code}] ${v.message} (ids: ${v.instanceIds.join(", ")})`,
-		)
-		throw new Error(
-			`Invariant violations in solveChecked result:\n${messages.join("\n")}`,
-		)
-	}
+  // Check invariants on the main timeline
+  const violations = checkInvariants(result.timeline)
+  if (violations.length > 0) {
+    const messages = violations.map(
+      (v) => `[${v.code}] ${v.message} (ids: ${v.instanceIds.join(", ")})`
+    )
+    throw new Error(
+      `Invariant violations in solveChecked result:\n${messages.join("\n")}`
+    )
+  }
 
-	// Also check bestEffortTimeline if a rejection occurred
-	if (result.rejection?.bestEffortTimeline) {
-		const beViolations = checkInvariants(result.rejection.bestEffortTimeline)
-		if (beViolations.length > 0) {
-			const messages = beViolations.map(
-				(v) => `[${v.code}] ${v.message} (ids: ${v.instanceIds.join(", ")})`,
-			)
-			throw new Error(
-				`Invariant violations in bestEffortTimeline:\n${messages.join("\n")}`,
-			)
-		}
-	}
+  // Also check bestEffortTimeline if a rejection occurred
+  if (result.rejection?.bestEffortTimeline) {
+    const beViolations = checkInvariants(result.rejection.bestEffortTimeline)
+    if (beViolations.length > 0) {
+      const messages = beViolations.map(
+        (v) => `[${v.code}] ${v.message} (ids: ${v.instanceIds.join(", ")})`
+      )
+      throw new Error(
+        `Invariant violations in bestEffortTimeline:\n${messages.join("\n")}`
+      )
+    }
+  }
 
-	return result
+  return result
 }

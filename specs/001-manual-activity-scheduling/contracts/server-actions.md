@@ -15,14 +15,14 @@ FR-007).
 ```ts
 type ActionState =
   | { ok: true; warnings?: string[] }
-  | { ok: false; formErrors: string[]; fieldErrors: Record<string, string[]> };
+  | { ok: false; formErrors: string[]; fieldErrors: Record<string, string[]> }
 ```
 
 - `fieldErrors` — per-field messages from Zod `flatten()`.
 - `formErrors` — cross-field / **Hard rule** messages (Strict Window violation, overlap, host
   bounds, budget, disallowed guest).
 - `warnings` — **Soft rule** messages on an otherwise successful save. This is the FR-017 path:
-  the block *is* persisted and `ok: true`, but the user is told the preference was violated. An
+  the block _is_ persisted and `ok: true`, but the user is told the preference was violated. An
   action MUST NOT return `ok: false` for a Soft violation, and MUST NOT return `ok: true` with a
   silent one.
 
@@ -32,14 +32,13 @@ Every rule check returns a verdict rather than a boolean (research §5):
 
 ```ts
 type RuleVerdict =
-  | { ok: true }
-  | { ok: false; classification: "hard" | "soft"; message: string };
+  { ok: true } | { ok: false; classification: "hard" | "soft"; message: string }
 ```
 
-| Classification | Persisted? | Response |
-|----------------|-----------|----------|
+| Classification                                                                       | Persisted?               | Response                               |
+| ------------------------------------------------------------------------------------ | ------------------------ | -------------------------------------- |
 | **Hard** (Strict Window, End>Start, overlap, host bounds, budget, allowed-guest set) | **No** — nothing written | `{ ok: false, formErrors: [message] }` |
-| **Soft** (Preferred Window) | **Yes** | `{ ok: true, warnings: [message] }` |
+| **Soft** (Preferred Window)                                                          | **Yes**                  | `{ ok: true, warnings: [message] }`    |
 
 The timeline additionally **derives** the Soft-violation flag when rendering (a block outside its
 activity's Preferred Window is badged), so the warning outlives the single action response
@@ -59,8 +58,9 @@ Covers FR-003–FR-006, FR-009–FR-010, FR-012–FR-013, FR-019–FR-020.
   - `placementKind` (`"preferred"` | `"strict"`)
   - `placementStartMin`, `placementEndMin` (0–1439 ints)
 
-  For a Strict activity these *are* its fixed start/end times and `placementKind` MUST be
+  For a Strict activity these _are_ its fixed start/end times and `placementKind` MUST be
   `"strict"`. For a Flexible activity they are the window its blocks float inside.
+
 - Flexible-only: `dailyTargetMin`, `minBlockMin` (positive ints)
 - Overlap Rule (strict only, optional): `overlapEnabled` (bool), `overlapBudgetMin` (int ≥ 0),
   `allowedGuestIds` (0..n activity IDs)
@@ -70,7 +70,7 @@ Covers FR-003–FR-006, FR-009–FR-010, FR-012–FR-013, FR-019–FR-020.
 **Validation / rules** (all **Hard** — any failure rejects the whole save)
 
 1. **Zod**, discriminated on `constraintType`: required fields present and typed, ints in range.
-   The schema models Temporal Placement as a single discriminated object, so submitting *both* a
+   The schema models Temporal Placement as a single discriminated object, so submitting _both_ a
    preferred and a strict window is unrepresentable at the boundary (FR-013).
 2. `placementEndMin > placementStartMin` (FR-005, Edge Case).
 3. Strict ⇒ `placementKind === "strict"`; flexible-only fields absent.
@@ -142,7 +142,7 @@ Covers FR-022–FR-024. Places a **guest block** overlapping a host (non-null `h
 **Effect**: insert one `scheduled_block` with `host_activity_id` set.
 
 **Accounting guarantee (FR-026, SC-007)**: the write adds **no** minutes to the host. The host's
-logged duration remains its own span, the guest's minutes count toward the *guest's* daily
+logged duration remains its own span, the guest's minutes count toward the _guest's_ daily
 progress, and the day's total logged time is the union measure of intervals — so a 30-minute guest
 inside an 8-hour host yields 8h of covered clock, never 8h30m.
 

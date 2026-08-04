@@ -91,7 +91,7 @@ work:
   on top of the built-in defaults (grid size, and the per-unit costs of
   skipping, shrinking, chunking, drifting, and leaving a gap).
 - **`totalRanked`** — the denominator used for priority weighting — is
-  fixed as the size of the *entire* declared catalog, not just the
+  fixed as the size of the _entire_ declared catalog, not just the
   activities eligible today. An activity's weight is therefore stable
   across days even if it happens to be disabled or not allowed on a
   particular weekday elsewhere in the catalog.
@@ -122,7 +122,7 @@ overrides as if they had always been part of the template.
 
 ## 4. Anchors: what a re-solve is not allowed to touch
 
-Every event after the first solve of a day re-solves *something*, but never
+Every event after the first solve of a day re-solves _something_, but never
 everything. An **anchor** is an existing instance that the upcoming
 re-solve must leave completely untouched, for one of two reasons: it has
 already consumed real time (its state is `ACTIVE`, `COMPLETED`, or
@@ -153,7 +153,7 @@ Two details of how this set is built matter for correctness:
   catalog. Anywhere the engine needs a stable key for "this activity /
   instance is already spoken for," it falls back to the instance's own id
   when `activityId` is null. This same fallback key is also how a later
-  event finds *every* fragment of a chunked plan (all fragments share an
+  event finds _every_ fragment of a chunked plan (all fragments share an
   activity id) or a single ad-hoc instance (which has none) when it needs
   to act on "the whole thing" rather than one instance row.
 
@@ -185,7 +185,7 @@ against whichever window rule the activity carries, if any:
 - A strict window: feasible only if the candidate falls entirely inside the
   window; there is no such thing as "a little outside" for a strict window.
 - A flexible window: the candidate may extend outside the window on either
-  side, up to the rule's allowed drift *in total*. The amount of drift a
+  side, up to the rule's allowed drift _in total_. The amount of drift a
   candidate incurs is the sum of however many minutes of the candidate fall
   before the window's start and however many fall after its end, each
   capped so a candidate that lies entirely off to one side isn't
@@ -209,7 +209,7 @@ activity's full duration, then prefer the earlier start time. A few
 narrower internal searches (the single-block shrink ladder, the overlap
 nesting search) only implement this indirectly, by searching from the
 longest candidate length down to the shortest and only replacing the
-current best on a *strictly* cheaper find — which has the same practical
+current best on a _strictly_ cheaper find — which has the same practical
 effect (a tie is resolved in favor of whichever length was tried first,
 i.e. the longer one) without an explicit three-way sort.
 
@@ -218,7 +218,7 @@ i.e. the longer one) without an explicit three-way sort.
 Every activity carrying a `FixedRule` is placed at its declared wall-clock
 time, unconditionally — this is the only phase with no search at all. A
 `FixedRule` whose end is not after its start is interpreted as spanning
-midnight: its end is resolved against *tomorrow's* day frame rather than
+midnight: its end is resolved against _tomorrow's_ day frame rather than
 today's (so a transition-night's different length doesn't silently distort
 an overnight block), and its placement's end offset is expressed relative
 to today's frame by adding today's own length to that overflow.
@@ -274,7 +274,7 @@ the next untried candidate from that list, commits to it, and advances the
 cursor. If every candidate for the activity at the cursor is exhausted, the
 loop backtracks: it discards the previous activity's commitment, advances
 that activity's own attempt counter by one, and resumes the search from
-there — trying that previous activity's *next* candidate instead. Reaching
+there — trying that previous activity's _next_ candidate instead. Reaching
 the front of the list with no earlier commitment left to blame means that
 activity is infeasible in isolation.
 
@@ -353,7 +353,7 @@ candidates and takes whichever is cheaper:
    whatever is currently free, exactly as phase 1b would search for it, but
    without backtracking.
 2. **A nested candidate**, if this activity is listed as an allowed guest of
-   any host activity that is *already placed* at this point in the pass. An
+   any host activity that is _already placed_ at this point in the pass. An
    activity is only available as a nesting host once its own top-level
    placement has actually been committed — a host processed later in
    ascending-rank order, or one that never gets placed at all, simply isn't
@@ -420,7 +420,7 @@ shrink floor in total. For a given chunk count, the plan is built greedily:
    valid outcome — a chunked plan is only rejected afterward if its total
    still falls short of the shrink floor. This mirrors the single-block
    ladder's floor requirement: however an activity gets shrunk, whether as
-   one block or several chunks, however much *is* scheduled must still meet
+   one block or several chunks, however much _is_ scheduled must still meet
    the same minimum.
 
 ## 11. Overlap: nesting a guest inside a host
@@ -442,7 +442,7 @@ candidate, and that becomes the nested candidate compared against the
 guest's ordinary free-space result back in Phase 2.
 
 An absolute-anchored exclusion window plays one further role, upstream of
-nesting entirely: it's treated as a hard constraint on the *host's own*
+nesting entirely: it's treated as a hard constraint on the _host's own_
 placement search (in every phase, not just here) — the host itself is only
 allowed to land somewhere that fully contains every absolute exclusion
 window it declares, since that window's wall-clock position doesn't move
@@ -511,10 +511,10 @@ builds the actual list of instances that becomes the result:
 - An activity that resolved to a single placement (whether from fixed,
   hard-set, greedy, or the sequence phase) becomes one instance carrying
   that placement.
-- An activity that resolved to a chunk plan instead becomes *several*
+- An activity that resolved to a chunk plan instead becomes _several_
   top-level instances — one per chunk, ordered by start time — all sharing
   one chunk-group identifier and each other's total chunk count, but with
-  the *plan's* shrink and chunk-count relaxations recorded only once, on
+  the _plan's_ shrink and chunk-count relaxations recorded only once, on
   the first chunk, specifically so that reading the relaxation back out of
   the instance list later doesn't double-count a group-level cost as if it
   applied to every fragment individually.
@@ -524,7 +524,7 @@ builds the actual list of instances that becomes the result:
   after drift, a budget that ran out, its host being skipped, not being
   allowed on today's weekday, or a user's explicit skip).
 - A sequence dependent that ended up with both a placement and a
-  gap-relaxation from its own phase carries that gap relaxation *alongside*
+  gap-relaxation from its own phase carries that gap relaxation _alongside_
   whatever shrink/drift relaxation its own placement search would otherwise
   have recorded for it — the two are independent and both apply if both
   occurred.
@@ -551,8 +551,7 @@ specific existing instance and follows the same shape, implemented
 separately (and largely duplicated) per event rather than through one
 shared generic step. `ADD_ADHOC` is the one exception to steps 1–2 below —
 it has no existing instance to look up at all, since it's creating one;
-its "precondition check" is validating the new payload instead (Section
-17) — but it rejoins the same shape from step 3 onward:
+its "precondition check" is validating the new payload instead (Section 17) — but it rejoins the same shape from step 3 onward:
 
 1. Look up the targeted instance by id in the caller's `existing` list;
    fail immediately if it isn't there.
@@ -581,11 +580,11 @@ its "precondition check" is validating the new payload instead (Section
    scratch against this new instance list), and tentatively advance the
    revision number by one.
 7. Compare that speculative result against the instance list as it stood
-   *before* the event (Section 15). If the comparison finds the event
+   _before_ the event (Section 15). If the comparison finds the event
    introduced a genuine regression, the speculative result is discarded
    entirely and the event is rejected — the caller gets back the original,
    completely unchanged timeline (same revision, recomputed diagnostics and
-   cost against the *unchanged* instances), plus a description of what went
+   cost against the _unchanged_ instances), plus a description of what went
    wrong and, for reference, the discarded speculative timeline showing
    what would have happened. Otherwise the speculative result is returned
    as the new timeline.
@@ -618,7 +617,7 @@ What differs per event is almost entirely contained in steps 2 and 3:
   it can come back skipped again, possibly for an entirely different
   reason — that alone is not a rejection, since the activity being restored
   was already skipped beforehand and the rejection check only cares about
-  regressions the event itself caused. What *can* legitimately get
+  regressions the event itself caused. What _can_ legitimately get
   rejected here is a side effect: restoring one activity can shift where a
   higher-priority activity around it ends up, which can in turn break a
   sequence dependent that was previously sitting comfortably adjacent to
@@ -650,7 +649,7 @@ What differs per event is almost entirely contained in steps 2 and 3:
   one solve, rather than reusing the weight the rest of the day was
   computed with.
 - **`EDIT_INSTANCE_RULES`** replaces one or more rule types on the target's
-  *template*, for today only, by constructing a modified copy of that
+  _template_, for today only, by constructing a modified copy of that
   activity with the new rules substituted in (and tagged as coming from the
   instance, not the template) and validating that modified copy exactly
   like any other activity. If the edited instance happens to be currently
@@ -666,14 +665,14 @@ What differs per event is almost entirely contained in steps 2 and 3:
 The comparison that decides whether to reject an event works by comparing
 "before" (the instance list exactly as the caller passed it in) against
 "after" (the freshly solved speculative result), matched up by activity id.
-It looks specifically for an activity that is skipped *after* the event but
-was **not** already skipped *before* it — an activity already skipped
+It looks specifically for an activity that is skipped _after_ the event but
+was **not** already skipped _before_ it — an activity already skipped
 beforehand staying skipped, or getting skipped for a different reason,
 never counts on its own, because the event didn't cause that; it was
 already true.
 
 For the first such newly-introduced skip it finds, it classifies the
-rejection by *why* that activity is now unplaceable:
+rejection by _why_ that activity is now unplaceable:
 
 - No free space or window could be found at all, and the activity is
   mandatory (or the same holds for a fixed activity, whose declared time
@@ -686,7 +685,7 @@ rejection by *why* that activity is now unplaceable:
   distinction matters because the natural fix is different (move the guest
   vs. reconsider the host).
 - A sequence dependent that can no longer find an adjacent slot: rejected
-  as a sequence failure — but *only* if its host is not itself now skipped.
+  as a sequence failure — but _only_ if its host is not itself now skipped.
   A dependent losing its slot purely because its own host vanished is a
   cascading, zero-cost, and entirely expected consequence (Section 12), not
   a regression the event should be blamed for.
@@ -719,7 +718,7 @@ or carried forward for it. For a genuinely overflowing instance, today's
 own copy is clamped to end exactly at the day boundary, and the overflow
 portion becomes a brand-new, separate instance — marked `CARRIED_IN` and
 already `locked` — occupying the very start of what will become tomorrow's
-day frame. That carry-in list, handed back to the caller, is the *only*
+day frame. That carry-in list, handed back to the caller, is the _only_
 piece of state that ever crosses from one day frame into the next; the
 engine itself retains nothing.
 

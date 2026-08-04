@@ -17,18 +17,18 @@ Activities in this system are **global definitions** governed by **rules**, not 
 Rules have three defining traits:
 
 - **Scope** — a rule is either **system-wide** (applies across all activities, e.g. the Overlap Rule) or **activity-level** (attached to one activity definition).
-- **Category** — rules are grouped into **mutually-exclusive categories**; an activity holds **at most one** rule per category (e.g. an activity may have *either* a Preferred Window *or* a Strict Window, never both).
+- **Category** — rules are grouped into **mutually-exclusive categories**; an activity holds **at most one** rule per category (e.g. an activity may have _either_ a Preferred Window _or_ a Strict Window, never both).
 - **Classification** — a rule is **Hard** (immovable; a violating block is rejected) or **Soft** (a preference that may be relaxed when the schedule is worked out).
 
 Three rules are referenced by the phases in this feature:
 
-- **Overlap Rule (system-wide)** — a **host** activity may be overlapped by a designated **allowed-guest set** for a bounded total of **X minutes** (the host's *overlap budget*). Each guest block is carved out of the host's span, consuming part of the budget. This replaces the earlier "Container + interruptible minutes + allowed interrupters" model; the two describe the same behaviour, but the Overlap Rule frames it as **parallel reality** (guest and host occupy the same wall-clock time) rather than a nested hierarchy. **Consequence for accounting**: overlapping time is counted once, not twice — a 30-minute guest overlapping an 8-hour host does not produce 8h30m of logged time toward any daily target.
+- **Overlap Rule (system-wide)** — a **host** activity may be overlapped by a designated **allowed-guest set** for a bounded total of **X minutes** (the host's _overlap budget_). Each guest block is carved out of the host's span, consuming part of the budget. This replaces the earlier "Container + interruptible minutes + allowed interrupters" model; the two describe the same behaviour, but the Overlap Rule frames it as **parallel reality** (guest and host occupy the same wall-clock time) rather than a nested hierarchy. **Consequence for accounting**: overlapping time is counted once, not twice — a 30-minute guest overlapping an 8-hour host does not produce 8h30m of logged time toward any daily target.
 - **Temporal Placement (activity-level, exclusive)** — an activity carries either a **Preferred Window** (Soft; a block should fall inside it but may be placed outside) or a **Strict Window** (Hard; a block must stay within it but may float to any position inside it) — never both.
 - **Recurrence (activity-level, exclusive)** — an activity is either **Recurring** (carries an allowed-days set and is re-evaluated on each matching day, subject to carry-over) or **One-Time** (bound to a single specific date). Recurrence is introduced here as part of the model; the phases that exercise it are **out of scope for this feature** (see Assumptions) and are not covered by the user stories below.
 
 The user stories below reframe the four detailed phases in terms of this model.
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - View the daily timeline and record a fixed activity (Priority: P1)
 
@@ -113,7 +113,7 @@ The user creates a Strict activity and enables the system-wide **Overlap Rule** 
 - What happens when the selected guest's minimum-block duration would extend past the host's own end time? The system MUST reject the guest block (it must fit within the host bounds).
 - How is time accounted when a guest overlaps a host? The overlapping wall-clock minutes are counted once. The guest's minutes contribute to the guest activity's own daily progress, and the host's logged duration remains its own span; the overlap MUST NOT inflate total logged time (e.g., a 30-minute lunch inside an 8-hour workday yields 8h of work + 30m of lunch across the same clock window, never 8h30m of combined logged time).
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -154,7 +154,7 @@ The user creates a Strict activity and enables the system-wide **Overlap Rule** 
 - **Scheduled Block**: A specific, manually placed occurrence of a Flexible activity on a given date's timeline, with a start time and end time, contributing to that activity's daily progress.
 - **Overlapping Guest Block**: A specific occurrence of an allowed-guest activity scheduled to overlap a particular host block, with a start time and end time, consuming part of the host's remaining overlap budget while counting only once toward total logged time.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 

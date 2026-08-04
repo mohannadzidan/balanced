@@ -1,7 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-require("dotenv").config();
+require("dotenv").config()
 
-import type { Config } from "drizzle-kit";
+import type { Config } from "drizzle-kit"
 
 export default {
   schema: "./lib/db/schema.ts",
@@ -11,4 +11,4 @@ export default {
     url: process.env.TURSO_DATABASE_URL!,
     authToken: process.env.TURSO_AUTH_TOKEN,
   },
-} satisfies Config;
+} satisfies Config

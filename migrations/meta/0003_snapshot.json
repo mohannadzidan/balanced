@@ -91,12 +91,8 @@
           "name": "overlap_allowed_guest_rule_id_rule_id_fk",
           "tableFrom": "overlap_allowed_guest",
           "tableTo": "rule",
-          "columnsFrom": [
-            "rule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["rule_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -104,12 +100,8 @@
           "name": "overlap_allowed_guest_guest_activity_id_activity_id_fk",
           "tableFrom": "overlap_allowed_guest",
           "tableTo": "activity",
-          "columnsFrom": [
-            "guest_activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guest_activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -153,10 +145,7 @@
       "indexes": {
         "activity_rule_type_idx": {
           "name": "activity_rule_type_idx",
-          "columns": [
-            "activity_id",
-            "rule_type"
-          ],
+          "columns": ["activity_id", "rule_type"],
           "isUnique": true
         }
       },
@@ -165,12 +154,8 @@
           "name": "rule_activity_id_activity_id_fk",
           "tableFrom": "rule",
           "tableTo": "activity",
-          "columnsFrom": [
-            "activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -268,12 +253,8 @@
           "name": "timeline_activity_timeline_id_timeline_id_fk",
           "tableFrom": "timeline_activity",
           "tableTo": "timeline",
-          "columnsFrom": [
-            "timeline_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["timeline_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -281,12 +262,8 @@
           "name": "timeline_activity_source_activity_id_activity_id_fk",
           "tableFrom": "timeline_activity",
           "tableTo": "activity",
-          "columnsFrom": [
-            "source_activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["source_activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -326,12 +303,8 @@
           "name": "timeline_overlap_guest_timeline_rule_id_timeline_rule_id_fk",
           "tableFrom": "timeline_overlap_guest",
           "tableTo": "timeline_rule",
-          "columnsFrom": [
-            "timeline_rule_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["timeline_rule_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -339,12 +312,8 @@
           "name": "timeline_overlap_guest_timeline_guest_activity_id_timeline_activity_id_fk",
           "tableFrom": "timeline_overlap_guest",
           "tableTo": "timeline_activity",
-          "columnsFrom": [
-            "timeline_guest_activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["timeline_guest_activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -391,12 +360,8 @@
           "name": "timeline_rule_timeline_activity_id_timeline_activity_id_fk",
           "tableFrom": "timeline_rule",
           "tableTo": "timeline_activity",
-          "columnsFrom": [
-            "timeline_activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["timeline_activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -441,9 +406,7 @@
       "indexes": {
         "date_idx": {
           "name": "date_idx",
-          "columns": [
-            "date"
-          ],
+          "columns": ["date"],
           "isUnique": true
         }
       },
@@ -500,12 +463,8 @@
           "name": "tracking_ledger_activity_id_activity_id_fk",
           "tableFrom": "tracking_ledger",
           "tableTo": "activity",
-          "columnsFrom": [
-            "activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -542,10 +501,7 @@
       "indexes": {
         "activity_vacation_date_idx": {
           "name": "activity_vacation_date_idx",
-          "columns": [
-            "activity_id",
-            "date"
-          ],
+          "columns": ["activity_id", "date"],
           "isUnique": true
         }
       },
@@ -554,12 +510,8 @@
           "name": "vacation_day_activity_id_activity_id_fk",
           "tableFrom": "vacation_day",
           "tableTo": "activity",
-          "columnsFrom": [
-            "activity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["activity_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

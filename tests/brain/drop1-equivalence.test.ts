@@ -86,7 +86,12 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
         enabled: true,
         requiredCount: 0,
         rules: [
-          { type: "fixed", source: "template", startWall: "08:00", endWall: "08:30" },
+          {
+            type: "fixed",
+            source: "template",
+            startWall: "08:00",
+            endWall: "08:30",
+          },
         ],
       },
       {
@@ -140,7 +145,12 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
   it("requiredCount (mandatory), including the hard-set backtracking path", () => {
     const sugar = [
       activity("Sleep").rank(1).minutes(400).mandatory().build(),
-      activity("Gym").rank(2).minutes(90).mandatory().strict("06:00", "08:00").build(),
+      activity("Gym")
+        .rank(2)
+        .minutes(90)
+        .mandatory()
+        .strict("06:00", "08:00")
+        .build(),
       activity("Reading").rank(3).minutes(30).build(),
     ]
     const manual: Activity[] = [
@@ -203,7 +213,12 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
         enabled: true,
         requiredCount: 0,
         rules: [
-          { type: "fixed", source: "template", startWall: "09:00", endWall: "17:00" },
+          {
+            type: "fixed",
+            source: "template",
+            startWall: "09:00",
+            endWall: "17:00",
+          },
         ],
       },
       {
@@ -250,11 +265,7 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
         .minutes(30)
         .sequence("pre", "work", { maxGap: 5 })
         .build(),
-      activity("Debrief")
-        .rank(3)
-        .minutes(15)
-        .sequence("post", "work")
-        .build(),
+      activity("Debrief").rank(3).minutes(15).sequence("post", "work").build(),
     ]
     const manual: Activity[] = [
       {

@@ -48,7 +48,10 @@ export async function manualScheduleActivityAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   const result = await manualScheduleActivity({
@@ -84,7 +87,10 @@ export async function manualPlaceGuestActivityAction(
   })
 
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." }
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    }
   }
 
   const dateISO = todayISO()

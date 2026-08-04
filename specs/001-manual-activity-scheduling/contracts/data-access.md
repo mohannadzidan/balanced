@@ -60,7 +60,7 @@ insertScheduledBlock(block: ScheduledBlock): Promise<void>;
   activity without its placement rule, or a host without its allowed-guest rows, cannot exist —
   the category invariants hold at every observable moment.
 - **No business rules here**: this layer persists and reads. Rule evaluation lives in
-  `lib/domain/rules.ts` and runs in the Server Action *before* these writes are called; derived
+  `lib/domain/rules.ts` and runs in the Server Action _before_ these writes are called; derived
   figures (remaining overlap budget, activity progress, union totals) are computed in
   `lib/domain/accounting.ts` from what these reads return — never stored, never computed in SQL.
 

@@ -4,29 +4,51 @@ import { fillTrackedActivity, placeFlexibleBlock } from "@/lib/solver/placement"
 
 describe("placeFlexibleBlock", () => {
   it("places at the window's own start when the whole window is free", () => {
-    const result = placeFlexibleBlock({ startMin: 600, endMin: 660 }, 60, [{ startMin: 0, endMin: 1440 }])
-    expect(result).toEqual({ block: { startMin: 600, endMin: 660 }, wasShrunk: false })
+    const result = placeFlexibleBlock({ startMin: 600, endMin: 660 }, 60, [
+      { startMin: 0, endMin: 1440 },
+    ])
+    expect(result).toEqual({
+      block: { startMin: 600, endMin: 660 },
+      wasShrunk: false,
+    })
   })
 
   it("floats a shorter duration within wider bounds, anchored to the window's start", () => {
     // An 8h (480m) block inside a 10h (600m) window: 21:00 (1260) to 07:00
     // (420, wrapped) — clamped to today's 1260-1440 portion for this test.
-    const result = placeFlexibleBlock({ startMin: 1260, endMin: 1440 }, 120, [{ startMin: 0, endMin: 1440 }])
-    expect(result).toEqual({ block: { startMin: 1260, endMin: 1380 }, wasShrunk: false })
+    const result = placeFlexibleBlock({ startMin: 1260, endMin: 1440 }, 120, [
+      { startMin: 0, endMin: 1440 },
+    ])
+    expect(result).toEqual({
+      block: { startMin: 1260, endMin: 1380 },
+      wasShrunk: false,
+    })
   })
 
   it("slides later within the window when the preferred start is occupied", () => {
-    const result = placeFlexibleBlock({ startMin: 600, endMin: 700 }, 40, [{ startMin: 620, endMin: 700 }])
-    expect(result).toEqual({ block: { startMin: 620, endMin: 660 }, wasShrunk: false })
+    const result = placeFlexibleBlock({ startMin: 600, endMin: 700 }, 40, [
+      { startMin: 620, endMin: 700 },
+    ])
+    expect(result).toEqual({
+      block: { startMin: 620, endMin: 660 },
+      wasShrunk: false,
+    })
   })
 
   it("shrinks to the largest overlapping gap instead of dropping the activity", () => {
-    const result = placeFlexibleBlock({ startMin: 600, endMin: 660 }, 60, [{ startMin: 610, endMin: 640 }])
-    expect(result).toEqual({ block: { startMin: 610, endMin: 640 }, wasShrunk: true })
+    const result = placeFlexibleBlock({ startMin: 600, endMin: 660 }, 60, [
+      { startMin: 610, endMin: 640 },
+    ])
+    expect(result).toEqual({
+      block: { startMin: 610, endMin: 640 },
+      wasShrunk: true,
+    })
   })
 
   it("returns null only when the window has no free overlap at all", () => {
-    const result = placeFlexibleBlock({ startMin: 600, endMin: 660 }, 60, [{ startMin: 700, endMin: 800 }])
+    const result = placeFlexibleBlock({ startMin: 600, endMin: 660 }, 60, [
+      { startMin: 700, endMin: 800 },
+    ])
     expect(result).toBeNull()
   })
 })

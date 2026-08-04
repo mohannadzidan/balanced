@@ -42,7 +42,9 @@ describe("SPEC-v2.1 §15 row 5: requiredCount > 1 with hard-set decomposition", 
     })
 
     if (result.status === "REJECTED") {
-      throw new Error(`unexpected rejection: ${JSON.stringify(result.rejection)}`)
+      throw new Error(
+        `unexpected rejection: ${JSON.stringify(result.rejection)}`
+      )
     }
 
     // Every day got exactly one 09:00–09:15 standup.

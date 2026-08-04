@@ -55,8 +55,14 @@ function buildActivity(id: string, rules: Rule[]): Activity {
 
 describe("repeatRuleOf — disambiguates chunking vs recurrence (SPEC-v2.1 §5.4)", () => {
   it("returns the chunking rule (sharedBudget: true) regardless of declaration order", () => {
-    const recurrenceFirst = buildActivity("gym-rf", [recurrenceRule, chunkingRule])
-    const chunkingFirst = buildActivity("gym-cf", [chunkingRule, recurrenceRule])
+    const recurrenceFirst = buildActivity("gym-rf", [
+      recurrenceRule,
+      chunkingRule,
+    ])
+    const chunkingFirst = buildActivity("gym-cf", [
+      chunkingRule,
+      recurrenceRule,
+    ])
 
     const r1 = repeatRuleOf(recurrenceFirst)
     const r2 = repeatRuleOf(chunkingFirst)
@@ -68,14 +74,18 @@ describe("repeatRuleOf — disambiguates chunking vs recurrence (SPEC-v2.1 §5.4
   })
 
   it("returns null when only a recurrence rule is present (no chunking)", () => {
-    const gym = activity("Gym").rank(1).minutes(60)
+    const gym = activity("Gym")
+      .rank(1)
+      .minutes(60)
       .repeat({ count: 3, period: "week", sharedBudget: false })
       .build()
     expect(repeatRuleOf(gym)).toBeNull()
   })
 
   it("returns the chunking rule when only a chunking rule is present (Drop 1 behavior preserved)", () => {
-    const gym = activity("Gym").rank(1).minutes(60)
+    const gym = activity("Gym")
+      .rank(1)
+      .minutes(60)
       .shrink({ floor: 30, chunking: true, minChunk: 30, maxChunks: 2 })
       .build()
     const r = repeatRuleOf(gym)
@@ -130,7 +140,9 @@ describe("SPEC-v2.1 §5.4: one chunking + one recurrence RepeatRule on the same 
     })
 
     if (result.status === "REJECTED") {
-      throw new Error(`unexpected rejection: ${JSON.stringify(result.rejection)}`)
+      throw new Error(
+        `unexpected rejection: ${JSON.stringify(result.rejection)}`
+      )
     }
 
     const placed = result.timeline.instances.filter(
@@ -157,7 +169,9 @@ describe("SPEC-v2.1 §5.4: one chunking + one recurrence RepeatRule on the same 
 
     // {type:"chunk"} relaxation is recorded (at least once) — the positive
     // signal chunking ran, which the bug would have withheld.
-    const chunkRelaxations = placed.flatMap((b) => b.relaxations).filter((r) => r.type === "chunk")
+    const chunkRelaxations = placed
+      .flatMap((b) => b.relaxations)
+      .filter((r) => r.type === "chunk")
     expect(chunkRelaxations.length).toBeGreaterThan(0)
   })
 })

@@ -26,7 +26,11 @@ export type FlexiblePlacement = {
  * when the window has zero free overlap at all — everything inside it is
  * already occupied by higher-priority blocks.
  */
-export function placeFlexibleBlock(window: TimeRange, durationMin: number, gaps: TimeRange[]): FlexiblePlacement | null {
+export function placeFlexibleBlock(
+  window: TimeRange,
+  durationMin: number,
+  gaps: TimeRange[]
+): FlexiblePlacement | null {
   if (durationMin <= 0) return null
 
   const candidates = gapsWithinWindow(gaps, window)
@@ -37,8 +41,14 @@ export function placeFlexibleBlock(window: TimeRange, durationMin: number, gaps:
     if (gapDuration < durationMin) continue
 
     // Prefer sitting exactly at the window's own start when the gap allows it.
-    const startMin = Math.max(gap.startMin, Math.min(window.startMin, gap.endMin - durationMin))
-    return { block: { startMin, endMin: startMin + durationMin }, wasShrunk: false }
+    const startMin = Math.max(
+      gap.startMin,
+      Math.min(window.startMin, gap.endMin - durationMin)
+    )
+    return {
+      block: { startMin, endMin: startMin + durationMin },
+      wasShrunk: false,
+    }
   }
 
   const largest = candidates.reduce((best, gap) =>
@@ -79,7 +89,10 @@ export function fillTrackedActivity(input: {
     const blockDuration = Math.min(remaining, gapDuration)
     if (blockDuration < input.minBlockMin) continue
 
-    placements.push({ startMin: gap.startMin, endMin: gap.startMin + blockDuration })
+    placements.push({
+      startMin: gap.startMin,
+      endMin: gap.startMin + blockDuration,
+    })
     remaining -= blockDuration
   }
 

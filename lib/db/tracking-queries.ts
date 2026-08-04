@@ -11,13 +11,24 @@ import {
 } from "@/lib/db/schema"
 import type { TrackingRuleConfig } from "@/lib/rules/types"
 import { addDaysISO } from "@/lib/time"
-import { nextRollingTarget, nextRollingTargetNoCarryOver } from "@/lib/tracking/carryover"
+import {
+  nextRollingTarget,
+  nextRollingTargetNoCarryOver,
+} from "@/lib/tracking/carryover"
 
-export async function isVacationDay(activityId: string, dateISO: string): Promise<boolean> {
+export async function isVacationDay(
+  activityId: string,
+  dateISO: string
+): Promise<boolean> {
   const [row] = await db
     .select({ id: vacationDayTable.id })
     .from(vacationDayTable)
-    .where(and(eq(vacationDayTable.activityId, activityId), eq(vacationDayTable.date, dateISO)))
+    .where(
+      and(
+        eq(vacationDayTable.activityId, activityId),
+        eq(vacationDayTable.date, dateISO)
+      )
+    )
   return row !== undefined
 }
 
@@ -29,18 +40,35 @@ export async function listVacationDays(activityId: string): Promise<string[]> {
   return rows.map((row) => row.date)
 }
 
-export async function setVacationDay(activityId: string, dateISO: string): Promise<void> {
-  await db.insert(vacationDayTable).values({ activityId, date: dateISO }).onConflictDoNothing()
+export async function setVacationDay(
+  activityId: string,
+  dateISO: string
+): Promise<void> {
+  await db
+    .insert(vacationDayTable)
+    .values({ activityId, date: dateISO })
+    .onConflictDoNothing()
 }
 
-export async function removeVacationDay(activityId: string, dateISO: string): Promise<void> {
+export async function removeVacationDay(
+  activityId: string,
+  dateISO: string
+): Promise<void> {
   await db
     .delete(vacationDayTable)
-    .where(and(eq(vacationDayTable.activityId, activityId), eq(vacationDayTable.date, dateISO)))
+    .where(
+      and(
+        eq(vacationDayTable.activityId, activityId),
+        eq(vacationDayTable.date, dateISO)
+      )
+    )
 }
 
 /** Sum of actual logged minutes for one activity on one calendar date. */
-export async function achievedMinutesOn(activityId: string, dateISO: string): Promise<number> {
+export async function achievedMinutesOn(
+  activityId: string,
+  dateISO: string
+): Promise<number> {
   const [timeline] = await db
     .select({ id: timelineTable.id })
     .from(timelineTable)
@@ -62,7 +90,9 @@ export async function achievedMinutesOn(activityId: string, dateISO: string): Pr
 
   return rows.reduce((total, row) => {
     if (!row.actualStartTime || !row.actualEndTime) return total
-    const minutes = Math.round((row.actualEndTime.getTime() - row.actualStartTime.getTime()) / 60_000)
+    const minutes = Math.round(
+      (row.actualEndTime.getTime() - row.actualStartTime.getTime()) / 60_000
+    )
     return total + Math.max(0, minutes)
   }, 0)
 }
@@ -87,13 +117,17 @@ export async function evaluateAndAdvanceLedger(
     .from(trackingLedgerTable)
     .where(eq(trackingLedgerTable.activityId, activityId))
 
-  let rollingTargetMinutes = ledger?.rollingTargetMinutes ?? trackingConfig.dailyTargetMin
+  let rollingTargetMinutes =
+    ledger?.rollingTargetMinutes ?? trackingConfig.dailyTargetMin
   let rollingAchievedMinutes = ledger?.rollingAchievedMinutes ?? 0
   const lastEvaluatedDate = ledger?.lastEvaluatedDate ?? null
 
   if (lastEvaluatedDate !== todayISO) {
     if (!trackingConfig.carryOverEnabled) {
-      rollingTargetMinutes = nextRollingTargetNoCarryOver(trackingConfig.dailyTargetMin, trackingConfig.capMin)
+      rollingTargetMinutes = nextRollingTargetNoCarryOver(
+        trackingConfig.dailyTargetMin,
+        trackingConfig.capMin
+      )
     } else {
       const yesterdayISO = addDaysISO(todayISO, -1)
       const evaluation =
@@ -114,10 +148,20 @@ export async function evaluateAndAdvanceLedger(
 
     await db
       .insert(trackingLedgerTable)
-      .values({ activityId, rollingTargetMinutes, rollingAchievedMinutes, lastEvaluatedDate: todayISO })
+      .values({
+        activityId,
+        rollingTargetMinutes,
+        rollingAchievedMinutes,
+        lastEvaluatedDate: todayISO,
+      })
       .onConflictDoUpdate({
         target: trackingLedgerTable.activityId,
-        set: { rollingTargetMinutes, rollingAchievedMinutes, lastEvaluatedDate: todayISO, updatedAt: new Date() },
+        set: {
+          rollingTargetMinutes,
+          rollingAchievedMinutes,
+          lastEvaluatedDate: todayISO,
+          updatedAt: new Date(),
+        },
       })
   }
 
@@ -132,9 +176,15 @@ export type TrackingProgress = {
 }
 
 /** Today's effective target and logged-so-far minutes for every tracked activity. */
-export async function getTrackingProgressForToday(todayISO: string): Promise<TrackingProgress[]> {
+export async function getTrackingProgressForToday(
+  todayISO: string
+): Promise<TrackingProgress[]> {
   const rows = await db
-    .select({ activityId: ruleTable.activityId, activityName: activityTable.name, config: ruleTable.config })
+    .select({
+      activityId: ruleTable.activityId,
+      activityName: activityTable.name,
+      config: ruleTable.config,
+    })
     .from(ruleTable)
     .innerJoin(activityTable, eq(activityTable.id, ruleTable.activityId))
     .where(eq(ruleTable.ruleType, "tracking"))
@@ -146,7 +196,12 @@ export async function getTrackingProgressForToday(todayISO: string): Promise<Tra
         evaluateAndAdvanceLedger(row.activityId, config, todayISO),
         achievedMinutesOn(row.activityId, todayISO),
       ])
-      return { activityId: row.activityId, activityName: row.activityName, targetMin, achievedTodayMin }
+      return {
+        activityId: row.activityId,
+        activityName: row.activityName,
+        targetMin,
+        achievedTodayMin,
+      }
     })
   )
 }

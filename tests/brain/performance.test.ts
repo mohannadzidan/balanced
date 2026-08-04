@@ -159,11 +159,7 @@ describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () =>
         .window("18:00", "20:00")
         .repeat({ count: 3, period: "week", sharedBudget: false })
         .build(),
-      activity("Reading")
-        .rank(4)
-        .minutes(45)
-        .window("20:00", "22:00")
-        .build(),
+      activity("Reading").rank(4).minutes(45).window("20:00", "22:00").build(),
       activity("Breakfast")
         .rank(5)
         .minutes(20)
@@ -206,11 +202,7 @@ describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () =>
         .window("18:00", "20:00")
         .repeat({ count: 3, period: "week", sharedBudget: false })
         .build(),
-      activity("Reading")
-        .rank(4)
-        .minutes(45)
-        .window("20:00", "22:00")
-        .build(),
+      activity("Reading").rank(4).minutes(45).window("20:00", "22:00").build(),
       activity("Breakfast")
         .rank(5)
         .minutes(20)

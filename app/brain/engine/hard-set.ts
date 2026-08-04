@@ -56,7 +56,8 @@ export function resolveFixedPlacement(
   const nextLength =
     frame.days[dayIndex + 1]?.lengthMinutes ??
     lengthMinutesOfDate(addDays(thisDay.date, 1), frame.timezone)
-  const endWallOffset = resolveWallClock(rule.endWall, frame, dayIndex) - dayStart
+  const endWallOffset =
+    resolveWallClock(rule.endWall, frame, dayIndex) - dayStart
   return {
     start,
     end: dayStart + nextLength + endWallOffset,
@@ -94,7 +95,11 @@ export function placeFixedSet(
       return rule
         ? {
             activity,
-            placement: resolveFixedPlacement(rule, dayFrame, dayIndexOf(activity)),
+            placement: resolveFixedPlacement(
+              rule,
+              dayFrame,
+              dayIndexOf(activity)
+            ),
           }
         : null
     })
@@ -202,7 +207,9 @@ function candidatesFor(
   const dayBound = ctx.dayBoundOf?.(activity)
   const freeIntervals = computeFreeIntervals(
     occupied,
-    dayBound ? Math.max(ctx.freezeBoundary, dayBound.start) : ctx.freezeBoundary,
+    dayBound
+      ? Math.max(ctx.freezeBoundary, dayBound.start)
+      : ctx.freezeBoundary,
     dayBound ? Math.min(ctx.lengthMinutes, dayBound.end) : ctx.lengthMinutes
   )
   return enumerateFeasiblePlacementsAcrossLengths(

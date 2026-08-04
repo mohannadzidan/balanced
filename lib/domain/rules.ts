@@ -22,7 +22,8 @@ import type { TemporalPlacementRule } from "@/lib/domain/types"
 
 /** The result of a single rule check. */
 export type RuleVerdict =
-  { ok: true } | { ok: false; classification: "hard" | "soft"; message: string }
+  | { ok: true }
+  | { ok: false; classification: "hard" | "soft"; message: string }
 
 /** A passing verdict. */
 export function ok(): RuleVerdict {

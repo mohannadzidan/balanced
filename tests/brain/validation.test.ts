@@ -284,9 +284,7 @@ describe("validateActivity", () => {
       .fixed("09:00", "09:15")
       .repeat({ count: 1, period: "week", sharedBudget: false })
       .build()
-    expect(codesOf(validateActivity(ok, C))).not.toContain(
-      "RULE_INCOMPATIBLE"
-    )
+    expect(codesOf(validateActivity(ok, C))).not.toContain("RULE_INCOMPATIBLE")
   })
 
   it("flags WINDOW_INVERTED when a strict window ends before it starts", () => {
