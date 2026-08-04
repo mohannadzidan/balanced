@@ -1,4 +1,4 @@
-import type { TimelineActivity } from "./types";
+import type { TimelineActivity } from "./types"
 
 export interface BackdatingOptions {
   /**
@@ -7,7 +7,7 @@ export interface BackdatingOptions {
    * `COMPLETED`. `undefined` preserves v1's "everything before `now` is
    * completed" behavior exactly.
    */
-  readonly horizonMinutes?: number;
+  readonly horizonMinutes?: number
 }
 
 /**
@@ -30,18 +30,21 @@ export interface BackdatingOptions {
 export function applyBackdating(
   instances: readonly TimelineActivity[],
   now: number,
-  options: BackdatingOptions = {},
+  options: BackdatingOptions = {}
 ): { instances: TimelineActivity[]; changed: boolean } {
-  const { horizonMinutes } = options;
-  let changed = false;
+  const { horizonMinutes } = options
+  let changed = false
 
   const next = instances.map((inst): TimelineActivity => {
-    if (inst.state !== "PLANNED" && inst.state !== "ACTIVE") return inst;
-    if (inst.plannedStart === null || inst.plannedEnd === null) return inst;
+    if (inst.state !== "PLANNED" && inst.state !== "ACTIVE") return inst
+    if (inst.plannedStart === null || inst.plannedEnd === null) return inst
 
     if (inst.plannedEnd <= now) {
-      changed = true;
-      if (horizonMinutes !== undefined && inst.plannedEnd < now - horizonMinutes) {
+      changed = true
+      if (
+        horizonMinutes !== undefined &&
+        inst.plannedEnd < now - horizonMinutes
+      ) {
         return {
           ...inst,
           state: "SKIPPED",
@@ -55,7 +58,7 @@ export function applyBackdating(
           hostInstanceId: null,
           relaxations: [],
           locked: true,
-        };
+        }
       }
       return {
         ...inst,
@@ -63,16 +66,16 @@ export function applyBackdating(
         completedSource: "backdated",
         actualStart: inst.actualStart ?? inst.plannedStart,
         actualEnd: inst.plannedEnd,
-      };
+      }
     }
 
     if (inst.state === "PLANNED" && inst.plannedStart <= now) {
-      changed = true;
-      return { ...inst, state: "ACTIVE", actualStart: inst.plannedStart };
+      changed = true
+      return { ...inst, state: "ACTIVE", actualStart: inst.plannedStart }
     }
 
-    return inst;
-  });
+    return inst
+  })
 
-  return { instances: next, changed };
+  return { instances: next, changed }
 }

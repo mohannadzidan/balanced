@@ -1,23 +1,29 @@
-import { placementCost } from "./cost";
+import { placementCost } from "./cost"
 import {
   enumerateCandidateStarts,
   placeActivityWithFloor,
   violatesSeparation,
   type PlacementContext,
-} from "./placement";
-import { evaluateCandidate } from "./resolve";
-import type { ResolvedActivity } from "./resolve";
-import type { ElasticityRule, Interval, Placement, RepeatRule, SkipReason } from "./types";
+} from "./placement"
+import { evaluateCandidate } from "./resolve"
+import type { ResolvedActivity } from "./resolve"
+import type {
+  ElasticityRule,
+  Interval,
+  Placement,
+  RepeatRule,
+  SkipReason,
+} from "./types"
 
 export interface ChunkPlan {
-  readonly chunks: readonly Placement[];
-  readonly scheduledMinutes: number;
-  readonly cost: number;
+  readonly chunks: readonly Placement[]
+  readonly scheduledMinutes: number
+  readonly cost: number
 }
 
 interface ChunkCandidate {
-  readonly placement: Placement;
-  readonly driftMinutes: number;
+  readonly placement: Placement
+  readonly driftMinutes: number
 }
 
 /** The lowest-drift legal placement of `length` minutes inside one interval. */
@@ -25,28 +31,33 @@ function bestChunkInInterval(
   resolved: ResolvedActivity,
   interval: Interval,
   length: number,
-  context: PlacementContext,
+  context: PlacementContext
 ): ChunkCandidate | null {
-  if (length <= 0) return null;
+  if (length <= 0) return null
   const starts = enumerateCandidateStarts(length, [interval], context.grid)
     .filter((s) => s >= context.freezeBoundary)
     .filter(
-      (s) => !violatesSeparation(s, context.minSeparationMinutes ?? 0, context.siblingStarts),
-    );
+      (s) =>
+        !violatesSeparation(
+          s,
+          context.minSeparationMinutes ?? 0,
+          context.siblingStarts
+        )
+    )
 
-  let best: ChunkCandidate | null = null;
+  let best: ChunkCandidate | null = null
   for (const start of starts) {
-    const end = start + length;
-    const verdict = evaluateCandidate(resolved, start, end);
-    if (!verdict.feasible) continue;
+    const end = start + length
+    const verdict = evaluateCandidate(resolved, start, end)
+    if (!verdict.feasible) continue
     if (!best || verdict.driftMinutes < best.driftMinutes) {
       best = {
         placement: { start, end, nestedIn: null },
         driftMinutes: verdict.driftMinutes,
-      };
+      }
     }
   }
-  return best;
+  return best
 }
 
 /**
@@ -63,23 +74,23 @@ function bestChunkInInterval(
  */
 function clipToWindowBounds(
   freeIntervals: readonly Interval[],
-  resolved: ResolvedActivity,
+  resolved: ResolvedActivity
 ): Interval[] {
-  const { windows } = resolved;
-  if (windows.length === 0) return [...freeIntervals];
+  const { windows } = resolved
+  if (windows.length === 0) return [...freeIntervals]
 
   const bound = {
     start: Math.min(...windows.map((w) => w.start - w.maxDriftMinutes)),
     end: Math.max(...windows.map((w) => w.end + w.maxDriftMinutes)),
-  };
-
-  const clipped: Interval[] = [];
-  for (const iv of freeIntervals) {
-    const start = Math.max(iv.start, bound.start);
-    const end = Math.min(iv.end, bound.end);
-    if (start < end) clipped.push({ start, end });
   }
-  return clipped;
+
+  const clipped: Interval[] = []
+  for (const iv of freeIntervals) {
+    const start = Math.max(iv.start, bound.start)
+    const end = Math.min(iv.end, bound.end)
+    if (start < end) clipped.push({ start, end })
+  }
+  return clipped
 }
 
 /**
@@ -98,57 +109,67 @@ function fillChunks(
   target: number,
   k: number,
   minChunk: number,
-  context: PlacementContext,
+  context: PlacementContext
 ): ChunkPlan | null {
   interface Region {
-    readonly interval: Interval;
-    readonly usable: number;
-    readonly driftMinutes: number;
+    readonly interval: Interval
+    readonly usable: number
+    readonly driftMinutes: number
   }
 
-  const regions: Region[] = [];
+  const regions: Region[] = []
   for (const iv of freeIntervals) {
-    const usable = Math.min(Math.floor((iv.end - iv.start) / context.grid) * context.grid, target);
-    if (usable < minChunk) continue;
-    const candidate = bestChunkInInterval(resolved, iv, usable, context);
-    if (!candidate) continue;
-    regions.push({ interval: iv, usable, driftMinutes: candidate.driftMinutes });
+    const usable = Math.min(
+      Math.floor((iv.end - iv.start) / context.grid) * context.grid,
+      target
+    )
+    if (usable < minChunk) continue
+    const candidate = bestChunkInInterval(resolved, iv, usable, context)
+    if (!candidate) continue
+    regions.push({ interval: iv, usable, driftMinutes: candidate.driftMinutes })
   }
 
   regions.sort(
     (a, b) =>
-      a.driftMinutes - b.driftMinutes || b.usable - a.usable || a.interval.start - b.interval.start,
-  );
-  const selected = regions.slice(0, k);
+      a.driftMinutes - b.driftMinutes ||
+      b.usable - a.usable ||
+      a.interval.start - b.interval.start
+  )
+  const selected = regions.slice(0, k)
 
-  let remaining = target;
-  const chunks: Placement[] = [];
-  let totalDrift = 0;
+  let remaining = target
+  const chunks: Placement[] = []
+  let totalDrift = 0
   for (let i = 0; i < selected.length; i++) {
-    const region = selected[i];
-    if (remaining <= 0) break;
+    const region = selected[i]
+    if (remaining <= 0) break
     // Reserve at least `minChunk` for each region still to come, so an
     // early, larger region doesn't greedily take so much that a later one
     // can't meet the floor — a split that would otherwise exist (e.g. two
     // 60-minute regions for a 120-minute target) must not be missed just
     // because this region alone could hold the whole target.
-    const regionsAfter = selected.length - i - 1;
-    const cap = remaining - minChunk * regionsAfter;
-    const length = Math.min(region.usable, cap);
+    const regionsAfter = selected.length - i - 1
+    const cap = remaining - minChunk * regionsAfter
+    const length = Math.min(region.usable, cap)
     // A region this reservation can't fit at least `minChunk` into just
     // doesn't participate — that no longer fails the whole plan the way it
     // used to, since falling short of `target` is now an acceptable
     // (partial) outcome rather than an automatic rejection.
-    if (length < minChunk) continue;
-    const placed = bestChunkInInterval(resolved, region.interval, length, context);
-    if (!placed) continue;
-    chunks.push(placed.placement);
-    totalDrift += placed.driftMinutes;
-    remaining -= length;
+    if (length < minChunk) continue
+    const placed = bestChunkInInterval(
+      resolved,
+      region.interval,
+      length,
+      context
+    )
+    if (!placed) continue
+    chunks.push(placed.placement)
+    totalDrift += placed.driftMinutes
+    remaining -= length
   }
-  if (chunks.length === 0) return null;
+  if (chunks.length === 0) return null
 
-  const scheduledMinutes = chunks.reduce((s, c) => s + (c.end - c.start), 0);
+  const scheduledMinutes = chunks.reduce((s, c) => s + (c.end - c.start), 0)
   const cost = placementCost(
     resolved.activity.durationMinutes,
     context.weight,
@@ -158,9 +179,9 @@ function fillChunks(
       driftMinutes: totalDrift,
       gapMinutes: 0,
     },
-    context.constants,
-  );
-  return { chunks, scheduledMinutes, cost };
+    context.constants
+  )
+  return { chunks, scheduledMinutes, cost }
 }
 
 /**
@@ -179,30 +200,41 @@ export function planChunks(
   resolved: ResolvedActivity,
   elasticity: ElasticityRule | null,
   repeat: RepeatRule,
-  context: PlacementContext,
+  context: PlacementContext
 ): ChunkPlan | null {
-  if (!repeat.sharedBudget) return null;
-  const target = resolved.activity.durationMinutes;
-  const floor = elasticity ? elasticity.minTotalMinutes : target;
-  const minChunk = elasticity ? elasticity.minBlockMinutes : context.grid;
-  const searchIntervals = clipToWindowBounds(context.freeIntervals, resolved);
+  if (!repeat.sharedBudget) return null
+  const target = resolved.activity.durationMinutes
+  const floor = elasticity ? elasticity.minTotalMinutes : target
+  const minChunk = elasticity ? elasticity.minBlockMinutes : context.grid
+  const searchIntervals = clipToWindowBounds(context.freeIntervals, resolved)
 
-  let best: ChunkPlan | null = null;
+  let best: ChunkPlan | null = null
   for (let k = 2; k <= repeat.count; k++) {
-    const plan = fillChunks(resolved, searchIntervals, target, k, minChunk, context);
-    if (plan && plan.scheduledMinutes >= floor && (!best || plan.cost < best.cost)) {
-      best = plan;
+    const plan = fillChunks(
+      resolved,
+      searchIntervals,
+      target,
+      k,
+      minChunk,
+      context
+    )
+    if (
+      plan &&
+      plan.scheduledMinutes >= floor &&
+      (!best || plan.cost < best.cost)
+    ) {
+      best = plan
     }
   }
-  return best;
+  return best
 }
 
 export interface ShrinkOutcome {
-  readonly placement: Placement | null;
-  readonly chunks: readonly Placement[] | null;
-  readonly scheduledMinutes: number;
-  readonly skipReason: SkipReason | null;
-  readonly cost: number;
+  readonly placement: Placement | null
+  readonly chunks: readonly Placement[] | null
+  readonly scheduledMinutes: number
+  readonly skipReason: SkipReason | null
+  readonly cost: number
 }
 
 /**
@@ -217,11 +249,15 @@ export function placeWithElasticity(
   resolved: ResolvedActivity,
   elasticity: ElasticityRule | null,
   repeat: RepeatRule | null,
-  context: PlacementContext,
+  context: PlacementContext
 ): ShrinkOutcome {
-  const floor = elasticity ? elasticity.minTotalMinutes : resolved.activity.durationMinutes;
-  const single = placeActivityWithFloor(resolved, floor, context);
-  const chunkPlan = repeat?.sharedBudget ? planChunks(resolved, elasticity, repeat, context) : null;
+  const floor = elasticity
+    ? elasticity.minTotalMinutes
+    : resolved.activity.durationMinutes
+  const single = placeActivityWithFloor(resolved, floor, context)
+  const chunkPlan = repeat?.sharedBudget
+    ? planChunks(resolved, elasticity, repeat, context)
+    : null
 
   if (chunkPlan && (!single.placement || chunkPlan.cost < single.cost)) {
     return {
@@ -230,7 +266,7 @@ export function placeWithElasticity(
       scheduledMinutes: chunkPlan.scheduledMinutes,
       skipReason: null,
       cost: chunkPlan.cost,
-    };
+    }
   }
   if (single.placement) {
     return {
@@ -239,7 +275,7 @@ export function placeWithElasticity(
       scheduledMinutes: single.scheduledMinutes,
       skipReason: null,
       cost: single.cost,
-    };
+    }
   }
   return {
     placement: null,
@@ -247,5 +283,5 @@ export function placeWithElasticity(
     scheduledMinutes: 0,
     skipReason: single.skipReason,
     cost: Number.POSITIVE_INFINITY,
-  };
+  }
 }

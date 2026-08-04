@@ -133,7 +133,9 @@ export const timelineActivityTable = sqliteTable("timeline_activity", {
     .references(() => timelineTable.id, { onDelete: "cascade" }),
   sourceActivityId: text("source_activity_id").references(
     () => activityTable.id,
-    { onDelete: "set null" }
+    {
+      onDelete: "set null",
+    }
   ),
   title: text("title").notNull(),
   startTime: integer("start_time", { mode: "timestamp" }).notNull(),

@@ -1,7 +1,10 @@
-import { computeFreeIntervals } from "./intervals";
-import { enumerateFeasiblePlacementsForLength, type PlacementContext } from "./placement";
-import type { ResolvedActivity } from "./resolve";
-import { resolveWallClock } from "./time";
+import { computeFreeIntervals } from "./intervals"
+import {
+  enumerateFeasiblePlacementsForLength,
+  type PlacementContext,
+} from "./placement"
+import type { ResolvedActivity } from "./resolve"
+import { resolveWallClock } from "./time"
 import type {
   Activity,
   DayFrame,
@@ -9,10 +12,12 @@ import type {
   Interval,
   OverlapRule,
   Placement,
-} from "./types";
+} from "./types"
 
 export function overlapRuleOf(activity: Activity): OverlapRule | null {
-  return activity.rules.find((r): r is OverlapRule => r.type === "overlap") ?? null;
+  return (
+    activity.rules.find((r): r is OverlapRule => r.type === "overlap") ?? null
+  )
 }
 
 /** Resolves one ExclusionWindow to offsets in `dayFrame` (SPEC.md Section 5.7).
@@ -24,18 +29,18 @@ export function resolveExclusionWindow(
   window: ExclusionWindow,
   host: { readonly start: number },
   dayFrame: DayFrame,
-  dayIndex = 0,
+  dayIndex = 0
 ): Interval {
   if (window.anchor === "relative") {
     return {
       start: host.start + (window.startOffset ?? 0),
       end: host.start + (window.endOffset ?? 0),
-    };
+    }
   }
   return {
     start: resolveWallClock(window.startWall ?? "00:00", dayFrame, dayIndex),
     end: resolveWallClock(window.endWall ?? "00:00", dayFrame, dayIndex),
-  };
+  }
 }
 
 /**
@@ -49,12 +54,12 @@ export function resolveExclusionWindow(
 export function resolveAbsoluteExclusions(
   rule: OverlapRule | null,
   dayFrame: DayFrame,
-  dayIndex = 0,
+  dayIndex = 0
 ): Interval[] {
-  if (!rule) return [];
+  if (!rule) return []
   return rule.exclusionWindows
     .filter((w) => w.anchor === "absolute")
-    .map((w) => resolveExclusionWindow(w, { start: 0 }, dayFrame, dayIndex));
+    .map((w) => resolveExclusionWindow(w, { start: 0 }, dayFrame, dayIndex))
 }
 
 /**
@@ -67,24 +72,26 @@ export function computeNestableRegions(
   host: { readonly start: number; readonly end: number },
   rule: OverlapRule,
   existingGuests: readonly Placement[],
-  dayFrame: DayFrame,
+  dayFrame: DayFrame
 ): Interval[] {
   const occupied: Interval[] = [
-    ...rule.exclusionWindows.map((w) => resolveExclusionWindow(w, host, dayFrame)),
+    ...rule.exclusionWindows.map((w) =>
+      resolveExclusionWindow(w, host, dayFrame)
+    ),
     ...existingGuests.map((g) => ({ start: g.start, end: g.end })),
-  ];
-  return computeFreeIntervals(occupied, host.start, host.end);
+  ]
+  return computeFreeIntervals(occupied, host.start, host.end)
 }
 
 /** Total minutes already drawn from the host's shared overlap budget. */
 export function usedBudget(existingGuests: readonly Placement[]): number {
-  return existingGuests.reduce((sum, g) => sum + (g.end - g.start), 0);
+  return existingGuests.reduce((sum, g) => sum + (g.end - g.start), 0)
 }
 
 export interface NestedSearchResult {
-  readonly placement: Placement;
-  readonly cost: number;
-  readonly scheduledMinutes: number;
+  readonly placement: Placement
+  readonly cost: number
+  readonly scheduledMinutes: number
 }
 
 /**
@@ -103,32 +110,37 @@ export function findBestNestedPlacement(
   overlapRule: OverlapRule,
   existingGuests: readonly Placement[],
   dayFrame: DayFrame,
-  context: PlacementContext,
+  context: PlacementContext
 ): NestedSearchResult | null {
-  const remainingBudget = overlapRule.budgetMinutes - usedBudget(existingGuests);
-  if (remainingBudget <= 0) return null;
+  const remainingBudget = overlapRule.budgetMinutes - usedBudget(existingGuests)
+  if (remainingBudget <= 0) return null
 
-  const fullLength = resolved.activity.durationMinutes;
-  const cappedFull = Math.min(fullLength, remainingBudget);
-  if (cappedFull < shrinkFloor) return null;
+  const fullLength = resolved.activity.durationMinutes
+  const cappedFull = Math.min(fullLength, remainingBudget)
+  if (cappedFull < shrinkFloor) return null
 
-  const region = computeNestableRegions(hostPlacement, overlapRule, existingGuests, dayFrame);
+  const region = computeNestableRegions(
+    hostPlacement,
+    overlapRule,
+    existingGuests,
+    dayFrame
+  )
 
-  let best: NestedSearchResult | null = null;
+  let best: NestedSearchResult | null = null
   for (let length = cappedFull; length >= shrinkFloor; length -= context.grid) {
     const ranked = enumerateFeasiblePlacementsForLength(resolved, length, {
       ...context,
       freeIntervals: region,
-    });
-    if (ranked.length === 0) continue;
-    const top = ranked[0];
+    })
+    if (ranked.length === 0) continue
+    const top = ranked[0]
     if (!best || top.cost < best.cost) {
       best = {
         placement: top.placement,
         cost: top.cost,
         scheduledMinutes: length,
-      };
+      }
     }
   }
-  return best;
+  return best
 }

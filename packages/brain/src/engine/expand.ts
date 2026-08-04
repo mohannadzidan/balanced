@@ -1,5 +1,5 @@
-import { resolveWindows, windowRulesOf } from "./resolve";
-import { isoWeekKey } from "./time";
+import { resolveWindows, windowRulesOf } from "./resolve"
+import { isoWeekKey } from "./time"
 import type {
   Activity,
   BucketSpan,
@@ -8,9 +8,9 @@ import type {
   RepeatQuotas,
   RepeatRule,
   ResolvedWindow,
-} from "./types";
+} from "./types"
 
-export type { Occurrence };
+export type { Occurrence }
 
 /**
  * SPEC-v2.1 §5.4: RepeatRule is one operation applied at two independent
@@ -24,8 +24,10 @@ export type { Occurrence };
  */
 function recurrenceRuleOf(activity: Activity): RepeatRule | null {
   return (
-    activity.rules.find((r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget) ?? null
-  );
+    activity.rules.find(
+      (r): r is RepeatRule => r.type === "repeat" && !r.sharedBudget
+    ) ?? null
+  )
 }
 
 /**
@@ -36,9 +38,12 @@ function recurrenceRuleOf(activity: Activity): RepeatRule | null {
  * the union of its member days — already clipped to the frame because it's
  * built only from days the frame actually contains.
  */
-function bucketsForPeriod(period: RepeatRule["period"], frame: Frame): readonly BucketSpan[] {
+function bucketsForPeriod(
+  period: RepeatRule["period"],
+  frame: Frame
+): readonly BucketSpan[] {
   if (period === "frame") {
-    return [{ key: "frame", start: 0, end: frame.lengthMinutes }];
+    return [{ key: "frame", start: 0, end: frame.lengthMinutes }]
   }
   if (period === "day") {
     return frame.days.map((day) => ({
@@ -46,26 +51,27 @@ function bucketsForPeriod(period: RepeatRule["period"], frame: Frame): readonly 
       start: day.startOffset,
       end: day.startOffset + day.lengthMinutes,
       dayIndex: day.index,
-    }));
+    }))
   }
 
-  const keyOf = period === "week" ? isoWeekKey : (date: string) => date.slice(0, 7);
-  const spans = new Map<string, { start: number; end: number }>();
+  const keyOf =
+    period === "week" ? isoWeekKey : (date: string) => date.slice(0, 7)
+  const spans = new Map<string, { start: number; end: number }>()
   for (const day of frame.days) {
-    const key = keyOf(day.date);
-    const end = day.startOffset + day.lengthMinutes;
-    const existing = spans.get(key);
+    const key = keyOf(day.date)
+    const end = day.startOffset + day.lengthMinutes
+    const existing = spans.get(key)
     if (existing) {
-      existing.end = end; // frame.days is chronological, so end only grows
+      existing.end = end // frame.days is chronological, so end only grows
     } else {
-      spans.set(key, { start: day.startOffset, end });
+      spans.set(key, { start: day.startOffset, end })
     }
   }
   // §5.1: "bucketKey sorts lexicographically in [chronological] order" — true
   // for "YYYY-MM" and "YYYY-Www" keys, so this also fixes iteration order.
   return [...spans.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, span]) => ({ key, ...span }));
+    .map(([key, span]) => ({ key, ...span }))
 }
 
 /** Selects `windows` for one bucket. A `period: "day"` bucket selects by
@@ -78,20 +84,20 @@ function bucketsForPeriod(period: RepeatRule["period"], frame: Frame): readonly 
  * clamping to an empty/negative range. */
 function windowsInBucket(
   windows: readonly ResolvedWindow[],
-  bucket: BucketSpan,
+  bucket: BucketSpan
 ): readonly ResolvedWindow[] {
   if (bucket.dayIndex !== undefined) {
-    return windows.filter((w) => w.dayIndex === bucket.dayIndex);
+    return windows.filter((w) => w.dayIndex === bucket.dayIndex)
   }
-  const clipped: ResolvedWindow[] = [];
+  const clipped: ResolvedWindow[] = []
   for (const w of windows) {
-    const start = Math.max(w.start, bucket.start);
-    const end = Math.min(w.end, bucket.end);
+    const start = Math.max(w.start, bucket.start)
+    const end = Math.min(w.end, bucket.end)
     if (start < end) {
-      clipped.push({ ...w, start, end });
+      clipped.push({ ...w, start, end })
     }
   }
-  return clipped;
+  return clipped
 }
 
 /** The implicit window for an unconstrained (no WindowRule) activity's
@@ -102,23 +108,26 @@ function windowsInBucket(
  * still zero drift, still bounded to the bucket. dayIndex uses the bucket's
  * own day when present; for week/month/frame buckets it falls back to the
  * first day in the frame (the day-span remains the bucket's own extent). */
-function syntheticBucketWindow(bucket: BucketSpan, frame: Frame): ResolvedWindow {
-  const bucketStart = bucket.start;
-  const bucketEnd = bucket.end;
-  const dw = frame.defaultDayWindow;
-  let start = bucketStart;
-  let end = bucketEnd;
+function syntheticBucketWindow(
+  bucket: BucketSpan,
+  frame: Frame
+): ResolvedWindow {
+  const bucketStart = bucket.start
+  const bucketEnd = bucket.end
+  const dw = frame.defaultDayWindow
+  let start = bucketStart
+  let end = bucketEnd
   if (dw && bucket.dayIndex !== undefined) {
-    const day = frame.days[bucket.dayIndex];
-    const dayStart = day.startOffset;
-    const dayEnd = dayStart + day.lengthMinutes;
-    const dwStart = resolveWallClockSync(dw.startWall, dayStart);
-    const dwEnd = resolveWallClockSync(dw.endWall, dayStart);
-    const ws = Math.max(bucketStart, Math.max(dayStart, dwStart));
-    const we = Math.min(bucketEnd, Math.min(dayEnd, dwEnd));
+    const day = frame.days[bucket.dayIndex]
+    const dayStart = day.startOffset
+    const dayEnd = dayStart + day.lengthMinutes
+    const dwStart = resolveWallClockSync(dw.startWall, dayStart)
+    const dwEnd = resolveWallClockSync(dw.endWall, dayStart)
+    const ws = Math.max(bucketStart, Math.max(dayStart, dwStart))
+    const we = Math.min(bucketEnd, Math.min(dayEnd, dwEnd))
     if (ws < we) {
-      start = ws;
-      end = we;
+      start = ws
+      end = we
     }
   }
   return {
@@ -128,14 +137,14 @@ function syntheticBucketWindow(bucket: BucketSpan, frame: Frame): ResolvedWindow
     dayIndex: bucket.dayIndex ?? 0,
     daySpanStart: bucket.start,
     daySpanEnd: bucket.end,
-  };
+  }
 }
 
 /** Inlined wall-clock-to-offset resolver (no DST math needed when the offset
  * is given: `dayStart` already encodes the day in frame-relative minutes). */
 function resolveWallClockSync(wall: string, dayStart: number): number {
-  const [h, m] = wall.split(":").map((s) => parseInt(s, 10));
-  return dayStart + (h ?? 0) * 60 + (m ?? 0);
+  const [h, m] = wall.split(":").map((s) => parseInt(s, 10))
+  return dayStart + (h ?? 0) * 60 + (m ?? 0)
 }
 
 /**
@@ -154,20 +163,20 @@ function resolveWallClockSync(wall: string, dayStart: number): number {
 export function expand(
   catalog: readonly Activity[],
   frame: Frame,
-  quotas: RepeatQuotas = { placed: new Map() },
+  quotas: RepeatQuotas = { placed: new Map() }
 ): Occurrence[] {
-  const occurrences: Occurrence[] = [];
+  const occurrences: Occurrence[] = []
 
   for (const activity of catalog) {
-    const repeat = recurrenceRuleOf(activity);
+    const repeat = recurrenceRuleOf(activity)
     // SPEC-v2.1 §2's own equivalence property (already the §15 row 2 hard
     // gate) fixes this default: an activity with no RepeatRule must produce
     // one occurrence per eligible day across a multi-day frame — matching N
     // chained 1-day solves — not one occurrence for the whole frame. At
     // dayCount=1 "day" and "frame" buckets coincide, so this is also exactly
     // Drop 1's one-instance-per-solve behavior.
-    const period = repeat?.period ?? "day";
-    const count = repeat?.count ?? 1;
+    const period = repeat?.period ?? "day"
+    const count = repeat?.count ?? 1
 
     // An activity with no WindowRule at all is unconstrained (§3.2: "implicit
     // window covering every day in full") — but that "every day in full" is
@@ -177,25 +186,25 @@ export function expand(
     // landing on Monday while Tuesday goes unfilled. So each bucket gets its
     // own synthetic full-bucket-span window instead of an empty (= fully
     // unconstrained across the whole frame) window list.
-    const unconstrained = windowRulesOf(activity).length === 0;
-    const windows = resolveWindows(activity, frame);
-    const buckets = bucketsForPeriod(period, frame);
+    const unconstrained = windowRulesOf(activity).length === 0
+    const windows = resolveWindows(activity, frame)
+    const buckets = bucketsForPeriod(period, frame)
 
     for (const bucket of buckets) {
       const bucketWindows = unconstrained
         ? [syntheticBucketWindow(bucket, frame)]
-        : windowsInBucket(windows, bucket);
-      if (bucketWindows.length === 0) continue;
+        : windowsInBucket(windows, bucket)
+      if (bucketWindows.length === 0) continue
 
-      const placed = quotas.placed.get(activity.id)?.get(bucket.key) ?? 0;
-      const toEmit = Math.max(0, count - placed);
+      const placed = quotas.placed.get(activity.id)?.get(bucket.key) ?? 0
+      const toEmit = Math.max(0, count - placed)
       const bucketOccurrenceIds = Array.from(
         { length: toEmit },
-        (_, i) => `${activity.id}@${bucket.key}#${i + 1}`,
-      );
+        (_, i) => `${activity.id}@${bucket.key}#${i + 1}`
+      )
 
       for (let index = 1; index <= toEmit; index++) {
-        const id = bucketOccurrenceIds[index - 1];
+        const id = bucketOccurrenceIds[index - 1]
         occurrences.push({
           id,
           activity,
@@ -204,7 +213,7 @@ export function expand(
           windows: bucketWindows,
           required: index <= activity.requiredCount,
           siblingIds: bucketOccurrenceIds.filter((sid) => sid !== id),
-        });
+        })
       }
     }
   }
@@ -214,9 +223,10 @@ export function expand(
   // resolve ties across activities and re-assert bucket/index order.
   return occurrences.sort((a, b) => {
     if (a.activity.priorityRank !== b.activity.priorityRank) {
-      return a.activity.priorityRank - b.activity.priorityRank;
+      return a.activity.priorityRank - b.activity.priorityRank
     }
-    if (a.bucketKey !== b.bucketKey) return a.bucketKey.localeCompare(b.bucketKey);
-    return a.index - b.index;
-  });
+    if (a.bucketKey !== b.bucketKey)
+      return a.bucketKey.localeCompare(b.bucketKey)
+    return a.index - b.index
+  })
 }

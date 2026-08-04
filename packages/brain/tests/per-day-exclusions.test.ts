@@ -13,15 +13,15 @@
 // difference, and lands separately (§15 row 7.4 work; deferred until a
 // spec/UX driver motivates it).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { resolveAbsoluteExclusions } from "../src/engine/overlap";
-import { resolveFrame } from "../src/engine/time";
-import type { OverlapRule } from "../src/engine/types";
+import { resolveAbsoluteExclusions } from "../src/engine/overlap"
+import { resolveFrame } from "../src/engine/time"
+import type { OverlapRule } from "../src/engine/types"
 
 describe("SPEC-v2.1 §7.4: per-day absolute exclusions", () => {
   it("resolves the same absolute window against different dayIndex values", () => {
-    const frame = resolveFrame("2026-07-27", 7, "UTC");
+    const frame = resolveFrame("2026-07-27", 7, "UTC")
     const rule: OverlapRule = {
       type: "overlap",
       source: "template",
@@ -36,17 +36,19 @@ describe("SPEC-v2.1 §7.4: per-day absolute exclusions", () => {
           endWall: "13:00",
         },
       ],
-    };
+    }
 
-    const day0 = resolveAbsoluteExclusions(rule, frame, 0);
-    const day3 = resolveAbsoluteExclusions(rule, frame, 3);
+    const day0 = resolveAbsoluteExclusions(rule, frame, 0)
+    const day3 = resolveAbsoluteExclusions(rule, frame, 3)
 
-    expect(day0).toEqual([{ start: 12 * 60, end: 13 * 60 }]);
-    expect(day3).toEqual([{ start: 3 * 1440 + 12 * 60, end: 3 * 1440 + 13 * 60 }]);
-  });
+    expect(day0).toEqual([{ start: 12 * 60, end: 13 * 60 }])
+    expect(day3).toEqual([
+      { start: 3 * 1440 + 12 * 60, end: 3 * 1440 + 13 * 60 },
+    ])
+  })
 
   it("default dayIndex=0 reproduces the v1 once-per-frame resolution", () => {
-    const frame = resolveFrame("2026-07-27", 7, "UTC");
+    const frame = resolveFrame("2026-07-27", 7, "UTC")
     const rule: OverlapRule = {
       type: "overlap",
       source: "template",
@@ -61,17 +63,17 @@ describe("SPEC-v2.1 §7.4: per-day absolute exclusions", () => {
           endWall: "13:00",
         },
       ],
-    };
+    }
 
-    const explicit = resolveAbsoluteExclusions(rule, frame, 0);
-    const defaulted = resolveAbsoluteExclusions(rule, frame);
-    expect(defaulted).toEqual(explicit);
-    expect(defaulted).toEqual([{ start: 12 * 60, end: 13 * 60 }]);
-  });
+    const explicit = resolveAbsoluteExclusions(rule, frame, 0)
+    const defaulted = resolveAbsoluteExclusions(rule, frame)
+    expect(defaulted).toEqual(explicit)
+    expect(defaulted).toEqual([{ start: 12 * 60, end: 13 * 60 }])
+  })
 
   it("returns an empty list when the activity has no OverlapRule", () => {
-    const frame = resolveFrame("2026-07-27", 1, "UTC");
-    expect(resolveAbsoluteExclusions(null, frame, 0)).toEqual([]);
-    expect(resolveAbsoluteExclusions(null, frame, 3)).toEqual([]);
-  });
-});
+    const frame = resolveFrame("2026-07-27", 1, "UTC")
+    expect(resolveAbsoluteExclusions(null, frame, 0)).toEqual([])
+    expect(resolveAbsoluteExclusions(null, frame, 3)).toEqual([])
+  })
+})

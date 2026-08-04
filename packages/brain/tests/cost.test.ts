@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
 import {
   placementCost,
@@ -6,12 +6,12 @@ import {
   scheduleCost,
   skipCost,
   violatesDominance,
-} from "../src/engine/cost";
-import { DEFAULT_COST_CONSTANTS } from "../src/engine/constants";
-import type { TimelineActivity } from "../src/engine/types";
-import { activity } from "./support/fixtures";
+} from "../src/engine/cost"
+import { DEFAULT_COST_CONSTANTS } from "../src/engine/constants"
+import type { TimelineActivity } from "../src/engine/types"
+import { activity } from "./support/fixtures"
 
-const C = DEFAULT_COST_CONSTANTS;
+const C = DEFAULT_COST_CONSTANTS
 
 describe("priorityWeight", () => {
   it.each([
@@ -19,9 +19,9 @@ describe("priorityWeight", () => {
     [6, 6, 1],
     [3, 6, 4],
   ])("rank %i of %i ranked activities weighs %i", (rank, total, expected) => {
-    expect(priorityWeight(rank, total)).toBe(expected);
-  });
-});
+    expect(priorityWeight(rank, total)).toBe(expected)
+  })
+})
 
 describe("placementCost", () => {
   it.each([
@@ -62,26 +62,30 @@ describe("placementCost", () => {
       C.SHRINK * 15 + C.DRIFT * 10,
     ],
   ])("%s", (_label, duration, evaluation, expectedAtWeight1) => {
-    expect(placementCost(duration, 1, evaluation, C)).toBe(expectedAtWeight1);
-    expect(placementCost(duration, 3, evaluation, C)).toBe(expectedAtWeight1 * 3);
-  });
-});
+    expect(placementCost(duration, 1, evaluation, C)).toBe(expectedAtWeight1)
+    expect(placementCost(duration, 3, evaluation, C)).toBe(
+      expectedAtWeight1 * 3
+    )
+  })
+})
 
 describe("skipCost", () => {
   it("charges W(a) * SKIP for an ordinary skip", () => {
-    expect(skipCost(4, C, { isRequired: false, isDependentSkip: false })).toBe(4 * C.SKIP);
-  });
+    expect(skipCost(4, C, { isRequired: false, isDependentSkip: false })).toBe(
+      4 * C.SKIP
+    )
+  })
 
   it("charges infinity for a skipped required activity", () => {
     expect(skipCost(4, C, { isRequired: true, isDependentSkip: false })).toBe(
-      Number.POSITIVE_INFINITY,
-    );
-  });
+      Number.POSITIVE_INFINITY
+    )
+  })
 
   it("is free for a dependent skipped because its host was skipped", () => {
-    expect(skipCost(4, C, { isRequired: true, isDependentSkip: true })).toBe(0);
-  });
-});
+    expect(skipCost(4, C, { isRequired: true, isDependentSkip: true })).toBe(0)
+  })
+})
 
 function instance(overrides: Partial<TimelineActivity>): TimelineActivity {
   return {
@@ -113,12 +117,12 @@ function instance(overrides: Partial<TimelineActivity>): TimelineActivity {
     locked: false,
     skipReason: null,
     ...overrides,
-  };
+  }
 }
 
 describe("scheduleCost", () => {
   it("charges idle for every uncovered minute of an empty day", () => {
-    const result = scheduleCost([], 1440, 0, C);
+    const result = scheduleCost([], 1440, 0, C)
     expect(result).toEqual({
       total: 1440,
       skip: 0,
@@ -128,8 +132,8 @@ describe("scheduleCost", () => {
       gap: 0,
       idle: 1440,
       perInstance: {},
-    });
-  });
+    })
+  })
 
   it("aggregates shrink, drift, gap, and skip across instances", () => {
     const instances = [
@@ -160,24 +164,29 @@ describe("scheduleCost", () => {
         scheduledMinutes: 0,
         skipReason: "NO_FREE_SPACE",
       }),
-    ];
+    ]
 
-    const result = scheduleCost(instances, 1440, 3, C);
+    const result = scheduleCost(instances, 1440, 3, C)
 
-    const weightGym = priorityWeight(1, 3); // 3
-    const weightCommute = priorityWeight(2, 3); // 2
-    const weightReading = priorityWeight(3, 3); // 1
+    const weightGym = priorityWeight(1, 3) // 3
+    const weightCommute = priorityWeight(2, 3) // 2
+    const weightReading = priorityWeight(3, 3) // 1
 
-    expect(result.shrink).toBe(weightGym * C.SHRINK * 15);
-    expect(result.drift).toBe(weightCommute * C.DRIFT * 10);
-    expect(result.skip).toBe(weightReading * C.SKIP);
-    expect(result.idle).toBe((1440 - 75) * C.IDLE);
+    expect(result.shrink).toBe(weightGym * C.SHRINK * 15)
+    expect(result.drift).toBe(weightCommute * C.DRIFT * 10)
+    expect(result.skip).toBe(weightReading * C.SKIP)
+    expect(result.idle).toBe((1440 - 75) * C.IDLE)
     expect(result.total).toBe(
-      result.shrink + result.chunk + result.drift + result.gap + result.skip + result.idle,
-    );
-    expect(result.perInstance.gym).toBe(weightGym * C.SHRINK * 15);
-    expect(result.perInstance.reading).toBe(weightReading * C.SKIP);
-  });
+      result.shrink +
+        result.chunk +
+        result.drift +
+        result.gap +
+        result.skip +
+        result.idle
+    )
+    expect(result.perInstance.gym).toBe(weightGym * C.SHRINK * 15)
+    expect(result.perInstance.reading).toBe(weightReading * C.SKIP)
+  })
 
   it("charges nothing for a dependent skipped because its host was skipped", () => {
     const instances = [
@@ -190,22 +199,26 @@ describe("scheduleCost", () => {
         scheduledMinutes: 0,
         skipReason: "HOST_SKIPPED",
       }),
-    ];
-    const result = scheduleCost(instances, 1440, 1, C);
-    expect(result.skip).toBe(0);
-  });
-});
+    ]
+    const result = scheduleCost(instances, 1440, 1, C)
+    expect(result.skip).toBe(0)
+  })
+})
 
 describe("violatesDominance", () => {
   it("holds for a reasonably configured activity", () => {
-    const gym = activity("Gym").rank(1).minutes(60).shrink({ floor: 45 }).build();
-    expect(violatesDominance(gym, C)).toBe(false);
-  });
+    const gym = activity("Gym")
+      .rank(1)
+      .minutes(60)
+      .shrink({ floor: 45 })
+      .build()
+    expect(violatesDominance(gym, C)).toBe(false)
+  })
 
   it("holds for an activity with no relaxation rules at all", () => {
-    const plain = activity("Plain").rank(1).minutes(60).build();
-    expect(violatesDominance(plain, C)).toBe(false);
-  });
+    const plain = activity("Plain").rank(1).minutes(60).build()
+    expect(violatesDominance(plain, C)).toBe(false)
+  })
 
   it("fires from a sequence rule's max gap alone, with no shrink or drift involved", () => {
     // GAP * 2001 = 10,005 > SKIP (10,000), on its own.
@@ -213,18 +226,22 @@ describe("violatesDominance", () => {
       .rank(1)
       .minutes(200)
       .sequence("post", "host", { maxGap: 2001 })
-      .build();
-    expect(violatesDominance(dependent, C)).toBe(true);
+      .build()
+    expect(violatesDominance(dependent, C)).toBe(true)
 
     // The same activity without the sequence rule holds, confirming the gap
     // term — not some other relaxation — was what tipped it over.
-    const withoutSequence = activity("Dependent").rank(1).minutes(200).build();
-    expect(violatesDominance(withoutSequence, C)).toBe(false);
-  });
+    const withoutSequence = activity("Dependent").rank(1).minutes(200).build()
+    expect(violatesDominance(withoutSequence, C)).toBe(false)
+  })
 
   it("fires for a deliberately broken activity whose shrink alone outprices skipping", () => {
     // duration 1000, shrink floor 0: SHRINK * 1000 = 20 * 1000 = 20,000 > SKIP (10,000)
-    const broken = activity("Broken").rank(1).minutes(1000).shrink({ floor: 0 }).build();
-    expect(violatesDominance(broken, C)).toBe(true);
-  });
-});
+    const broken = activity("Broken")
+      .rank(1)
+      .minutes(1000)
+      .shrink({ floor: 0 })
+      .build()
+    expect(violatesDominance(broken, C)).toBe(true)
+  })
+})

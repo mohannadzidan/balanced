@@ -60,32 +60,36 @@
 
 // --- Entry point -------------------------------------------------------------
 
-export { solve } from "./engine/solve";
+export { solve } from "./engine/solve"
 
 // --- Building a catalog --------------------------------------------------------
 
 /** Fluent builder for `Activity` templates — start here instead of hand-assembling `Rule` objects. */
-export { activity, ActivityBuilder } from "./engine/activity-builder";
+export { activity, ActivityBuilder } from "./engine/activity-builder"
 
 // --- Pre-flight checks ---------------------------------------------------------
 
 /** Catches template mistakes (bad windows, incompatible rules, ...) before they reach `solve()`. */
-export { validateActivity, validateCatalog, validateFrame } from "./engine/validation";
+export {
+  validateActivity,
+  validateCatalog,
+  validateFrame,
+} from "./engine/validation"
 
 // --- Time / day-frame helpers ----------------------------------------------------
 
 /** Resolves a local calendar date + IANA timezone into the `DayFrame` `solve()` expects, DST-aware. */
-export { resolveDayFrame, weekdayOf, addDays } from "./engine/time";
+export { resolveDayFrame, weekdayOf, addDays } from "./engine/time"
 
 // --- Cost tuning -----------------------------------------------------------------
 
 /** The engine's default relaxation weights; pass `{ constants: {...} }` in `SolveInput` to override any subset. */
-export { DEFAULT_COST_CONSTANTS } from "./engine/constants";
+export { DEFAULT_COST_CONSTANTS } from "./engine/constants"
 
 // --- Debug / display -------------------------------------------------------------
 
 /** Deterministic ASCII rendering of a `Timeline`, handy for logs and snapshot assertions. */
-export { renderAscii } from "./engine/render";
+export { renderAscii } from "./engine/render"
 
 // --- Types -------------------------------------------------------------------------
 
@@ -134,4 +138,4 @@ export type {
   // Validation
   ValidationIssue,
   ValidationSeverity,
-} from "./engine/types";
+} from "./engine/types"

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveDayFrame, weekdayOf } from "../src/engine/time";
-import { activity } from "./support/fixtures";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveDayFrame, weekdayOf } from "../src/engine/time"
+import { activity } from "./support/fixtures"
 
 /**
  * SPEC.md 14.8: Night Shift is fixed 22:00-06:00, so it spans midnight from
@@ -34,13 +34,13 @@ const variants = [
     timezone: "America/New_York",
     overflow: 420, // 6h plus the repeated hour
   },
-];
+]
 
 describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
   for (const v of variants) {
     it(`places Night Shift to the day boundary, carries the overflow, and supports finishing it early — ${v.label}`, () => {
-      const dayFrameA = resolveDayFrame(v.dayA, v.timezone);
-      const dayFrameB = resolveDayFrame(v.dayB, v.timezone);
+      const dayFrameA = resolveDayFrame(v.dayA, v.timezone)
+      const dayFrameB = resolveDayFrame(v.dayB, v.timezone)
       // Scoped to day A's own weekday only, so this single occurrence can't
       // also try to regenerate fresh on day B — recurring midnight-spanning
       // activities are multi-day lookahead, out of scope (SPEC.md Section 15).
@@ -51,7 +51,7 @@ describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
           .fixed("22:00", "06:00")
           .days(weekdayOf(v.dayA))
           .build(),
-      ];
+      ]
 
       const dayA = solve({
         dayFrame: dayFrameA,
@@ -60,9 +60,11 @@ describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
         existing: [],
         carryIn: [],
         event: { type: "GENERATE_DAY" },
-      });
-      const shiftA = dayA.timeline.instances.find((i) => i.name === "Night Shift")!;
-      expect(shiftA.plannedStart).toBe(1320); // 22:00, unaffected by day B's DST
+      })
+      const shiftA = dayA.timeline.instances.find(
+        (i) => i.name === "Night Shift"
+      )!
+      expect(shiftA.plannedStart).toBe(1320) // 22:00, unaffected by day B's DST
 
       const finalisedA = solve({
         dayFrame: dayFrameA,
@@ -72,25 +74,32 @@ describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
         carryIn: [],
         event: { type: "FINALISE_FRAME" },
         revision: dayA.timeline.revision,
-      });
-      expect(finalisedA.status).not.toBe("REJECTED");
+      })
+      expect(finalisedA.status).not.toBe("REJECTED")
 
       // "Day A holds 22:00-24:00" — placed to the day boundary.
-      const shiftAFinal = finalisedA.timeline.instances.find((i) => i.name === "Night Shift")!;
-      expect(shiftAFinal.plannedStart).toBe(1320);
-      expect(shiftAFinal.plannedEnd).toBe(dayFrameA.lengthMinutes);
-      expect(shiftAFinal.scheduledMinutes).toBe(dayFrameA.lengthMinutes - 1320);
+      const shiftAFinal = finalisedA.timeline.instances.find(
+        (i) => i.name === "Night Shift"
+      )!
+      expect(shiftAFinal.plannedStart).toBe(1320)
+      expect(shiftAFinal.plannedEnd).toBe(dayFrameA.lengthMinutes)
+      expect(shiftAFinal.scheduledMinutes).toBe(dayFrameA.lengthMinutes - 1320)
 
-      const carriedShift = finalisedA.timeline.carryIn.find((i) => i.name === "Night Shift");
-      expect(carriedShift).toBeDefined();
-      expect(carriedShift?.state).toBe("CARRIED_IN");
-      expect(carriedShift?.spanningFromPreviousDay).toBe(true);
-      expect(carriedShift?.plannedStart).toBe(0);
-      expect(carriedShift?.plannedEnd).toBe(v.overflow);
-      expect(carriedShift?.scheduledMinutes).toBe(v.overflow);
+      const carriedShift = finalisedA.timeline.carryIn.find(
+        (i) => i.name === "Night Shift"
+      )
+      expect(carriedShift).toBeDefined()
+      expect(carriedShift?.state).toBe("CARRIED_IN")
+      expect(carriedShift?.spanningFromPreviousDay).toBe(true)
+      expect(carriedShift?.plannedStart).toBe(0)
+      expect(carriedShift?.plannedEnd).toBe(v.overflow)
+      expect(carriedShift?.scheduledMinutes).toBe(v.overflow)
 
       // "Day B opens with a locked CARRIED_IN block 00:00-06:00."
-      const dayBCatalog = [...catalog, activity("Coffee").rank(2).minutes(30).build()];
+      const dayBCatalog = [
+        ...catalog,
+        activity("Coffee").rank(2).minutes(30).build(),
+      ]
       const dayB = solve({
         dayFrame: dayFrameB,
         now: 0,
@@ -98,16 +107,20 @@ describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
         existing: [],
         carryIn: finalisedA.timeline.carryIn,
         event: { type: "GENERATE_DAY" },
-      });
-      const shiftB = dayB.timeline.instances.find((i) => i.name === "Night Shift")!;
-      expect(shiftB.state).toBe("CARRIED_IN");
-      expect(shiftB.plannedStart).toBe(0);
-      expect(shiftB.plannedEnd).toBe(v.overflow);
-      expect(shiftB.locked).toBeFalsy();
+      })
+      const shiftB = dayB.timeline.instances.find(
+        (i) => i.name === "Night Shift"
+      )!
+      expect(shiftB.state).toBe("CARRIED_IN")
+      expect(shiftB.plannedStart).toBe(0)
+      expect(shiftB.plannedEnd).toBe(v.overflow)
+      expect(shiftB.locked).toBeFalsy()
 
-      const coffeeBefore = dayB.timeline.instances.find((i) => i.name === "Coffee")!;
+      const coffeeBefore = dayB.timeline.instances.find(
+        (i) => i.name === "Coffee"
+      )!
       // Nothing may be scheduled before the carry-in block ends.
-      expect(coffeeBefore.plannedStart).toBe(v.overflow);
+      expect(coffeeBefore.plannedStart).toBe(v.overflow)
 
       // "Finishing it early at 04:00 frees 04:00-06:00 and re-solves day B
       // from that point."
@@ -119,19 +132,21 @@ describe("solve — SPEC.md 14.8: midnight span and carry-in", () => {
         carryIn: [],
         event: { type: "FINISH_EARLY", instanceId: shiftB.id, at: 240 },
         revision: dayB.timeline.revision,
-      });
-      expect(finishedEarly.status).not.toBe("REJECTED");
+      })
+      expect(finishedEarly.status).not.toBe("REJECTED")
 
       const shiftBFinished = finishedEarly.timeline.instances.find(
-        (i) => i.name === "Night Shift",
-      )!;
-      expect(shiftBFinished.state).toBe("COMPLETED");
-      expect(shiftBFinished.completedSource).toBe("user");
-      expect(shiftBFinished.actualStart).toBe(0);
-      expect(shiftBFinished.actualEnd).toBe(240);
+        (i) => i.name === "Night Shift"
+      )!
+      expect(shiftBFinished.state).toBe("COMPLETED")
+      expect(shiftBFinished.completedSource).toBe("user")
+      expect(shiftBFinished.actualStart).toBe(0)
+      expect(shiftBFinished.actualEnd).toBe(240)
 
-      const coffeeAfter = finishedEarly.timeline.instances.find((i) => i.name === "Coffee")!;
-      expect(coffeeAfter.plannedStart).toBe(240);
-    });
+      const coffeeAfter = finishedEarly.timeline.instances.find(
+        (i) => i.name === "Coffee"
+      )!
+      expect(coffeeAfter.plannedStart).toBe(240)
+    })
   }
-});
+})

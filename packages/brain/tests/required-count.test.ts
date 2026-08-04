@@ -6,19 +6,19 @@
 // succeed inside the node budget. A second activity with a non-overlapping
 // window would form a second component; here we test both ends.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveFrame } from "../src/engine/time";
-import { activity } from "./support/fixtures";
-import { DEFAULT_COST_CONSTANTS } from "../src/engine/constants";
-import { validateActivity } from "../src/engine/validation";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveFrame } from "../src/engine/time"
+import { activity } from "./support/fixtures"
+import { DEFAULT_COST_CONSTANTS } from "../src/engine/constants"
+import { validateActivity } from "../src/engine/validation"
 
-const C = DEFAULT_COST_CONSTANTS;
+const C = DEFAULT_COST_CONSTANTS
 
 describe("SPEC-v2.1 §15 row 5: requiredCount > 1 with hard-set decomposition", () => {
   it("30-day frame with daily required activities solves inside the node limit", () => {
-    const frame = resolveFrame("2026-07-01", 30, "UTC");
+    const frame = resolveFrame("2026-07-01", 30, "UTC")
     // Daily standup, 15 minutes, 09:00 every day, one occurrence per day,
     // each occurrence mandatory. 30 days × 1 occurrence = 30 required
     // nodes; with disjoint day-buckets the union-find places them in one
@@ -30,7 +30,7 @@ describe("SPEC-v2.1 §15 row 5: requiredCount > 1 with hard-set decomposition", 
       .fixed("09:00", "09:15")
       .repeat({ count: 1, period: "day", sharedBudget: false })
       .mandatory()
-      .build();
+      .build()
 
     const result = solve({
       dayFrame: frame,
@@ -39,25 +39,27 @@ describe("SPEC-v2.1 §15 row 5: requiredCount > 1 with hard-set decomposition", 
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
     if (result.status === "REJECTED") {
-      throw new Error(`unexpected rejection: ${JSON.stringify(result.rejection)}`);
+      throw new Error(
+        `unexpected rejection: ${JSON.stringify(result.rejection)}`
+      )
     }
 
     // Every day got exactly one 09:00–09:15 standup.
     const placed = result.timeline.instances.filter(
-      (i) => i.name === "Standup" && i.state === "PLANNED",
-    );
-    expect(placed).toHaveLength(30);
+      (i) => i.name === "Standup" && i.state === "PLANNED"
+    )
+    expect(placed).toHaveLength(30)
     for (const p of placed) {
-      expect(p.plannedStart).not.toBeNull();
-      expect(p.plannedEnd! - p.plannedStart!).toBe(15);
+      expect(p.plannedStart).not.toBeNull()
+      expect(p.plannedEnd! - p.plannedStart!).toBe(15)
     }
-  });
+  })
 
   it("requiredCount > count is flagged REQUIRED_COUNT_INVALID", () => {
-    const gym = activity("Gym").rank(1).minutes(60).build();
+    const gym = activity("Gym").rank(1).minutes(60).build()
     const withTooMany = {
       ...gym,
       requiredCount: 4,
@@ -72,13 +74,13 @@ describe("SPEC-v2.1 §15 row 5: requiredCount > 1 with hard-set decomposition", 
           minSeparationMinutes: 0,
         },
       ],
-    };
-    const codes = validateActivity(withTooMany, C).map((i) => i.code);
-    expect(codes).toContain("REQUIRED_COUNT_INVALID");
-  });
+    }
+    const codes = validateActivity(withTooMany, C).map((i) => i.code)
+    expect(codes).toContain("REQUIRED_COUNT_INVALID")
+  })
 
   it("requiredCount within [0, count] is allowed", () => {
-    const gym = activity("Gym").rank(1).minutes(60).build();
+    const gym = activity("Gym").rank(1).minutes(60).build()
     const withMaxRequired = {
       ...gym,
       requiredCount: 3,
@@ -93,8 +95,8 @@ describe("SPEC-v2.1 §15 row 5: requiredCount > 1 with hard-set decomposition", 
           minSeparationMinutes: 0,
         },
       ],
-    };
-    const codes = validateActivity(withMaxRequired, C).map((i) => i.code);
-    expect(codes).not.toContain("REQUIRED_COUNT_INVALID");
-  });
-});
+    }
+    const codes = validateActivity(withMaxRequired, C).map((i) => i.code)
+    expect(codes).not.toContain("REQUIRED_COUNT_INVALID")
+  })
+})

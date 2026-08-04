@@ -1,14 +1,19 @@
-import { priorityWeight, scheduleCost } from "./cost";
-import { resolveConstants } from "./constants";
-import { applyBackdating } from "./lifecycle";
-import { evaluateCandidate } from "./placement";
-import { placeGreedy } from "./greedy";
-import { placeFixedSet, placeHardSetDecomposed } from "./hard-set";
-import { expand, type Occurrence } from "./expand";
-import { isEligibleOnDay, isGhostable, resolveWindows, type ResolvedActivity } from "./resolve";
-import { isDependent, placeSequenceChain, sequenceRuleOf } from "./sequence";
-import { weekdayOf } from "./time";
-import { validateActivity, validateCatalog } from "./validation";
+import { priorityWeight, scheduleCost } from "./cost"
+import { resolveConstants } from "./constants"
+import { applyBackdating } from "./lifecycle"
+import { evaluateCandidate } from "./placement"
+import { placeGreedy } from "./greedy"
+import { placeFixedSet, placeHardSetDecomposed } from "./hard-set"
+import { expand, type Occurrence } from "./expand"
+import {
+  isEligibleOnDay,
+  isGhostable,
+  resolveWindows,
+  type ResolvedActivity,
+} from "./resolve"
+import { isDependent, placeSequenceChain, sequenceRuleOf } from "./sequence"
+import { weekdayOf } from "./time"
+import { validateActivity, validateCatalog } from "./validation"
 import type {
   Activity,
   AdhocPayload,
@@ -28,31 +33,34 @@ import type {
   Timeline,
   TimelineActivity,
   TimelineStatus,
-} from "./types";
+} from "./types"
 
 function hasFixed(activity: Activity): boolean {
-  return activity.rules.some((r) => r.type === "fixed");
+  return activity.rules.some((r) => r.type === "fixed")
 }
 
 // SPEC-v2.md Section 5.1: isHardConstrained = hasFixedRule || requiredCount > 0.
 function isRequired(activity: Activity): boolean {
-  return activity.requiredCount > 0;
+  return activity.requiredCount > 0
 }
 
-function relaxationsFor(resolved: ResolvedActivity, placement: Placement | null): Relaxation[] {
-  if (!placement) return [];
-  const relaxations: Relaxation[] = [];
+function relaxationsFor(
+  resolved: ResolvedActivity,
+  placement: Placement | null
+): Relaxation[] {
+  if (!placement) return []
+  const relaxations: Relaxation[] = []
 
-  const scheduledMinutes = placement.end - placement.start;
-  const shrunkBy = resolved.activity.durationMinutes - scheduledMinutes;
-  if (shrunkBy > 0) relaxations.push({ type: "shrink", minutes: shrunkBy });
+  const scheduledMinutes = placement.end - placement.start
+  const shrunkBy = resolved.activity.durationMinutes - scheduledMinutes
+  if (shrunkBy > 0) relaxations.push({ type: "shrink", minutes: shrunkBy })
 
-  const verdict = evaluateCandidate(resolved, placement.start, placement.end);
+  const verdict = evaluateCandidate(resolved, placement.start, placement.end)
   if (verdict.driftMinutes > 0) {
-    relaxations.push({ type: "drift", minutes: verdict.driftMinutes });
+    relaxations.push({ type: "drift", minutes: verdict.driftMinutes })
   }
 
-  return relaxations;
+  return relaxations
 }
 
 /** SPEC.md Section 3: `TimelineActivity.date` is the local calendar date a
@@ -62,9 +70,9 @@ function relaxationsFor(resolved: ResolvedActivity, placement: Placement | null)
  * by offset instead. */
 function dateAtOffset(frame: DayFrame, offset: number): string {
   for (const day of frame.days) {
-    if (offset < day.startOffset + day.lengthMinutes) return day.date;
+    if (offset < day.startOffset + day.lengthMinutes) return day.date
   }
-  return frame.days[frame.days.length - 1].date;
+  return frame.days[frame.days.length - 1].date
 }
 
 function freshInstance(
@@ -73,12 +81,12 @@ function freshInstance(
   frame: DayFrame,
   placement: Placement | null,
   skipReason: SkipReason | null,
-  relaxations: readonly Relaxation[],
+  relaxations: readonly Relaxation[]
 ): TimelineActivity {
   const date = dateAtOffset(
     frame,
-    placement ? placement.start : (occurrence.windows[0]?.daySpanStart ?? 0),
-  );
+    placement ? placement.start : (occurrence.windows[0]?.daySpanStart ?? 0)
+  )
   return {
     id: occurrence.id,
     activityId: activity.id,
@@ -107,7 +115,7 @@ function freshInstance(
     relaxations,
     locked: false,
     skipReason,
-  };
+  }
 }
 
 /**
@@ -121,25 +129,25 @@ function chunkedInstances(
   occurrence: Occurrence,
   frame: DayFrame,
   resolved: ResolvedActivity,
-  chunkPlacements: readonly Placement[],
+  chunkPlacements: readonly Placement[]
 ): TimelineActivity[] {
-  const sorted = [...chunkPlacements].sort((a, b) => a.start - b.start);
-  const totalScheduled = sorted.reduce((sum, c) => sum + (c.end - c.start), 0);
-  const shrunkBy = activity.durationMinutes - totalScheduled;
+  const sorted = [...chunkPlacements].sort((a, b) => a.start - b.start)
+  const totalScheduled = sorted.reduce((sum, c) => sum + (c.end - c.start), 0)
+  const shrunkBy = activity.durationMinutes - totalScheduled
 
-  const occurrenceId = occurrence.id;
+  const occurrenceId = occurrence.id
 
   return sorted.map((placement, index) => {
-    const relaxations: Relaxation[] = [];
+    const relaxations: Relaxation[] = []
     if (index === 0) {
-      if (shrunkBy > 0) relaxations.push({ type: "shrink", minutes: shrunkBy });
+      if (shrunkBy > 0) relaxations.push({ type: "shrink", minutes: shrunkBy })
       if (sorted.length > 1) {
-        relaxations.push({ type: "chunk", minutes: sorted.length - 1 });
+        relaxations.push({ type: "chunk", minutes: sorted.length - 1 })
       }
     }
-    const verdict = evaluateCandidate(resolved, placement.start, placement.end);
+    const verdict = evaluateCandidate(resolved, placement.start, placement.end)
     if (verdict.driftMinutes > 0) {
-      relaxations.push({ type: "drift", minutes: verdict.driftMinutes });
+      relaxations.push({ type: "drift", minutes: verdict.driftMinutes })
     }
 
     return {
@@ -170,14 +178,14 @@ function chunkedInstances(
       relaxations,
       locked: false,
       skipReason: null,
-    };
-  });
+    }
+  })
 }
 
 interface PipelineOutcome {
-  readonly instances: TimelineActivity[];
-  readonly diagnostics: Diagnostic[];
-  readonly status: TimelineStatus;
+  readonly instances: TimelineActivity[]
+  readonly diagnostics: Diagnostic[]
+  readonly status: TimelineStatus
 }
 
 /**
@@ -193,29 +201,35 @@ interface PipelineOutcome {
  * (`OverlapRule.allowedGuestIds`, `SequenceRule.linkedActivityId`) still
  * resolve correctly in `greedy.ts`/`sequence.ts`.
  */
-function expandForSolve(catalog: readonly Activity[], frame: SolveInput["dayFrame"]): Occurrence[] {
-  const ghostable = catalog.filter((a) => isGhostable(a, catalog));
-  const nonGhostable = catalog.filter((a) => !isGhostable(a, catalog));
+function expandForSolve(
+  catalog: readonly Activity[],
+  frame: SolveInput["dayFrame"]
+): Occurrence[] {
+  const ghostable = catalog.filter((a) => isGhostable(a, catalog))
+  const nonGhostable = catalog.filter((a) => !isGhostable(a, catalog))
 
-  const ghostableOccurrences = expand(ghostable, frame);
-  const day0 = frame.days[0];
-  const nonGhostableOccurrences: Occurrence[] = nonGhostable.map((activity) => ({
-    id: `${activity.id}@${day0.date}#1`,
-    activity,
-    bucketKey: day0.date,
-    index: 1,
-    windows: resolveWindows(activity, frame),
-    required: activity.requiredCount > 0,
-    siblingIds: [],
-  }));
+  const ghostableOccurrences = expand(ghostable, frame)
+  const day0 = frame.days[0]
+  const nonGhostableOccurrences: Occurrence[] = nonGhostable.map(
+    (activity) => ({
+      id: `${activity.id}@${day0.date}#1`,
+      activity,
+      bucketKey: day0.date,
+      index: 1,
+      windows: resolveWindows(activity, frame),
+      required: activity.requiredCount > 0,
+      siblingIds: [],
+    })
+  )
 
   return [...ghostableOccurrences, ...nonGhostableOccurrences].sort((a, b) => {
     if (a.activity.priorityRank !== b.activity.priorityRank) {
-      return a.activity.priorityRank - b.activity.priorityRank;
+      return a.activity.priorityRank - b.activity.priorityRank
     }
-    if (a.bucketKey !== b.bucketKey) return a.bucketKey.localeCompare(b.bucketKey);
-    return a.index - b.index;
-  });
+    if (a.bucketKey !== b.bucketKey)
+      return a.bucketKey.localeCompare(b.bucketKey)
+    return a.index - b.index
+  })
 }
 
 /**
@@ -234,11 +248,11 @@ function runPipeline(
   weight: (activity: Activity) => number,
   freezeBoundary: number = input.now,
   fullCatalog: readonly Activity[] = occurrencesToSolve.map((o) => o.activity),
-  anchorPlacements: ReadonlyMap<string, Placement> = new Map(),
+  anchorPlacements: ReadonlyMap<string, Placement> = new Map()
 ): PipelineOutcome {
-  const grid = constants.GRID;
-  const nodeLimit = constants.HARD_SET_NODE_LIMIT;
-  const lengthMinutes = input.dayFrame.lengthMinutes;
+  const grid = constants.GRID
+  const nodeLimit = constants.HARD_SET_NODE_LIMIT
+  const lengthMinutes = input.dayFrame.lengthMinutes
 
   // The placement phases (fixed / hard-set / greedy / sequence) key their
   // internal maps by `activity.id`. SPEC-v2.1's cross-reference rules
@@ -253,22 +267,24 @@ function runPipeline(
   // more than one occurrence has no such cross-reference to preserve, so its
   // occurrences are rekeyed to their own occurrence id to avoid colliding on
   // one placement-map entry.
-  const occurrencesByActivityId = new Map<string, Occurrence[]>();
+  const occurrencesByActivityId = new Map<string, Occurrence[]>()
   for (const occ of occurrencesToSolve) {
-    const arr = occurrencesByActivityId.get(occ.activity.id) ?? [];
-    arr.push(occ);
-    occurrencesByActivityId.set(occ.activity.id, arr);
+    const arr = occurrencesByActivityId.get(occ.activity.id) ?? []
+    arr.push(occ)
+    occurrencesByActivityId.set(occ.activity.id, arr)
   }
   const placementKeyOf = (occ: Occurrence): string =>
-    (occurrencesByActivityId.get(occ.activity.id)?.length ?? 0) > 1 ? occ.id : occ.activity.id;
+    (occurrencesByActivityId.get(occ.activity.id)?.length ?? 0) > 1
+      ? occ.id
+      : occ.activity.id
 
   // Occurrence lookup keyed by placement key, for `dayBoundOf` and the final
   // instance assembly to recover the right occurrence for a given solve
   // activity — the single occurrence at that key, disambiguated when there's
   // more than one per activity.
   const occurrenceByPlacementKey = new Map<string, Occurrence>(
-    occurrencesToSolve.map((occ) => [placementKeyOf(occ), occ]),
-  );
+    occurrencesToSolve.map((occ) => [placementKeyOf(occ), occ])
+  )
 
   // SPEC-v2.1 §6.1: sibling placement keys for each occurrence — every
   // other placement key belonging to one of this occurrence's activity's
@@ -277,11 +293,13 @@ function runPipeline(
   // Pre-computed once, not per iteration, because `occurrencesByActivityId`
   // is stable across the whole solve.
   const siblingPlacementKeysOf = (placementKey: string): readonly string[] => {
-    const occ = occurrenceByPlacementKey.get(placementKey);
-    if (!occ) return [];
-    const siblings = occurrencesByActivityId.get(occ.activity.id) ?? [];
-    return siblings.map((s) => placementKeyOf(s)).filter((k) => k !== placementKey);
-  };
+    const occ = occurrenceByPlacementKey.get(placementKey)
+    if (!occ) return []
+    const siblings = occurrencesByActivityId.get(occ.activity.id) ?? []
+    return siblings
+      .map((s) => placementKeyOf(s))
+      .filter((k) => k !== placementKey)
+  }
 
   // SPEC-v2.1 §4/§5: bounds the free-interval search to the occurrence's
   // *eligible day span* (`daySpanStart`/`daySpanEnd` — the calendar day(s) a
@@ -290,48 +308,52 @@ function runPipeline(
   // window-tight bound here would wrongly forbid the very drift placements
   // outside the window that make it feasible at all.
   const dayBoundOf = (activity: Activity): Interval | undefined => {
-    const occ = occurrenceByPlacementKey.get(activity.id);
-    if (!occ) return undefined;
-    const starts = occ.windows.map((w) => w.daySpanStart);
-    const ends = occ.windows.map((w) => w.daySpanEnd);
-    if (starts.length === 0) return undefined;
-    return { start: Math.min(...starts), end: Math.max(...ends) };
-  };
+    const occ = occurrenceByPlacementKey.get(activity.id)
+    if (!occ) return undefined
+    const starts = occ.windows.map((w) => w.daySpanStart)
+    const ends = occ.windows.map((w) => w.daySpanEnd)
+    if (starts.length === 0) return undefined
+    return { start: Math.min(...starts), end: Math.max(...ends) }
+  }
 
   // SPEC-v2.1 §7.1: a bucketed FixedRule occurrence resolves its wall-clock
   // time against its own bucket's day, not always day 0.
   const dayIndexOf = (activity: Activity): number =>
-    occurrenceByPlacementKey.get(activity.id)?.windows[0]?.dayIndex ?? 0;
+    occurrenceByPlacementKey.get(activity.id)?.windows[0]?.dayIndex ?? 0
 
   const solveActivities = occurrencesToSolve.map((occ) => ({
     ...occ.activity,
     id: placementKeyOf(occ),
-  }));
+  }))
 
   // Sequence dependents (SPEC.md Section 5.6) are placed adjacent to their
   // host out of priority order, so they sit outside the normal hard-set /
   // discretionary partitioning below. A dependent that is itself Fixed keeps
   // its declared time and is treated as an ordinary host instead — there is
   // nothing left for the sequence relationship to solve for it.
-  const sequenceDependents = solveActivities.filter((a) => isDependent(a) && !hasFixed(a));
-  const hostPool = solveActivities.filter((a) => !sequenceDependents.includes(a));
+  const sequenceDependents = solveActivities.filter(
+    (a) => isDependent(a) && !hasFixed(a)
+  )
+  const hostPool = solveActivities.filter(
+    (a) => !sequenceDependents.includes(a)
+  )
 
   // Phase 1a: FixedRule activities, placed at their declared times.
-  const fixedSet = hostPool.filter(hasFixed);
+  const fixedSet = hostPool.filter(hasFixed)
   const fixedOutcome = placeFixedSet(
     fixedSet,
     input.dayFrame,
     freezeBoundary,
     baseOccupied,
-    dayIndexOf,
-  );
+    dayIndexOf
+  )
   const occupiedAfterFixed: Interval[] = [
     ...baseOccupied,
     ...[...fixedOutcome.placements.values()].map((p) => ({
       start: p.start,
       end: p.end,
     })),
-  ];
+  ]
 
   // Phase 1b: the remaining hard set — MandatoryRule without a FixedRule —
   // most-constrained first, with bounded backtracking. Routed through
@@ -339,7 +361,7 @@ function runPipeline(
   // partition by candidate-span overlap, then `placeOccurrenceGroup` per
   // component. Per-component node budgets sum to the global `nodeLimit`
   // backstop. Drop 1 callers behave identically (one component = one search).
-  const mandatorySet = hostPool.filter((a) => isRequired(a) && !hasFixed(a));
+  const mandatorySet = hostPool.filter((a) => isRequired(a) && !hasFixed(a))
   const hardOutcome = placeHardSetDecomposed(mandatorySet, occupiedAfterFixed, {
     freezeBoundary,
     grid,
@@ -351,23 +373,26 @@ function runPipeline(
     dayFrame: input.dayFrame,
     dayBoundOf,
     dayIndexOf,
-  });
+  })
   const occupiedAfterHardSet: Interval[] = [
     ...occupiedAfterFixed,
     ...[...hardOutcome.placements.values()].map((p) => ({
       start: p.start,
       end: p.end,
     })),
-  ];
+  ]
 
   // Phase 2: everything else, greedily, by ascending priority rank.
-  const hardSetIds = new Set([...fixedSet.map((a) => a.id), ...mandatorySet.map((a) => a.id)]);
-  const discretionary = hostPool.filter((a) => !hardSetIds.has(a.id));
+  const hardSetIds = new Set([
+    ...fixedSet.map((a) => a.id),
+    ...mandatorySet.map((a) => a.id),
+  ])
+  const discretionary = hostPool.filter((a) => !hardSetIds.has(a.id))
   const initialHostPlacements = new Map<string, Placement>([
     ...anchorPlacements,
     ...fixedOutcome.placements,
     ...hardOutcome.placements,
-  ]);
+  ])
   const greedyOutcome = placeGreedy(discretionary, occupiedAfterHardSet, {
     freezeBoundary,
     grid,
@@ -387,24 +412,26 @@ function runPipeline(
     // discretionary pass so a non-required recurrence activity (the typical
     // "gym 3×/week" case) still respects the start-to-start filter.
     minSeparationOf: (activity) => {
-      const rule = activity.rules.find((r): r is RepeatRule => r.type === "repeat");
-      return rule?.minSeparationMinutes ?? 0;
+      const rule = activity.rules.find(
+        (r): r is RepeatRule => r.type === "repeat"
+      )
+      return rule?.minSeparationMinutes ?? 0
     },
     siblingStartsOf: (activity, placements) => {
-      const siblingKeys = siblingPlacementKeysOf(activity.id);
-      const starts: number[] = [];
+      const siblingKeys = siblingPlacementKeysOf(activity.id)
+      const starts: number[] = []
       for (const key of siblingKeys) {
-        const p = placements.get(key);
-        if (p) starts.push(p.start);
+        const p = placements.get(key)
+        if (p) starts.push(p.start)
       }
-      return starts;
+      return starts
     },
     // SPEC-v2.1 §7.4: per-day absolute exclusions for bucketed occurrences.
     dayIndexOf,
-  });
-  const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap((chunks) =>
-    chunks.map((c) => ({ start: c.start, end: c.end })),
-  );
+  })
+  const chunksFlat: Interval[] = [...greedyOutcome.chunks.values()].flatMap(
+    (chunks) => chunks.map((c) => ({ start: c.start, end: c.end }))
+  )
   const occupiedAfterGreedy: Interval[] = [
     ...occupiedAfterHardSet,
     ...[...greedyOutcome.placements.values()].map((p) => ({
@@ -412,51 +439,51 @@ function runPipeline(
       end: p.end,
     })),
     ...chunksFlat,
-  ];
+  ]
 
   // Phase 2.5: sequence dependents, adjacent to their already-placed host.
   // A chunked host binds dependents to its outer span (SPEC.md Section 5.6
   // more precisely binds pre/post to the first/last chunk individually —
   // deferred until a worked example exercises Sequence+Shrink together).
-  const hostResolutions = new Map<string, Placement | "SKIPPED">();
+  const hostResolutions = new Map<string, Placement | "SKIPPED">()
   for (const activity of hostPool) {
-    const chunksPlaced = greedyOutcome.chunks.get(activity.id);
+    const chunksPlaced = greedyOutcome.chunks.get(activity.id)
     if (chunksPlaced) {
-      const starts = chunksPlaced.map((c) => c.start);
-      const ends = chunksPlaced.map((c) => c.end);
+      const starts = chunksPlaced.map((c) => c.start)
+      const ends = chunksPlaced.map((c) => c.end)
       hostResolutions.set(activity.id, {
         start: Math.min(...starts),
         end: Math.max(...ends),
         nestedIn: null,
-      });
-      continue;
+      })
+      continue
     }
     const placement =
       fixedOutcome.placements.get(activity.id) ??
       hardOutcome.placements.get(activity.id) ??
       greedyOutcome.placements.get(activity.id) ??
-      null;
-    hostResolutions.set(activity.id, placement ?? "SKIPPED");
+      null
+    hostResolutions.set(activity.id, placement ?? "SKIPPED")
   }
   const sequenceOutcome = placeSequenceChain(
     sequenceDependents,
     hostResolutions,
     occupiedAfterGreedy,
-    { freezeBoundary, lengthMinutes, grid, resolve },
-  );
+    { freezeBoundary, lengthMinutes, grid, resolve }
+  )
 
   const instances = occurrencesToSolve.flatMap((occurrence) => {
-    const activity = occurrence.activity;
-    const key = placementKeyOf(occurrence);
-    const chunksPlaced = greedyOutcome.chunks.get(key);
+    const activity = occurrence.activity
+    const key = placementKeyOf(occurrence)
+    const chunksPlaced = greedyOutcome.chunks.get(key)
     if (chunksPlaced) {
       return chunkedInstances(
         activity,
         occurrence,
         input.dayFrame,
         resolve(activity),
-        chunksPlaced,
-      );
+        chunksPlaced
+      )
     }
 
     const placement =
@@ -464,27 +491,42 @@ function runPipeline(
       hardOutcome.placements.get(key) ??
       greedyOutcome.placements.get(key) ??
       sequenceOutcome.placements.get(key) ??
-      null;
+      null
     const skipReason =
       fixedOutcome.skipped.get(key) ??
       hardOutcome.skipped.get(key) ??
       greedyOutcome.skipped.get(key) ??
       sequenceOutcome.skipped.get(key) ??
-      null;
-    const sequenceRelaxations = sequenceOutcome.relaxations.get(key);
+      null
+    const sequenceRelaxations = sequenceOutcome.relaxations.get(key)
     const relaxations = sequenceRelaxations
-      ? [...sequenceRelaxations, ...relaxationsFor(resolve(activity), placement)]
-      : relaxationsFor(resolve(activity), placement);
+      ? [
+          ...sequenceRelaxations,
+          ...relaxationsFor(resolve(activity), placement),
+        ]
+      : relaxationsFor(resolve(activity), placement)
     return [
-      freshInstance(activity, occurrence, input.dayFrame, placement, skipReason, relaxations),
-    ];
-  });
+      freshInstance(
+        activity,
+        occurrence,
+        input.dayFrame,
+        placement,
+        skipReason,
+        relaxations
+      ),
+    ]
+  })
 
-  const { diagnostics: scanDiagnostics, status: scanStatus } = buildDiagnostics(instances);
-  const diagnostics: Diagnostic[] = [...fixedOutcome.diagnostics, ...scanDiagnostics];
-  const status: TimelineStatus = fixedOutcome.diagnostics.length > 0 ? "DEGRADED" : scanStatus;
+  const { diagnostics: scanDiagnostics, status: scanStatus } =
+    buildDiagnostics(instances)
+  const diagnostics: Diagnostic[] = [
+    ...fixedOutcome.diagnostics,
+    ...scanDiagnostics,
+  ]
+  const status: TimelineStatus =
+    fixedOutcome.diagnostics.length > 0 ? "DEGRADED" : scanStatus
 
-  return { instances, diagnostics, status };
+  return { instances, diagnostics, status }
 }
 
 /**
@@ -493,27 +535,31 @@ function runPipeline(
  * and for an unchanged TICK echo.
  */
 function buildDiagnostics(instances: readonly TimelineActivity[]): {
-  diagnostics: Diagnostic[];
-  status: TimelineStatus;
+  diagnostics: Diagnostic[]
+  status: TimelineStatus
 } {
-  const diagnostics: Diagnostic[] = [];
-  let status: TimelineStatus = "OK";
+  const diagnostics: Diagnostic[] = []
+  let status: TimelineStatus = "OK"
 
   for (const inst of instances) {
-    if (inst.state === "SKIPPED" && inst.skipReason === "INFEASIBLE_HARD_CONSTRAINT") {
-      status = "DEGRADED";
+    if (
+      inst.state === "SKIPPED" &&
+      inst.skipReason === "INFEASIBLE_HARD_CONSTRAINT"
+    ) {
+      status = "DEGRADED"
       diagnostics.push({
         severity: "blocking",
         code: "INFEASIBLE_HARD_CONSTRAINT",
         instanceIds: [inst.id],
         message: `"${inst.name}" is mandatory but could not be placed today.`,
-        suggestedFix: "Free up time elsewhere, widen its window, or add a ShrinkRule.",
-      });
+        suggestedFix:
+          "Free up time elsewhere, widen its window, or add a ShrinkRule.",
+      })
     }
 
-    if (inst.blockIndex !== 1) continue; // avoid double-reporting a chunked plan
+    if (inst.blockIndex !== 1) continue // avoid double-reporting a chunked plan
 
-    const shrink = inst.relaxations.find((r) => r.type === "shrink");
+    const shrink = inst.relaxations.find((r) => r.type === "shrink")
     if (shrink && inst.blockCount === 1) {
       diagnostics.push({
         severity: "info",
@@ -521,10 +567,10 @@ function buildDiagnostics(instances: readonly TimelineActivity[]): {
         instanceIds: [inst.id],
         message: `"${inst.name}" shortened from ${inst.durationMinutes} to ${inst.scheduledMinutes} minutes.`,
         suggestedFix: null,
-      });
+      })
     }
 
-    const chunked = inst.relaxations.find((r) => r.type === "chunk");
+    const chunked = inst.relaxations.find((r) => r.type === "chunk")
     if (chunked) {
       diagnostics.push({
         severity: "info",
@@ -532,19 +578,19 @@ function buildDiagnostics(instances: readonly TimelineActivity[]): {
         instanceIds: [inst.id],
         message: `"${inst.name}" was split into ${inst.blockCount} blocks.`,
         suggestedFix: null,
-      });
+      })
     }
   }
 
-  return { diagnostics, status };
+  return { diagnostics, status }
 }
 
 interface AnchorSet {
-  readonly anchors: TimelineActivity[];
-  readonly anchorActivityIds: Set<string>;
-  readonly baseOccupied: Interval[];
+  readonly anchors: TimelineActivity[]
+  readonly anchorActivityIds: Set<string>
+  readonly baseOccupied: Interval[]
   /** Anchor placements keyed by activityId, for guest-nesting lookups. */
-  readonly anchorPlacements: ReadonlyMap<string, Placement>;
+  readonly anchorPlacements: ReadonlyMap<string, Placement>
 }
 
 /**
@@ -554,36 +600,36 @@ interface AnchorSet {
  */
 interface EventPlan {
   /** Precondition failure — short-circuits before the pipeline runs. */
-  readonly rejection: RejectionError | null;
+  readonly rejection: RejectionError | null
   /** `existing` with the event's mutation applied. */
-  readonly workingExisting: readonly TimelineActivity[];
+  readonly workingExisting: readonly TimelineActivity[]
   /** Freeze boundary for the re-solve — ordinarily `now`; `at` for FINISH_EARLY. */
-  readonly freezeBoundary: number;
+  readonly freezeBoundary: number
   /** Extra activities beyond today's catalogue (ADD_ADHOC's pseudo-activity). */
-  readonly extraActivities: readonly Activity[];
+  readonly extraActivities: readonly Activity[]
   /** Whether to run `checkEventRejection` on the speculative result. */
-  readonly checkRejection: boolean;
+  readonly checkRejection: boolean
   /** Extra instances injected between anchors and solved (SKIP's locked instance). */
-  readonly extraInstances: readonly TimelineActivity[];
+  readonly extraInstances: readonly TimelineActivity[]
   /** Override catalogue for this solve (EDIT_INSTANCE_RULES substitutes rules). */
-  readonly catalogOverride: readonly Activity[] | null;
+  readonly catalogOverride: readonly Activity[] | null
   /** Override weight function (ADD_ADHOC's totalRanked+1 denominator). */
-  readonly weightOverride: ((activity: Activity) => number) | null;
+  readonly weightOverride: ((activity: Activity) => number) | null
   /** Post-pipeline instance transform (ADD_ADHOC's `activityId: null` tagging). */
   readonly instanceTransform:
     | ((instances: readonly TimelineActivity[]) => TimelineActivity[])
-    | null;
+    | null
   /** totalRanked override for cost recomputation (ADD_ADHOC). */
-  readonly totalRankedOverride: number | null;
+  readonly totalRankedOverride: number | null
   /** TICK's short-circuit: return the input timeline unchanged. */
-  readonly shortCircuitResult: SolveResult | null;
+  readonly shortCircuitResult: SolveResult | null
   /** Activity ids excluded from re-solving (SKIP's target). */
-  readonly excludeActivityIds: ReadonlySet<string> | null;
+  readonly excludeActivityIds: ReadonlySet<string> | null
   /** SPEC-v2.1 §9.1: interval to re-solve. Instances placed entirely
    *  outside this interval become anchors (locked, contribute to
    *  `baseOccupied` but aren't re-placed). Default:
    *  `[freezeBoundary, lengthMinutes)`. */
-  readonly scope: { start: number; end: number };
+  readonly scope: { start: number; end: number }
 }
 
 /**
@@ -596,21 +642,25 @@ interface EventPlan {
  * activity id.
  */
 function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
-  const ANCHOR_STATES = new Set(["ACTIVE", "COMPLETED", "CARRIED_IN"]);
+  const ANCHOR_STATES = new Set(["ACTIVE", "COMPLETED", "CARRIED_IN"])
   const anchors = existing.filter(
-    (inst) => inst.chunkGroupId === null && (inst.locked || ANCHOR_STATES.has(inst.state)),
-  );
+    (inst) =>
+      inst.chunkGroupId === null &&
+      (inst.locked || ANCHOR_STATES.has(inst.state))
+  )
   // An ad-hoc anchor has activityId: null (SPEC.md Section 9.5), so its key
   // for "already spoken for, exclude from re-solving" purposes is its own
   // instance id instead.
-  const anchorActivityIds = new Set(anchors.map((a) => a.activityId ?? a.id));
-  const placedAnchors = anchors.filter((a) => a.plannedStart !== null && a.plannedEnd !== null);
+  const anchorActivityIds = new Set(anchors.map((a) => a.activityId ?? a.id))
+  const placedAnchors = anchors.filter(
+    (a) => a.plannedStart !== null && a.plannedEnd !== null
+  )
   const baseOccupied: Interval[] = placedAnchors
     .filter((a) => !a.hostInstanceId)
     .map((a) => ({
       start: a.actualStart ?? (a.plannedStart as number),
       end: a.actualEnd ?? (a.plannedEnd as number),
-    }));
+    }))
   const anchorPlacements = new Map<string, Placement>(
     placedAnchors.map((a) => [
       a.activityId ?? a.id,
@@ -619,9 +669,9 @@ function extractAnchors(existing: readonly TimelineActivity[]): AnchorSet {
         end: a.plannedEnd as number,
         nestedIn: a.hostInstanceId,
       },
-    ]),
-  );
-  return { anchors, anchorActivityIds, baseOccupied, anchorPlacements };
+    ])
+  )
+  return { anchors, anchorActivityIds, baseOccupied, anchorPlacements }
 }
 
 function rejectionResult(
@@ -631,10 +681,15 @@ function rejectionResult(
   conflictingInstanceIds: readonly string[],
   constants: CostConstants,
   totalRanked: number,
-  bestEffortTimeline: Timeline | null = null,
+  bestEffortTimeline: Timeline | null = null
 ): SolveResult {
-  const { diagnostics, status } = buildDiagnostics(input.existing);
-  const cost = scheduleCost(input.existing, input.dayFrame.lengthMinutes, totalRanked, constants);
+  const { diagnostics, status } = buildDiagnostics(input.existing)
+  const cost = scheduleCost(
+    input.existing,
+    input.dayFrame.lengthMinutes,
+    totalRanked,
+    constants
+  )
   const timeline: Timeline = {
     dayFrame: input.dayFrame,
     revision: input.revision ?? 0,
@@ -645,14 +700,14 @@ function rejectionResult(
     solvedAtOffset: input.now,
     finalised: false,
     carryIn: [],
-  };
+  }
   const rejection: RejectionError = {
     code,
     message,
     conflictingInstanceIds,
     diagnostics: bestEffortTimeline?.diagnostics ?? diagnostics,
     bestEffortTimeline,
-  };
+  }
   return {
     status: "REJECTED",
     timeline,
@@ -660,7 +715,7 @@ function rejectionResult(
     diagnostics,
     cost,
     trace: null,
-  };
+  }
 }
 
 /**
@@ -672,12 +727,14 @@ function rejectionResult(
  */
 function tagAdhocInstances(
   instances: readonly TimelineActivity[],
-  adhocIds: ReadonlySet<string>,
+  adhocIds: ReadonlySet<string>
 ): TimelineActivity[] {
-  if (adhocIds.size === 0) return [...instances];
+  if (adhocIds.size === 0) return [...instances]
   return instances.map((inst) =>
-    adhocIds.has(groupKeyOf(inst)) ? { ...inst, activityId: null, isAdhoc: true } : inst,
-  );
+    adhocIds.has(groupKeyOf(inst))
+      ? { ...inst, activityId: null, isAdhoc: true }
+      : inst
+  )
 }
 
 function toResult(
@@ -687,11 +744,18 @@ function toResult(
   status: TimelineStatus,
   constants: CostConstants,
   totalRanked: number,
-  revision: number,
+  revision: number
 ): SolveResult {
-  const adhocIds = new Set(input.existing.filter((i) => i.isAdhoc).map((i) => groupKeyOf(i)));
-  const instances = tagAdhocInstances(rawInstances, adhocIds);
-  const cost = scheduleCost(instances, input.dayFrame.lengthMinutes, totalRanked, constants);
+  const adhocIds = new Set(
+    input.existing.filter((i) => i.isAdhoc).map((i) => groupKeyOf(i))
+  )
+  const instances = tagAdhocInstances(rawInstances, adhocIds)
+  const cost = scheduleCost(
+    instances,
+    input.dayFrame.lengthMinutes,
+    totalRanked,
+    constants
+  )
   const timeline: Timeline = {
     dayFrame: input.dayFrame,
     revision,
@@ -702,7 +766,7 @@ function toResult(
     solvedAtOffset: input.now,
     finalised: false,
     carryIn: [],
-  };
+  }
   return {
     status,
     timeline,
@@ -710,7 +774,7 @@ function toResult(
     diagnostics: timeline.diagnostics,
     cost,
     trace: null,
-  };
+  }
 }
 
 /**
@@ -726,9 +790,9 @@ function runEvent(
   todaysCatalog: readonly Activity[],
   resolve: (activity: Activity) => ResolvedActivity,
   weight: (activity: Activity) => number,
-  totalRanked: number,
+  totalRanked: number
 ): SolveResult {
-  if (plan.shortCircuitResult) return plan.shortCircuitResult;
+  if (plan.shortCircuitResult) return plan.shortCircuitResult
   if (plan.rejection) {
     return rejectionResult(
       input,
@@ -736,37 +800,38 @@ function runEvent(
       plan.rejection.message,
       plan.rejection.conflictingInstanceIds,
       constants,
-      totalRanked,
-    );
+      totalRanked
+    )
   }
 
-  const catalog = plan.catalogOverride ?? todaysCatalog;
-  const effectiveWeight = plan.weightOverride ?? weight;
-  const effectiveTotalRanked = plan.totalRankedOverride ?? totalRanked;
+  const catalog = plan.catalogOverride ?? todaysCatalog
+  const effectiveWeight = plan.weightOverride ?? weight
+  const effectiveTotalRanked = plan.totalRankedOverride ?? totalRanked
 
-  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } = extractAnchors(
-    plan.workingExisting,
-  );
+  const { anchors, anchorActivityIds, baseOccupied, anchorPlacements } =
+    extractAnchors(plan.workingExisting)
   // SPEC-v2.1 §8.1: prelude blocks from a prior frame occupy
   // `[max(0, start), end)` of this frame's coordinates. Applied here rather
   // than inside `extractAnchors` so the existing function's surface stays
   // tight on `existing`-only inputs.
-  const lengthMinutes = input.dayFrame.lengthMinutes;
+  const lengthMinutes = input.dayFrame.lengthMinutes
   for (const b of input.prelude ?? []) {
-    if (b.plannedStart === null || b.plannedEnd === null) continue;
-    if (b.plannedEnd <= 0 || b.plannedStart >= lengthMinutes) continue;
+    if (b.plannedStart === null || b.plannedEnd === null) continue
+    if (b.plannedEnd <= 0 || b.plannedStart >= lengthMinutes) continue
     baseOccupied.push({
       start: Math.max(0, b.plannedStart),
       end: Math.min(lengthMinutes, b.plannedEnd),
-    });
+    })
   }
-  const excluded = plan.excludeActivityIds;
+  const excluded = plan.excludeActivityIds
   const activitiesToSolve = [
-    ...catalog.filter((a) => !anchorActivityIds.has(a.id) && !(excluded?.has(a.id) ?? false)),
+    ...catalog.filter(
+      (a) => !anchorActivityIds.has(a.id) && !(excluded?.has(a.id) ?? false)
+    ),
     ...plan.extraActivities,
-  ];
+  ]
 
-  const occurrencesToSolve = expandForSolve(activitiesToSolve, input.dayFrame);
+  const occurrencesToSolve = expandForSolve(activitiesToSolve, input.dayFrame)
 
   const {
     instances: solved,
@@ -781,11 +846,12 @@ function runEvent(
     effectiveWeight,
     plan.freezeBoundary,
     [...catalog, ...plan.extraActivities],
-    anchorPlacements,
-  );
+    anchorPlacements
+  )
 
-  let allInstances = [...anchors, ...plan.extraInstances, ...solved];
-  if (plan.instanceTransform) allInstances = plan.instanceTransform(allInstances);
+  let allInstances = [...anchors, ...plan.extraInstances, ...solved]
+  if (plan.instanceTransform)
+    allInstances = plan.instanceTransform(allInstances)
 
   const speculative = toResult(
     input,
@@ -794,15 +860,15 @@ function runEvent(
     status,
     constants,
     effectiveTotalRanked,
-    (input.revision ?? 0) + 1,
-  );
+    (input.revision ?? 0) + 1
+  )
 
   if (plan.checkRejection) {
     const violation = checkEventRejection(
       [...catalog, ...plan.extraActivities],
       input.existing,
-      speculative.timeline.instances,
-    );
+      speculative.timeline.instances
+    )
     if (violation) {
       return rejectionResult(
         input,
@@ -811,12 +877,12 @@ function runEvent(
         violation.instanceIds,
         constants,
         totalRanked,
-        speculative.timeline,
-      );
+        speculative.timeline
+      )
     }
   }
 
-  return speculative;
+  return speculative
 }
 
 /**
@@ -827,13 +893,13 @@ function runEvent(
  * engine implements, but the fallback is cheap to have in place).
  */
 function groupKeyOf(inst: TimelineActivity): string {
-  return inst.occurrenceId;
+  return inst.occurrenceId
 }
 
 interface EventRejection {
-  readonly code: RejectionCode;
-  readonly message: string;
-  readonly instanceIds: readonly string[];
+  readonly code: RejectionCode
+  readonly message: string
+  readonly instanceIds: readonly string[]
 }
 
 /**
@@ -850,65 +916,69 @@ interface EventRejection {
 function checkEventRejection(
   catalog: readonly Activity[],
   before: readonly TimelineActivity[],
-  after: readonly TimelineActivity[],
+  after: readonly TimelineActivity[]
 ): EventRejection | null {
-  const byActivityId = new Map(catalog.map((a) => [a.id, a]));
-  const priorByOccurrence = new Map<string, TimelineActivity>();
+  const byActivityId = new Map(catalog.map((a) => [a.id, a]))
+  const priorByOccurrence = new Map<string, TimelineActivity>()
   for (const inst of before) {
-    priorByOccurrence.set(inst.occurrenceId, inst);
+    priorByOccurrence.set(inst.occurrenceId, inst)
   }
-  const afterByOccurrence = new Map<string, TimelineActivity>();
-  const afterByActivityId = new Map<string, TimelineActivity>();
+  const afterByOccurrence = new Map<string, TimelineActivity>()
+  const afterByActivityId = new Map<string, TimelineActivity>()
   for (const inst of after) {
-    afterByOccurrence.set(inst.occurrenceId, inst);
-    if (inst.activityId) afterByActivityId.set(inst.activityId, inst);
+    afterByOccurrence.set(inst.occurrenceId, inst)
+    if (inst.activityId) afterByActivityId.set(inst.activityId, inst)
   }
 
   for (const inst of after) {
-    if (!inst.activityId || inst.state !== "SKIPPED") continue;
-    const prior = priorByOccurrence.get(inst.occurrenceId);
-    if (!prior || prior.state === "SKIPPED") continue;
-    const activity = byActivityId.get(inst.activityId);
-    if (!activity) continue;
+    if (!inst.activityId || inst.state !== "SKIPPED") continue
+    const prior = priorByOccurrence.get(inst.occurrenceId)
+    if (!prior || prior.state === "SKIPPED") continue
+    const activity = byActivityId.get(inst.activityId)
+    if (!activity) continue
 
     if (inst.skipReason === "INFEASIBLE_HARD_CONSTRAINT") {
-      const code: RejectionCode = hasFixed(activity) ? "FIXED_COLLISION" : "MANDATORY_UNPLACEABLE";
+      const code: RejectionCode = hasFixed(activity)
+        ? "FIXED_COLLISION"
+        : "MANDATORY_UNPLACEABLE"
       const reason =
         code === "FIXED_COLLISION"
           ? "its fixed time now collides with another fixed activity"
-          : "it is mandatory but this action would leave it unplaceable";
+          : "it is mandatory but this action would leave it unplaceable"
       return {
         code,
         message: `"${activity.name}" can't be placed: ${reason}.`,
         instanceIds: [inst.id],
-      };
+      }
     }
 
     if (inst.skipReason === "WINDOW_UNSATISFIABLE") {
-      const wasGuest = prior.hostInstanceId !== null;
+      const wasGuest = prior.hostInstanceId !== null
       return {
         code: wasGuest ? "GUEST_WINDOW_VIOLATED" : "STRICT_WINDOW_VIOLATED",
         message: wasGuest
           ? `"${activity.name}" no longer fits within its own strict window now that its host has moved.`
           : `"${activity.name}"'s strict window can no longer be satisfied.`,
         instanceIds: [inst.id],
-      };
+      }
     }
 
     if (inst.skipReason === "NO_FREE_SPACE" && isDependent(activity)) {
-      const rule = sequenceRuleOf(activity);
-      const hostAfter = rule ? afterByActivityId.get(rule.linkedActivityId) : undefined;
+      const rule = sequenceRuleOf(activity)
+      const hostAfter = rule
+        ? afterByActivityId.get(rule.linkedActivityId)
+        : undefined
       if (!hostAfter || hostAfter.state !== "SKIPPED") {
         return {
           code: "SEQUENCE_UNSATISFIABLE",
           message: `"${activity.name}" can no longer be placed adjacent to its host.`,
           instanceIds: [inst.id],
-        };
+        }
       }
     }
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -924,29 +994,32 @@ function checkEventRejection(
  */
 function applyInstanceRuleOverrides(
   todaysCatalog: readonly Activity[],
-  existing: readonly TimelineActivity[],
+  existing: readonly TimelineActivity[]
 ): Activity[] {
-  const overridesByActivity = new Map<string, Map<string, Rule>>();
+  const overridesByActivity = new Map<string, Map<string, Rule>>()
   for (const inst of existing) {
-    if (!inst.activityId) continue;
+    if (!inst.activityId) continue
     for (const rule of inst.rules) {
-      if (rule.source !== "instance") continue;
-      const overrides = overridesByActivity.get(inst.activityId) ?? new Map();
-      overrides.set(rule.type, rule);
-      overridesByActivity.set(inst.activityId, overrides);
+      if (rule.source !== "instance") continue
+      const overrides = overridesByActivity.get(inst.activityId) ?? new Map()
+      overrides.set(rule.type, rule)
+      overridesByActivity.set(inst.activityId, overrides)
     }
   }
-  if (overridesByActivity.size === 0) return [...todaysCatalog];
+  if (overridesByActivity.size === 0) return [...todaysCatalog]
 
   return todaysCatalog.map((activity) => {
-    const overrides = overridesByActivity.get(activity.id);
-    if (!overrides) return activity;
-    const overriddenTypes = new Set(overrides.keys());
+    const overrides = overridesByActivity.get(activity.id)
+    if (!overrides) return activity
+    const overriddenTypes = new Set(overrides.keys())
     return {
       ...activity,
-      rules: [...activity.rules.filter((r) => !overriddenTypes.has(r.type)), ...overrides.values()],
-    };
-  });
+      rules: [
+        ...activity.rules.filter((r) => !overriddenTypes.has(r.type)),
+        ...overrides.values(),
+      ],
+    }
+  })
 }
 
 /**
@@ -958,14 +1031,16 @@ function applyInstanceRuleOverrides(
  * event's pipeline sees it as an ordinary candidate. `toResult`'s
  * `tagAdhocInstances` restores the `activityId: null` tagging afterward.
  */
-function adhocActivitiesFrom(existing: readonly TimelineActivity[]): Activity[] {
-  const seen = new Set<string>();
-  const activities: Activity[] = [];
+function adhocActivitiesFrom(
+  existing: readonly TimelineActivity[]
+): Activity[] {
+  const seen = new Set<string>()
+  const activities: Activity[] = []
   for (const inst of existing) {
-    if (!inst.isAdhoc) continue;
-    const baseId = inst.occurrenceId.split("@")[0];
-    if (seen.has(baseId)) continue;
-    seen.add(baseId);
+    if (!inst.isAdhoc) continue
+    const baseId = inst.occurrenceId.split("@")[0]
+    if (seen.has(baseId)) continue
+    seen.add(baseId)
     activities.push({
       id: baseId,
       name: inst.name,
@@ -974,9 +1049,9 @@ function adhocActivitiesFrom(existing: readonly TimelineActivity[]): Activity[] 
       enabled: true,
       rules: inst.rules,
       requiredCount: inst.requiredCount,
-    });
+    })
   }
-  return activities;
+  return activities
 }
 
 /**
@@ -1001,9 +1076,9 @@ function adhocActivitiesFrom(existing: readonly TimelineActivity[]): Activity[] 
 function solveFinaliseDay(
   input: SolveInput,
   constants: CostConstants,
-  totalRanked: number,
+  totalRanked: number
 ): SolveResult {
-  const lengthMinutes = input.dayFrame.lengthMinutes;
+  const lengthMinutes = input.dayFrame.lengthMinutes
   if (input.now < lengthMinutes) {
     return rejectionResult(
       input,
@@ -1011,29 +1086,29 @@ function solveFinaliseDay(
       `The day can't be finalised before it ends (now=${input.now}, length=${lengthMinutes}).`,
       [],
       constants,
-      totalRanked,
-    );
+      totalRanked
+    )
   }
 
-  const { instances: backdated } = applyBackdating(input.existing, input.now);
+  const { instances: backdated } = applyBackdating(input.existing, input.now)
 
-  const today: TimelineActivity[] = [];
-  const carryIn: TimelineActivity[] = [];
+  const today: TimelineActivity[] = []
+  const carryIn: TimelineActivity[] = []
   for (const inst of backdated) {
     const spanning =
       (inst.state === "PLANNED" || inst.state === "ACTIVE") &&
       inst.plannedEnd !== null &&
-      inst.plannedEnd > lengthMinutes;
+      inst.plannedEnd > lengthMinutes
     if (!spanning) {
-      today.push(inst);
-      continue;
+      today.push(inst)
+      continue
     }
-    const overflow = (inst.plannedEnd as number) - lengthMinutes;
+    const overflow = (inst.plannedEnd as number) - lengthMinutes
     today.push({
       ...inst,
       plannedEnd: lengthMinutes,
       scheduledMinutes: lengthMinutes - (inst.plannedStart as number),
-    });
+    })
     carryIn.push({
       ...inst,
       state: "CARRIED_IN",
@@ -1046,11 +1121,11 @@ function solveFinaliseDay(
       spanningFromPreviousDay: true,
       locked: false,
       skipReason: null,
-    });
+    })
   }
 
-  const { diagnostics, status } = buildDiagnostics(today);
-  const cost = scheduleCost(today, lengthMinutes, totalRanked, constants);
+  const { diagnostics, status } = buildDiagnostics(today)
+  const cost = scheduleCost(today, lengthMinutes, totalRanked, constants)
   const timeline: Timeline = {
     dayFrame: input.dayFrame,
     revision: (input.revision ?? 0) + 1,
@@ -1061,9 +1136,9 @@ function solveFinaliseDay(
     solvedAtOffset: input.now,
     finalised: true,
     carryIn,
-  };
+  }
 
-  return { status, timeline, rejection: null, diagnostics, cost, trace: null };
+  return { status, timeline, rejection: null, diagnostics, cost, trace: null }
 }
 
 /**
@@ -1073,17 +1148,24 @@ function solveFinaliseDay(
  * calendar day holds `freezeBoundary`. `SolveInput.options.scope: "frame"`
  * widens to the full frame.
  */
-function defaultScope(input: SolveInput, freezeBoundary: number): { start: number; end: number } {
-  const opt = input.options?.scope;
+function defaultScope(
+  input: SolveInput,
+  freezeBoundary: number
+): { start: number; end: number } {
+  const opt = input.options?.scope
   if (opt === "frame") {
-    return { start: 0, end: input.dayFrame.lengthMinutes };
+    return { start: 0, end: input.dayFrame.lengthMinutes }
   }
-  if (opt && typeof opt === "object") return opt;
+  if (opt && typeof opt === "object") return opt
   const day = input.dayFrame.days.find(
-    (d) => freezeBoundary >= d.startOffset && freezeBoundary < d.startOffset + d.lengthMinutes,
-  );
-  const end = day ? day.startOffset + day.lengthMinutes : input.dayFrame.lengthMinutes;
-  return { start: freezeBoundary, end };
+    (d) =>
+      freezeBoundary >= d.startOffset &&
+      freezeBoundary < d.startOffset + d.lengthMinutes
+  )
+  const end = day
+    ? day.startOffset + day.lengthMinutes
+    : input.dayFrame.lengthMinutes
+  return { start: freezeBoundary, end }
 }
 
 /**
@@ -1094,23 +1176,26 @@ function defaultScope(input: SolveInput, freezeBoundary: number): { start: numbe
  */
 function scopePartitionExisting(
   existing: readonly TimelineActivity[],
-  scope: { start: number; end: number },
+  scope: { start: number; end: number }
 ): readonly TimelineActivity[] {
   return existing.map((i) => {
     const isAlreadyAnchored =
-      i.state === "ACTIVE" || i.state === "COMPLETED" || i.state === "CARRIED_IN" || i.locked;
-    if (isAlreadyAnchored) return i;
-    if (i.plannedStart === null || i.plannedEnd === null) return i;
-    const intersects = i.plannedStart < scope.end && i.plannedEnd > scope.start;
-    if (intersects) return i;
-    return { ...i, locked: true };
-  });
+      i.state === "ACTIVE" ||
+      i.state === "COMPLETED" ||
+      i.state === "CARRIED_IN" ||
+      i.locked
+    if (isAlreadyAnchored) return i
+    if (i.plannedStart === null || i.plannedEnd === null) return i
+    const intersects = i.plannedStart < scope.end && i.plannedEnd > scope.start
+    if (intersects) return i
+    return { ...i, locked: true }
+  })
 }
 
 function rejectionPlan(
   code: RejectionCode,
   message: string,
-  conflictingInstanceIds: readonly string[],
+  conflictingInstanceIds: readonly string[]
 ): EventPlan {
   return {
     rejection: {
@@ -1132,7 +1217,7 @@ function rejectionPlan(
     shortCircuitResult: null,
     excludeActivityIds: null,
     scope: { start: 0, end: 0 },
-  };
+  }
 }
 
 /**
@@ -1144,10 +1229,10 @@ function planEvent(
   input: SolveInput,
   constants: CostConstants,
   todaysCatalog: readonly Activity[],
-  totalRanked: number,
+  totalRanked: number
 ): EventPlan {
-  const scopeInterval = defaultScope(input, input.now);
-  const scopedExisting = scopePartitionExisting(input.existing, scopeInterval);
+  const scopeInterval = defaultScope(input, input.now)
+  const scopedExisting = scopePartitionExisting(input.existing, scopeInterval)
   const basePlan: EventPlan = {
     rejection: null,
     workingExisting: scopedExisting,
@@ -1162,14 +1247,18 @@ function planEvent(
     shortCircuitResult: null,
     excludeActivityIds: null,
     scope: scopeInterval,
-  };
+  }
 
   if (input.event.type === "TICK") {
-    const { instances: backdated, changed } = applyBackdating(basePlan.workingExisting, input.now, {
-      horizonMinutes: input.dayFrame.backdateHorizonMinutes,
-    });
+    const { instances: backdated, changed } = applyBackdating(
+      basePlan.workingExisting,
+      input.now,
+      {
+        horizonMinutes: input.dayFrame.backdateHorizonMinutes,
+      }
+    )
     if (!changed) {
-      const { diagnostics, status } = buildDiagnostics(backdated);
+      const { diagnostics, status } = buildDiagnostics(backdated)
       return {
         ...basePlan,
         shortCircuitResult: toResult(
@@ -1179,31 +1268,31 @@ function planEvent(
           status,
           constants,
           totalRanked,
-          input.revision ?? 0,
+          input.revision ?? 0
         ),
-      };
+      }
     }
-    return { ...basePlan, workingExisting: backdated };
+    return { ...basePlan, workingExisting: backdated }
   }
 
   if (input.event.type === "SKIP") {
-    const event = input.event as { type: "SKIP"; instanceId: string };
-    const target = input.existing.find((i) => i.id === event.instanceId);
+    const event = input.event as { type: "SKIP"; instanceId: string }
+    const target = input.existing.find((i) => i.id === event.instanceId)
     if (!target) {
       return rejectionPlan(
         "UNKNOWN_INSTANCE",
         `No instance "${event.instanceId}" in the current timeline.`,
-        [],
-      );
+        []
+      )
     }
     if (target.state !== "PLANNED") {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" is ${target.state}, not PLANNED — it can't be skipped.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
-    const groupKey = groupKeyOf(target);
+    const groupKey = groupKeyOf(target)
     const skippedInstance: TimelineActivity = {
       ...target,
       state: "SKIPPED",
@@ -1217,71 +1306,77 @@ function planEvent(
       hostInstanceId: null,
       relaxations: [],
       locked: true,
-    };
-    const workingExisting = input.existing.filter((i) => groupKeyOf(i) !== groupKey);
-    const excludeIds = target.activityId ? new Set([target.activityId]) : null;
+    }
+    const workingExisting = input.existing.filter(
+      (i) => groupKeyOf(i) !== groupKey
+    )
+    const excludeIds = target.activityId ? new Set([target.activityId]) : null
     return {
       ...basePlan,
       workingExisting,
       extraInstances: [skippedInstance],
       checkRejection: true,
       excludeActivityIds: excludeIds,
-    };
+    }
   }
 
   if (input.event.type === "RESTORE") {
-    const event = input.event as { type: "RESTORE"; instanceId: string };
-    const target = input.existing.find((i) => i.id === event.instanceId);
+    const event = input.event as { type: "RESTORE"; instanceId: string }
+    const target = input.existing.find((i) => i.id === event.instanceId)
     if (!target) {
       return rejectionPlan(
         "UNKNOWN_INSTANCE",
         `No instance "${event.instanceId}" in the current timeline.`,
-        [],
-      );
+        []
+      )
     }
     if (target.state !== "SKIPPED") {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" is ${target.state}, not SKIPPED — there's nothing to restore.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
-    const groupKey = groupKeyOf(target);
+    const groupKey = groupKeyOf(target)
     return {
       ...basePlan,
       workingExisting: input.existing.filter((i) => groupKeyOf(i) !== groupKey),
       checkRejection: true,
-    };
+    }
   }
 
   if (input.event.type === "FINISH_EARLY") {
     const event = input.event as {
-      type: "FINISH_EARLY";
-      instanceId: string;
-      at: number;
-    };
-    const target = input.existing.find((i) => i.id === event.instanceId);
+      type: "FINISH_EARLY"
+      instanceId: string
+      at: number
+    }
+    const target = input.existing.find((i) => i.id === event.instanceId)
     if (!target) {
       return rejectionPlan(
         "UNKNOWN_INSTANCE",
         `No instance "${event.instanceId}" in the current timeline.`,
-        [],
-      );
+        []
+      )
     }
     if (target.state !== "ACTIVE" && target.state !== "CARRIED_IN") {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" is ${target.state}, not ACTIVE or CARRIED_IN — it can't be finished early.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
-    const actualStart = target.actualStart ?? target.plannedStart ?? event.at;
-    if (event.at < actualStart || target.plannedEnd === null || event.at > target.plannedEnd) {
+    const actualStart = target.actualStart ?? target.plannedStart ?? event.at
+    if (
+      event.at < actualStart ||
+      target.plannedEnd === null ||
+      event.at > target.plannedEnd
+    ) {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" can only finish early between its actual start and its planned end.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
     const finished: TimelineActivity = {
       ...target,
@@ -1289,60 +1384,71 @@ function planEvent(
       completedSource: "user",
       actualStart,
       actualEnd: event.at,
-    };
-    const finishedExisting = input.existing.map((i) => (i.id === target.id ? finished : i));
+    }
+    const finishedExisting = input.existing.map((i) =>
+      i.id === target.id ? finished : i
+    )
     return {
       ...basePlan,
-      workingExisting: scopePartitionExisting(finishedExisting, defaultScope(input, event.at)),
+      workingExisting: scopePartitionExisting(
+        finishedExisting,
+        defaultScope(input, event.at)
+      ),
       freezeBoundary: event.at,
       checkRejection: true,
-    };
+    }
   }
 
   if (input.event.type === "EXTEND") {
     const event = input.event as {
-      type: "EXTEND";
-      instanceId: string;
-      minutes: number;
-    };
-    const target = input.existing.find((i) => i.id === event.instanceId);
+      type: "EXTEND"
+      instanceId: string
+      minutes: number
+    }
+    const target = input.existing.find((i) => i.id === event.instanceId)
     if (!target) {
       return rejectionPlan(
         "UNKNOWN_INSTANCE",
         `No instance "${event.instanceId}" in the current timeline.`,
-        [],
-      );
+        []
+      )
     }
     if (target.state !== "ACTIVE") {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" is ${target.state}, not ACTIVE — it can't be extended.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
-    if (event.minutes <= 0 || event.minutes % constants.GRID !== 0 || target.plannedEnd === null) {
+    if (
+      event.minutes <= 0 ||
+      event.minutes % constants.GRID !== 0 ||
+      target.plannedEnd === null
+    ) {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `An extension must be a positive multiple of ${constants.GRID} minutes.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
     const extended: TimelineActivity = {
       ...target,
       plannedEnd: target.plannedEnd + event.minutes,
       scheduledMinutes: target.scheduledMinutes + event.minutes,
-    };
+    }
     return {
       ...basePlan,
-      workingExisting: input.existing.map((i) => (i.id === target.id ? extended : i)),
+      workingExisting: input.existing.map((i) =>
+        i.id === target.id ? extended : i
+      ),
       checkRejection: true,
-    };
+    }
   }
 
   if (input.event.type === "ADD_ADHOC") {
-    const event = input.event as { type: "ADD_ADHOC"; payload: AdhocPayload };
-    const { payload } = event;
-    const adhocId = `adhoc-${input.existing.filter((i) => i.isAdhoc).length + 1}`;
+    const event = input.event as { type: "ADD_ADHOC"; payload: AdhocPayload }
+    const { payload } = event
+    const adhocId = `adhoc-${input.existing.filter((i) => i.isAdhoc).length + 1}`
     const adhocActivity: Activity = {
       id: adhocId,
       name: payload.name,
@@ -1351,25 +1457,29 @@ function planEvent(
       enabled: true,
       rules: payload.rules,
       requiredCount: payload.requiredCount ?? 0,
-    };
+    }
     const errors = [
       ...validateActivity(adhocActivity, constants),
       ...validateCatalog([...todaysCatalog, adhocActivity]),
-    ].filter((i) => i.severity === "error");
+    ].filter((i) => i.severity === "error")
     if (errors.length > 0) {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${payload.name}" can't be added: ${errors.map((e) => e.message).join("; ")}`,
-        [],
-      );
+        []
+      )
     }
-    const newTotalRanked = totalRanked + 1;
+    const newTotalRanked = totalRanked + 1
     const adhocWeight = (activity: Activity): number =>
-      priorityWeight(activity.priorityRank, newTotalRanked);
-    const adhocTransform = (instances: readonly TimelineActivity[]): TimelineActivity[] =>
+      priorityWeight(activity.priorityRank, newTotalRanked)
+    const adhocTransform = (
+      instances: readonly TimelineActivity[]
+    ): TimelineActivity[] =>
       instances.map((inst) =>
-        inst.activityId === adhocId ? { ...inst, activityId: null, isAdhoc: true } : inst,
-      );
+        inst.activityId === adhocId
+          ? { ...inst, activityId: null, isAdhoc: true }
+          : inst
+      )
     return {
       ...basePlan,
       extraActivities: [adhocActivity],
@@ -1377,83 +1487,89 @@ function planEvent(
       weightOverride: adhocWeight,
       totalRankedOverride: newTotalRanked,
       instanceTransform: adhocTransform,
-    };
+    }
   }
 
   if (input.event.type === "EDIT_INSTANCE_RULES") {
     const event = input.event as {
-      type: "EDIT_INSTANCE_RULES";
-      instanceId: string;
-      rules: readonly Rule[];
-    };
-    const target = input.existing.find((i) => i.id === event.instanceId);
+      type: "EDIT_INSTANCE_RULES"
+      instanceId: string
+      rules: readonly Rule[]
+    }
+    const target = input.existing.find((i) => i.id === event.instanceId)
     if (!target) {
       return rejectionPlan(
         "UNKNOWN_INSTANCE",
         `No instance "${event.instanceId}" in the current timeline.`,
-        [],
-      );
+        []
+      )
     }
     if (!target.activityId) {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" is ad-hoc and has no template rule to override.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
     if (target.state === "COMPLETED" || target.state === "CARRIED_IN") {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}" is ${target.state} — its rules can no longer be edited.`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
-    const templateActivity = todaysCatalog.find((a) => a.id === target.activityId) as Activity;
-    const overriddenTypes = new Set(event.rules.map((r) => r.type));
+    const templateActivity = todaysCatalog.find(
+      (a) => a.id === target.activityId
+    ) as Activity
+    const overriddenTypes = new Set(event.rules.map((r) => r.type))
     const overrideRules: Rule[] = event.rules.map((r) => ({
       ...r,
       source: "instance" as const,
-    }));
+    }))
     const overriddenActivity: Activity = {
       ...templateActivity,
       rules: [
         ...templateActivity.rules.filter((r) => !overriddenTypes.has(r.type)),
         ...overrideRules,
       ],
-    };
+    }
     const errors = validateActivity(overriddenActivity, constants).filter(
-      (i) => i.severity === "error",
-    );
+      (i) => i.severity === "error"
+    )
     if (errors.length > 0) {
       return rejectionPlan(
         "INVALID_STATE_FOR_EVENT",
         `"${target.name}"'s rules can't be edited that way: ${errors.map((e) => e.message).join("; ")}`,
-        [target.id],
-      );
+        [target.id]
+      )
     }
     const effectiveCatalog = todaysCatalog.map((a) =>
-      a.id === overriddenActivity.id ? overriddenActivity : a,
-    );
-    const anchorTransform = (instances: readonly TimelineActivity[]): TimelineActivity[] =>
+      a.id === overriddenActivity.id ? overriddenActivity : a
+    )
+    const anchorTransform = (
+      instances: readonly TimelineActivity[]
+    ): TimelineActivity[] =>
       instances.map((a) =>
-        a.activityId === overriddenActivity.id ? { ...a, rules: overriddenActivity.rules } : a,
-      );
+        a.activityId === overriddenActivity.id
+          ? { ...a, rules: overriddenActivity.rules }
+          : a
+      )
     return {
       ...basePlan,
       catalogOverride: effectiveCatalog,
       checkRejection: true,
       instanceTransform: anchorTransform,
-    };
+    }
   }
 
   // GENERATE_DAY — no preconditions, no mutation, no rejection check.
-  const { instances: backdated } = applyBackdating(input.existing, input.now);
-  return { ...basePlan, workingExisting: backdated };
+  const { instances: backdated } = applyBackdating(input.existing, input.now)
+  return { ...basePlan, workingExisting: backdated }
 }
 
 export function solve(input: SolveInput): SolveResult {
-  const constants = resolveConstants(input.constants);
-  const totalRanked = input.catalog.length;
+  const constants = resolveConstants(input.constants)
+  const totalRanked = input.catalog.length
 
   // SPEC.md Section 9.8: a finalised day refuses every further event.
   if (input.finalised) {
@@ -1463,12 +1579,12 @@ export function solve(input: SolveInput): SolveResult {
       "This day has already been finalised.",
       [],
       constants,
-      totalRanked,
-    );
+      totalRanked
+    )
   }
 
   if (input.event.type === "FINALISE_FRAME") {
-    return solveFinaliseDay(input, constants, totalRanked);
+    return solveFinaliseDay(input, constants, totalRanked)
   }
 
   // SPEC.md Section 8.3 step 4 / 3.4: carry-in blocks from a prior frame's
@@ -1485,10 +1601,10 @@ export function solve(input: SolveInput): SolveResult {
           existing: [...input.carryIn, ...input.existing],
           carryIn: [],
         }
-      : input;
+      : input
 
-  const weekday = weekdayOf(seededInput.dayFrame.date);
-  const frame = seededInput.dayFrame;
+  const weekday = weekdayOf(seededInput.dayFrame.date)
+  const frame = seededInput.dayFrame
 
   // For single-day solves, filter by today's weekday; for multi-day, the
   // per-bucket window filtering in `expand` already restricts to each bucket's
@@ -1497,28 +1613,39 @@ export function solve(input: SolveInput): SolveResult {
   const baseCatalog =
     frame.dayCount > 1
       ? seededInput.catalog.filter((a) => a.enabled)
-      : seededInput.catalog.filter((a) => a.enabled && isEligibleOnDay(a, weekday));
+      : seededInput.catalog.filter(
+          (a) => a.enabled && isEligibleOnDay(a, weekday)
+        )
 
-  const resolvedCache = new Map<string, ResolvedActivity>();
+  const resolvedCache = new Map<string, ResolvedActivity>()
   const resolve = (activity: Activity): ResolvedActivity => {
-    let resolved = resolvedCache.get(activity.id);
+    let resolved = resolvedCache.get(activity.id)
     if (!resolved) {
       // With expand() owning bucketing, resolve() now returns all eligible
       // windows across the frame. The per-occurrence day-bounding happens
       // inside expand() via bucket-specific window filtering.
-      const windows = resolveWindows(activity, frame);
-      resolved = { activity, windows };
-      resolvedCache.set(activity.id, resolved);
+      const windows = resolveWindows(activity, frame)
+      resolved = { activity, windows }
+      resolvedCache.set(activity.id, resolved)
     }
-    return resolved;
-  };
-  const weight = (activity: Activity): number => priorityWeight(activity.priorityRank, totalRanked);
+    return resolved
+  }
+  const weight = (activity: Activity): number =>
+    priorityWeight(activity.priorityRank, totalRanked)
 
   const todaysCatalog = applyInstanceRuleOverrides(
     [...baseCatalog, ...adhocActivitiesFrom(seededInput.existing)],
-    seededInput.existing,
-  );
+    seededInput.existing
+  )
 
-  const plan = planEvent(seededInput, constants, todaysCatalog, totalRanked);
-  return runEvent(seededInput, plan, constants, todaysCatalog, resolve, weight, totalRanked);
+  const plan = planEvent(seededInput, constants, todaysCatalog, totalRanked)
+  return runEvent(
+    seededInput,
+    plan,
+    constants,
+    todaysCatalog,
+    resolve,
+    weight,
+    totalRanked
+  )
 }

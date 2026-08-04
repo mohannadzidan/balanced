@@ -1,19 +1,26 @@
-import { computeFreeIntervals } from "./intervals";
-import { evaluateCandidate } from "./resolve";
-import type { ResolvedActivity } from "./resolve";
-import type { Activity, Interval, Placement, Relaxation, SequenceRule, SkipReason } from "./types";
+import { computeFreeIntervals } from "./intervals"
+import { evaluateCandidate } from "./resolve"
+import type { ResolvedActivity } from "./resolve"
+import type {
+  Activity,
+  Interval,
+  Placement,
+  Relaxation,
+  SequenceRule,
+  SkipReason,
+} from "./types"
 
 export function sequenceRuleOf(activity: Activity): SequenceRule | undefined {
-  return activity.rules.find((r): r is SequenceRule => r.type === "sequence");
+  return activity.rules.find((r): r is SequenceRule => r.type === "sequence")
 }
 
 export function isDependent(activity: Activity): boolean {
-  return sequenceRuleOf(activity) !== undefined;
+  return sequenceRuleOf(activity) !== undefined
 }
 
 export interface DependentPlacementResult {
-  readonly placement: Placement;
-  readonly gapMinutes: number;
+  readonly placement: Placement
+  readonly gapMinutes: number
 }
 
 /**
@@ -29,34 +36,34 @@ export function findDependentPlacement(
   freeIntervals: readonly Interval[],
   freezeBoundary: number,
   lengthMinutes: number,
-  grid: number,
+  grid: number
 ): DependentPlacementResult | null {
-  const duration = resolvedDependent.activity.durationMinutes;
+  const duration = resolvedDependent.activity.durationMinutes
 
   for (let g = 0; g <= rule.maxGapMinutes; g += grid) {
-    const start = rule.role === "pre" ? host.start - duration - g : host.end + g;
-    if (start < freezeBoundary) continue;
-    const end = start + duration;
-    if (end > lengthMinutes) continue;
-    const fits = freeIntervals.some((iv) => iv.start <= start && end <= iv.end);
-    if (!fits) continue;
-    if (!evaluateCandidate(resolvedDependent, start, end).feasible) continue;
-    return { placement: { start, end, nestedIn: null }, gapMinutes: g };
+    const start = rule.role === "pre" ? host.start - duration - g : host.end + g
+    if (start < freezeBoundary) continue
+    const end = start + duration
+    if (end > lengthMinutes) continue
+    const fits = freeIntervals.some((iv) => iv.start <= start && end <= iv.end)
+    if (!fits) continue
+    if (!evaluateCandidate(resolvedDependent, start, end).feasible) continue
+    return { placement: { start, end, nestedIn: null }, gapMinutes: g }
   }
-  return null;
+  return null
 }
 
 export interface SequenceChainContext {
-  readonly freezeBoundary: number;
-  readonly lengthMinutes: number;
-  readonly grid: number;
-  readonly resolve: (activity: Activity) => ResolvedActivity;
+  readonly freezeBoundary: number
+  readonly lengthMinutes: number
+  readonly grid: number
+  readonly resolve: (activity: Activity) => ResolvedActivity
 }
 
 export interface SequenceChainOutcome {
-  readonly placements: ReadonlyMap<string, Placement>;
-  readonly skipped: ReadonlyMap<string, SkipReason>;
-  readonly relaxations: ReadonlyMap<string, readonly Relaxation[]>;
+  readonly placements: ReadonlyMap<string, Placement>
+  readonly skipped: ReadonlyMap<string, SkipReason>
+  readonly relaxations: ReadonlyMap<string, readonly Relaxation[]>
 }
 
 /**
@@ -79,38 +86,42 @@ export function placeSequenceChain(
   dependents: readonly Activity[],
   hostResolutions: ReadonlyMap<string, Placement | "SKIPPED">,
   baseOccupied: readonly Interval[],
-  ctx: SequenceChainContext,
+  ctx: SequenceChainContext
 ): SequenceChainOutcome {
-  const placements = new Map<string, Placement>();
-  const skipped = new Map<string, SkipReason>();
-  const relaxations = new Map<string, readonly Relaxation[]>();
-  const resolved = new Map<string, Placement | "SKIPPED">(hostResolutions);
-  const occupied: Interval[] = [...baseOccupied];
+  const placements = new Map<string, Placement>()
+  const skipped = new Map<string, SkipReason>()
+  const relaxations = new Map<string, readonly Relaxation[]>()
+  const resolved = new Map<string, Placement | "SKIPPED">(hostResolutions)
+  const occupied: Interval[] = [...baseOccupied]
 
-  let remaining = [...dependents];
-  let progressed = true;
+  let remaining = [...dependents]
+  let progressed = true
   while (remaining.length > 0 && progressed) {
-    progressed = false;
-    const stillRemaining: Activity[] = [];
+    progressed = false
+    const stillRemaining: Activity[] = []
 
     for (const dependent of remaining) {
-      const rule = sequenceRuleOf(dependent);
-      if (!rule) continue; // unreachable: `dependents` is pre-filtered
-      const hostResolution = resolved.get(rule.linkedActivityId);
+      const rule = sequenceRuleOf(dependent)
+      if (!rule) continue // unreachable: `dependents` is pre-filtered
+      const hostResolution = resolved.get(rule.linkedActivityId)
 
       if (hostResolution === undefined) {
-        stillRemaining.push(dependent);
-        continue;
+        stillRemaining.push(dependent)
+        continue
       }
-      progressed = true;
+      progressed = true
 
       if (hostResolution === "SKIPPED") {
-        skipped.set(dependent.id, "HOST_SKIPPED");
-        resolved.set(dependent.id, "SKIPPED");
-        continue;
+        skipped.set(dependent.id, "HOST_SKIPPED")
+        resolved.set(dependent.id, "SKIPPED")
+        continue
       }
 
-      const freeIntervals = computeFreeIntervals(occupied, ctx.freezeBoundary, ctx.lengthMinutes);
+      const freeIntervals = computeFreeIntervals(
+        occupied,
+        ctx.freezeBoundary,
+        ctx.lengthMinutes
+      )
       const found = findDependentPlacement(
         ctx.resolve(dependent),
         rule,
@@ -118,32 +129,34 @@ export function placeSequenceChain(
         freeIntervals,
         ctx.freezeBoundary,
         ctx.lengthMinutes,
-        ctx.grid,
-      );
+        ctx.grid
+      )
 
       if (found) {
-        placements.set(dependent.id, found.placement);
+        placements.set(dependent.id, found.placement)
         occupied.push({
           start: found.placement.start,
           end: found.placement.end,
-        });
-        resolved.set(dependent.id, found.placement);
+        })
+        resolved.set(dependent.id, found.placement)
         if (found.gapMinutes > 0) {
-          relaxations.set(dependent.id, [{ type: "gap", minutes: found.gapMinutes }]);
+          relaxations.set(dependent.id, [
+            { type: "gap", minutes: found.gapMinutes },
+          ])
         }
       } else {
-        skipped.set(dependent.id, "NO_FREE_SPACE");
-        resolved.set(dependent.id, "SKIPPED");
+        skipped.set(dependent.id, "NO_FREE_SPACE")
+        resolved.set(dependent.id, "SKIPPED")
       }
     }
-    remaining = stillRemaining;
+    remaining = stillRemaining
   }
 
   // Anything left has no resolvable host — a validation-time SEQUENCE_CYCLE
   // should already prevent this; skip defensively rather than loop forever.
   for (const dependent of remaining) {
-    skipped.set(dependent.id, "NO_FREE_SPACE");
+    skipped.set(dependent.id, "NO_FREE_SPACE")
   }
 
-  return { placements, skipped, relaxations };
+  return { placements, skipped, relaxations }
 }

@@ -1,9 +1,9 @@
 // Tests for computeTailroom (SPEC-v2.1 §4.1).
 // tailroom = max(0, max over windows of (w.end − lengthMinutes)).
 
-import { describe, expect, it } from "vitest";
-import { computeTailroom } from "../src/engine/constants";
-import type { ResolvedWindow } from "../src/engine/resolve";
+import { describe, expect, it } from "vitest"
+import { computeTailroom } from "../src/engine/constants"
+import type { ResolvedWindow } from "../src/engine/resolve"
 
 describe("computeTailroom (SPEC-v2.1 §4.1)", () => {
   it("returns 0 when no window extends past lengthMinutes", () => {
@@ -24,9 +24,9 @@ describe("computeTailroom (SPEC-v2.1 §4.1)", () => {
         daySpanStart: 0,
         daySpanEnd: 1440,
       },
-    ];
-    expect(computeTailroom(windows, 1440)).toBe(0);
-  });
+    ]
+    expect(computeTailroom(windows, 1440)).toBe(0)
+  })
 
   it("returns w.end − lengthMinutes when a window extends past lengthMinutes", () => {
     const windows: ResolvedWindow[] = [
@@ -38,10 +38,10 @@ describe("computeTailroom (SPEC-v2.1 §4.1)", () => {
         daySpanStart: 0,
         daySpanEnd: 2880,
       },
-    ];
+    ]
     // 1860 − 1440 = 420.
-    expect(computeTailroom(windows, 1440)).toBe(420);
-  });
+    expect(computeTailroom(windows, 1440)).toBe(420)
+  })
 
   it("returns the maximum excess across multiple windows", () => {
     const windows: ResolvedWindow[] = [
@@ -69,13 +69,13 @@ describe("computeTailroom (SPEC-v2.1 §4.1)", () => {
         daySpanStart: 0,
         daySpanEnd: 2880,
       }, // excess 420 (max)
-    ];
-    expect(computeTailroom(windows, 1440)).toBe(420);
-  });
+    ]
+    expect(computeTailroom(windows, 1440)).toBe(420)
+  })
 
   it("returns 0 for an empty window list", () => {
-    expect(computeTailroom([], 1440)).toBe(0);
-  });
+    expect(computeTailroom([], 1440)).toBe(0)
+  })
 
   it("ignores windows that end exactly at lengthMinutes", () => {
     const windows: ResolvedWindow[] = [
@@ -87,7 +87,7 @@ describe("computeTailroom (SPEC-v2.1 §4.1)", () => {
         daySpanStart: 0,
         daySpanEnd: 1440,
       },
-    ];
-    expect(computeTailroom(windows, 1440)).toBe(0);
-  });
-});
+    ]
+    expect(computeTailroom(windows, 1440)).toBe(0)
+  })
+})

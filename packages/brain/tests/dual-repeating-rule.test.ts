@@ -16,13 +16,13 @@
 // placement policy SPEC-v2.1 §6.1 explicitly accepts (a recurrence's day
 // assignment is soft until `minSeparationMinutes` lands in Step 4).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveFrame } from "../src/engine/time";
-import { activity } from "./support/fixtures";
-import { repeatRuleOf } from "../src/engine/greedy";
-import type { Activity, RepeatRule, Rule } from "../src/engine/types";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveFrame } from "../src/engine/time"
+import { activity } from "./support/fixtures"
+import { repeatRuleOf } from "../src/engine/greedy"
+import type { Activity, RepeatRule, Rule } from "../src/engine/types"
 
 const recurrenceRule: RepeatRule = {
   type: "repeat",
@@ -31,7 +31,7 @@ const recurrenceRule: RepeatRule = {
   count: 3,
   sharedBudget: false,
   minSeparationMinutes: 0,
-};
+}
 const chunkingRule: RepeatRule = {
   type: "repeat",
   source: "template",
@@ -39,7 +39,7 @@ const chunkingRule: RepeatRule = {
   count: 2,
   sharedBudget: true,
   minSeparationMinutes: 0,
-};
+}
 
 function buildActivity(id: string, rules: Rule[]): Activity {
   return {
@@ -50,43 +50,49 @@ function buildActivity(id: string, rules: Rule[]): Activity {
     enabled: true,
     rules,
     requiredCount: 0,
-  };
+  }
 }
 
 describe("repeatRuleOf — disambiguates chunking vs recurrence (SPEC-v2.1 §5.4)", () => {
   it("returns the chunking rule (sharedBudget: true) regardless of declaration order", () => {
-    const recurrenceFirst = buildActivity("gym-rf", [recurrenceRule, chunkingRule]);
-    const chunkingFirst = buildActivity("gym-cf", [chunkingRule, recurrenceRule]);
+    const recurrenceFirst = buildActivity("gym-rf", [
+      recurrenceRule,
+      chunkingRule,
+    ])
+    const chunkingFirst = buildActivity("gym-cf", [
+      chunkingRule,
+      recurrenceRule,
+    ])
 
-    const r1 = repeatRuleOf(recurrenceFirst);
-    const r2 = repeatRuleOf(chunkingFirst);
+    const r1 = repeatRuleOf(recurrenceFirst)
+    const r2 = repeatRuleOf(chunkingFirst)
 
-    expect(r1).not.toBeNull();
-    expect(r2).not.toBeNull();
-    expect(r1?.sharedBudget).toBe(true);
-    expect(r2?.sharedBudget).toBe(true);
-  });
+    expect(r1).not.toBeNull()
+    expect(r2).not.toBeNull()
+    expect(r1?.sharedBudget).toBe(true)
+    expect(r2?.sharedBudget).toBe(true)
+  })
 
   it("returns null when only a recurrence rule is present (no chunking)", () => {
     const gym = activity("Gym")
       .rank(1)
       .minutes(60)
       .repeat({ count: 3, period: "week", sharedBudget: false })
-      .build();
-    expect(repeatRuleOf(gym)).toBeNull();
-  });
+      .build()
+    expect(repeatRuleOf(gym)).toBeNull()
+  })
 
   it("returns the chunking rule when only a chunking rule is present (Drop 1 behavior preserved)", () => {
     const gym = activity("Gym")
       .rank(1)
       .minutes(60)
       .shrink({ floor: 30, chunking: true, minChunk: 30, maxChunks: 2 })
-      .build();
-    const r = repeatRuleOf(gym);
-    expect(r).not.toBeNull();
-    expect(r?.sharedBudget).toBe(true);
-  });
-});
+      .build()
+    const r = repeatRuleOf(gym)
+    expect(r).not.toBeNull()
+    expect(r?.sharedBudget).toBe(true)
+  })
+})
 
 describe("SPEC-v2.1 §5.4: one chunking + one recurrence RepeatRule on the same activity (end-to-end)", () => {
   it("applies chunking end-to-end even when the recurrence rule is declared before the chunking rule", () => {
@@ -104,13 +110,17 @@ describe("SPEC-v2.1 §5.4: one chunking + one recurrence RepeatRule on the same 
     // Under the old bug, `repeat?.sharedBudget` was false (the recurrence
     // rule won first-match) so chunkPlan was null and Gym would be shrunk to
     // 30m or skipped — never chunked.
-    const frame = resolveFrame("2026-07-27", 1, "UTC");
+    const frame = resolveFrame("2026-07-27", 1, "UTC")
 
     // A 60m window with its middle 30m occupied by a higher-ranking blocker,
     // leaving two 30m gaps: the full 60m single block is infeasible at zero
     // drift, and the 2x30 chunk plan is the only feasible way to schedule
     // the full 60m duration.
-    const blocker = activity("Blocker").rank(1).minutes(30).window("09:30", "10:00").build();
+    const blocker = activity("Blocker")
+      .rank(1)
+      .minutes(30)
+      .window("09:30", "10:00")
+      .build()
 
     const gym = activity("Gym")
       .rank(2)
@@ -118,7 +128,7 @@ describe("SPEC-v2.1 §5.4: one chunking + one recurrence RepeatRule on the same 
       .window("09:00", "10:30")
       .repeat({ count: 1, period: "frame", sharedBudget: false }) // recurrence FIRST
       .shrink({ floor: 30, chunking: true, minChunk: 30, maxChunks: 2 }) // chunking SECOND
-      .build();
+      .build()
 
     const result = solve({
       dayFrame: frame,
@@ -127,37 +137,41 @@ describe("SPEC-v2.1 §5.4: one chunking + one recurrence RepeatRule on the same 
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
     if (result.status === "REJECTED") {
-      throw new Error(`unexpected rejection: ${JSON.stringify(result.rejection)}`);
+      throw new Error(
+        `unexpected rejection: ${JSON.stringify(result.rejection)}`
+      )
     }
 
     const placed = result.timeline.instances.filter(
-      (i) => i.name === "Gym" && i.state === "PLANNED",
-    );
+      (i) => i.name === "Gym" && i.state === "PLANNED"
+    )
 
     // Chunking firing is the fix: two 30m blocks, one chunk group.
-    expect(placed).toHaveLength(2);
-    expect(placed.every((b) => b.blockCount === 2)).toBe(true);
-    expect(placed[0].blockIndex).toBe(1);
-    expect(placed[1].blockIndex).toBe(2);
+    expect(placed).toHaveLength(2)
+    expect(placed.every((b) => b.blockCount === 2)).toBe(true)
+    expect(placed[0].blockIndex).toBe(1)
+    expect(placed[1].blockIndex).toBe(2)
 
     // One budget group spanning both blocks (§5.4: chunkGroupId == occurrenceId).
-    expect(placed[0].chunkGroupId).toBe(placed[1].chunkGroupId);
+    expect(placed[0].chunkGroupId).toBe(placed[1].chunkGroupId)
 
     // The two blocks sum to the full 60m duration and stay inside the window.
-    const total = placed.reduce((s, b) => s + b.scheduledMinutes, 0);
-    expect(total).toBe(60);
-    const day0 = frame.days[0];
+    const total = placed.reduce((s, b) => s + b.scheduledMinutes, 0)
+    expect(total).toBe(60)
+    const day0 = frame.days[0]
     for (const b of placed) {
-      expect(b.plannedStart).toBeGreaterThanOrEqual(day0.startOffset + 9 * 60);
-      expect(b.plannedEnd).toBeLessThanOrEqual(day0.startOffset + 10 * 60 + 30);
+      expect(b.plannedStart).toBeGreaterThanOrEqual(day0.startOffset + 9 * 60)
+      expect(b.plannedEnd).toBeLessThanOrEqual(day0.startOffset + 10 * 60 + 30)
     }
 
     // {type:"chunk"} relaxation is recorded (at least once) — the positive
     // signal chunking ran, which the bug would have withheld.
-    const chunkRelaxations = placed.flatMap((b) => b.relaxations).filter((r) => r.type === "chunk");
-    expect(chunkRelaxations.length).toBeGreaterThan(0);
-  });
-});
+    const chunkRelaxations = placed
+      .flatMap((b) => b.relaxations)
+      .filter((r) => r.type === "chunk")
+    expect(chunkRelaxations.length).toBeGreaterThan(0)
+  })
+})

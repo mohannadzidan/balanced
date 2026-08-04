@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveDayFrame } from "../src/engine/time";
-import type { Activity, SolveResult, Weekday } from "../src/engine/types";
-import { activity } from "./support/fixtures";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveDayFrame } from "../src/engine/time"
+import type { Activity, SolveResult, Weekday } from "../src/engine/types"
+import { activity } from "./support/fixtures"
 
 /**
  * SPEC-v2.md Section 12.1 criterion 8, "the cheapest possible proof" that
@@ -19,9 +19,17 @@ import { activity } from "./support/fixtures";
  * status, diagnostics) is compared in full.
  */
 
-const ALL_WEEKDAYS: readonly Weekday[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const ALL_WEEKDAYS: readonly Weekday[] = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+]
 
-const dayFrame = resolveDayFrame("2024-06-17", "UTC"); // a Monday
+const dayFrame = resolveDayFrame("2024-06-17", "UTC") // a Monday
 
 function stripRules(result: SolveResult) {
   return {
@@ -29,12 +37,12 @@ function stripRules(result: SolveResult) {
     timeline: {
       ...result.timeline,
       instances: result.timeline.instances.map((inst) => {
-        const clone: Record<string, unknown> = { ...inst };
-        delete clone.rules;
-        return clone;
+        const clone: Record<string, unknown> = { ...inst }
+        delete clone.rules
+        return clone
       }),
     },
-  };
+  }
 }
 
 function expectEquivalent(sugar: Activity[], manual: Activity[]): void {
@@ -45,7 +53,7 @@ function expectEquivalent(sugar: Activity[], manual: Activity[]): void {
     existing: [],
     carryIn: [],
     event: { type: "GENERATE_DAY" },
-  });
+  })
   const manualResult = solve({
     dayFrame,
     now: 0,
@@ -53,8 +61,8 @@ function expectEquivalent(sugar: Activity[], manual: Activity[]): void {
     existing: [],
     carryIn: [],
     event: { type: "GENERATE_DAY" },
-  });
-  expect(stripRules(manualResult)).toEqual(stripRules(sugarResult));
+  })
+  expect(stripRules(manualResult)).toEqual(stripRules(sugarResult))
 }
 
 describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)", () => {
@@ -68,7 +76,7 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
         .flexible("18:00", "20:00", { drift: 30 })
         .strict("12:00", "13:00")
         .build(),
-    ];
+    ]
     const manual: Activity[] = [
       {
         id: "commute",
@@ -130,16 +138,21 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
           },
         ],
       },
-    ];
-    expectEquivalent(sugar, manual);
-  });
+    ]
+    expectEquivalent(sugar, manual)
+  })
 
   it("requiredCount (mandatory), including the hard-set backtracking path", () => {
     const sugar = [
       activity("Sleep").rank(1).minutes(400).mandatory().build(),
-      activity("Gym").rank(2).minutes(90).mandatory().strict("06:00", "08:00").build(),
+      activity("Gym")
+        .rank(2)
+        .minutes(90)
+        .mandatory()
+        .strict("06:00", "08:00")
+        .build(),
       activity("Reading").rank(3).minutes(30).build(),
-    ];
+    ]
     const manual: Activity[] = [
       {
         id: "sleep",
@@ -177,9 +190,9 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
         requiredCount: 0,
         rules: [],
       },
-    ];
-    expectEquivalent(sugar, manual);
-  });
+    ]
+    expectEquivalent(sugar, manual)
+  })
 
   it("ElasticityRule + shared-budget RepeatRule (shrink and chunking)", () => {
     const sugar = [
@@ -190,7 +203,7 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
         .flexible("17:00", "22:00", { drift: 0 })
         .shrink({ floor: 60, chunking: true, minChunk: 45, maxChunks: 3 })
         .build(),
-    ];
+    ]
     const manual: Activity[] = [
       {
         id: "work",
@@ -240,16 +253,20 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
           },
         ],
       },
-    ];
-    expectEquivalent(sugar, manual);
-  });
+    ]
+    expectEquivalent(sugar, manual)
+  })
 
   it("SequenceRule (pre/post chain)", () => {
     const sugar = [
       activity("Work").rank(1).minutes(480).strict("09:00", "17:00").build(),
-      activity("Commute").rank(2).minutes(30).sequence("pre", "work", { maxGap: 5 }).build(),
+      activity("Commute")
+        .rank(2)
+        .minutes(30)
+        .sequence("pre", "work", { maxGap: 5 })
+        .build(),
       activity("Debrief").rank(3).minutes(15).sequence("post", "work").build(),
-    ];
+    ]
     const manual: Activity[] = [
       {
         id: "work",
@@ -303,9 +320,9 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
           },
         ],
       },
-    ];
-    expectEquivalent(sugar, manual);
-  });
+    ]
+    expectEquivalent(sugar, manual)
+  })
 
   it("OverlapRule (guest nesting) and .days() eligibility restriction", () => {
     const sugar = [
@@ -318,7 +335,7 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
       activity("Email").id("email").rank(2).minutes(30).build(),
       activity("Weekday Only").rank(3).minutes(30).days("MON").build(),
       activity("Weekend Only").rank(4).minutes(30).days("SAT", "SUN").build(),
-    ];
+    ]
     const manual: Activity[] = [
       {
         id: "work",
@@ -390,7 +407,7 @@ describe("Drop 1 differential equivalence (SPEC-v2.md Section 12.1 criterion 8)"
           },
         ],
       },
-    ];
-    expectEquivalent(sugar, manual);
-  });
-});
+    ]
+    expectEquivalent(sugar, manual)
+  })
+})

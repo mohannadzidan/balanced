@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { renderAscii } from "../src/engine/render";
-import { resolveDayFrame } from "../src/engine/time";
-import type { Timeline, TimelineActivity } from "../src/engine/types";
+import { renderAscii } from "../src/engine/render"
+import { resolveDayFrame } from "../src/engine/time"
+import type { Timeline, TimelineActivity } from "../src/engine/types"
 
 function instance(overrides: Partial<TimelineActivity>): TimelineActivity {
   return {
@@ -34,12 +34,12 @@ function instance(overrides: Partial<TimelineActivity>): TimelineActivity {
     locked: false,
     skipReason: null,
     ...overrides,
-  };
+  }
 }
 
 describe("renderAscii", () => {
   it("prints a hand-built timeline deterministically", () => {
-    const dayFrame = resolveDayFrame("2024-06-15", "UTC");
+    const dayFrame = resolveDayFrame("2024-06-15", "UTC")
     const timeline: Timeline = {
       dayFrame,
       revision: 1,
@@ -82,7 +82,7 @@ describe("renderAscii", () => {
       solvedAtOffset: 0,
       finalised: false,
       carryIn: [],
-    };
+    }
 
     expect(renderAscii(timeline)).toBe(
       [
@@ -92,12 +92,12 @@ describe("renderAscii", () => {
         "",
         "cost: total 100 | skip 0 | shrink 0 | chunk 0 | drift 0 | gap 0 | idle 100",
         "status: OK",
-      ].join("\n"),
-    );
-  });
+      ].join("\n")
+    )
+  })
 
   it("sorts multiple skipped instances by priority rank, and prints a placed instance's relaxations and multiple sorted guests", () => {
-    const dayFrame = resolveDayFrame("2024-06-15", "UTC");
+    const dayFrame = resolveDayFrame("2024-06-15", "UTC")
     const timeline: Timeline = {
       dayFrame,
       revision: 1,
@@ -159,24 +159,24 @@ describe("renderAscii", () => {
       solvedAtOffset: 0,
       finalised: false,
       carryIn: [],
-    };
+    }
 
-    const rendered = renderAscii(timeline);
-    expect(rendered).toContain("Work  60m  09:00-10:00  (shrink 15m)");
+    const rendered = renderAscii(timeline)
+    expect(rendered).toContain("Work  60m  09:00-10:00  (shrink 15m)")
     // Guests print earliest-first regardless of instance array order.
-    const earlierIdx = rendered.indexOf("Earlier Guest");
-    const laterIdx = rendered.indexOf("Later Guest");
-    expect(earlierIdx).toBeGreaterThan(-1);
-    expect(laterIdx).toBeGreaterThan(earlierIdx);
+    const earlierIdx = rendered.indexOf("Earlier Guest")
+    const laterIdx = rendered.indexOf("Later Guest")
+    expect(earlierIdx).toBeGreaterThan(-1)
+    expect(laterIdx).toBeGreaterThan(earlierIdx)
     // Skipped instances print in ascending priority-rank order.
-    const highIdx = rendered.indexOf("High Priority");
-    const lowIdx = rendered.indexOf("Low Priority");
-    expect(highIdx).toBeGreaterThan(-1);
-    expect(lowIdx).toBeGreaterThan(highIdx);
-  });
+    const highIdx = rendered.indexOf("High Priority")
+    const lowIdx = rendered.indexOf("Low Priority")
+    expect(highIdx).toBeGreaterThan(-1)
+    expect(lowIdx).toBeGreaterThan(highIdx)
+  })
 
   it("is a pure function of the timeline value", () => {
-    const dayFrame = resolveDayFrame("2024-06-15", "UTC");
+    const dayFrame = resolveDayFrame("2024-06-15", "UTC")
     const timeline: Timeline = {
       dayFrame,
       revision: 1,
@@ -196,7 +196,7 @@ describe("renderAscii", () => {
       solvedAtOffset: 0,
       finalised: false,
       carryIn: [],
-    };
-    expect(renderAscii(timeline)).toBe(renderAscii(timeline));
-  });
-});
+    }
+    expect(renderAscii(timeline)).toBe(renderAscii(timeline))
+  })
+})

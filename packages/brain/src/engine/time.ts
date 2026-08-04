@@ -1,13 +1,21 @@
-import type { Day, DayFrame, Frame, Weekday } from "./types";
+import type { Day, DayFrame, Frame, Weekday } from "./types"
 
-const WEEKDAYS: readonly Weekday[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const WEEKDAYS: readonly Weekday[] = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+]
 
 interface LocalParts {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
+  year: number
+  month: number
+  day: number
+  hour: number
+  minute: number
 }
 
 function localPartsAt(timeZone: string, utcMillis: number): LocalParts {
@@ -19,10 +27,10 @@ function localPartsAt(timeZone: string, utcMillis: number): LocalParts {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
-  const map: Record<string, number> = {};
+  })
+  const map: Record<string, number> = {}
   for (const part of dtf.formatToParts(new Date(utcMillis))) {
-    if (part.type !== "literal") map[part.type] = Number(part.value);
+    if (part.type !== "literal") map[part.type] = Number(part.value)
   }
   return {
     year: map.year,
@@ -30,7 +38,7 @@ function localPartsAt(timeZone: string, utcMillis: number): LocalParts {
     day: map.day,
     hour: map.hour % 24,
     minute: map.minute,
-  };
+  }
 }
 
 function offsetMinutesAt(timeZone: string, utcMillis: number): number {
@@ -43,19 +51,26 @@ function offsetMinutesAt(timeZone: string, utcMillis: number): number {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-  });
-  const map: Record<string, number> = {};
+  })
+  const map: Record<string, number> = {}
   for (const part of dtf.formatToParts(new Date(utcMillis))) {
-    if (part.type !== "literal") map[part.type] = Number(part.value);
+    if (part.type !== "literal") map[part.type] = Number(part.value)
   }
   // Reconstruct the local wall-clock time as if it were UTC, including
   // seconds — dropping them here would leave up to 59s of rounding error,
   // which corrupts the offset near a DST transition boundary.
-  const asUtc = Date.UTC(map.year, map.month - 1, map.day, map.hour % 24, map.minute, map.second);
+  const asUtc = Date.UTC(
+    map.year,
+    map.month - 1,
+    map.day,
+    map.hour % 24,
+    map.minute,
+    map.second
+  )
   // Real-world zone offsets are always a whole number of minutes; rounding
   // absorbs the sub-second slop introduced when utcMillis isn't itself
   // second-aligned (e.g. a binary-search midpoint).
-  return Math.round((asUtc - utcMillis) / 60_000);
+  return Math.round((asUtc - utcMillis) / 60_000)
 }
 
 function partsMatch(
@@ -65,16 +80,22 @@ function partsMatch(
   mo: number,
   d: number,
   h: number,
-  mi: number,
+  mi: number
 ): boolean {
-  const p = localPartsAt(timeZone, utcMillis);
-  return p.year === y && p.month === mo && p.day === d && p.hour === h && p.minute === mi;
+  const p = localPartsAt(timeZone, utcMillis)
+  return (
+    p.year === y &&
+    p.month === mo &&
+    p.day === d &&
+    p.hour === h &&
+    p.minute === mi
+  )
 }
 
 export interface WallClockResolution {
-  readonly instant: number;
-  readonly ambiguous: boolean;
-  readonly nonExistent: boolean;
+  readonly instant: number
+  readonly ambiguous: boolean
+  readonly nonExistent: boolean
 }
 
 /**
@@ -83,7 +104,7 @@ export interface WallClockResolution {
  * Non-existent times (spring-forward gap) resolve to the transition instant,
  * per SPEC.md Section 3.3.
  */
-const HALF_DAY_MS = 12 * 60 * 60 * 1000;
+const HALF_DAY_MS = 12 * 60 * 60 * 1000
 
 export function resolveWallClockToInstant(
   y: number,
@@ -91,51 +112,53 @@ export function resolveWallClockToInstant(
   d: number,
   h: number,
   mi: number,
-  timeZone: string,
+  timeZone: string
 ): WallClockResolution {
-  const guess = Date.UTC(y, mo - 1, d, h, mi, 0);
+  const guess = Date.UTC(y, mo - 1, d, h, mi, 0)
 
   // Sample the offset well clear of the guess on both sides. Any DST
   // transition affecting this wall-clock time lies inside this window,
   // and outside a transition the two samples always agree.
-  const offsetBefore = offsetMinutesAt(timeZone, guess - HALF_DAY_MS);
-  const offsetAfter = offsetMinutesAt(timeZone, guess + HALF_DAY_MS);
+  const offsetBefore = offsetMinutesAt(timeZone, guess - HALF_DAY_MS)
+  const offsetAfter = offsetMinutesAt(timeZone, guess + HALF_DAY_MS)
 
   if (offsetBefore === offsetAfter) {
     return {
       instant: guess - offsetBefore * 60_000,
       ambiguous: false,
       nonExistent: false,
-    };
+    }
   }
 
-  const candidateBefore = guess - offsetBefore * 60_000;
-  const candidateAfter = guess - offsetAfter * 60_000;
-  const matchBefore = partsMatch(timeZone, candidateBefore, y, mo, d, h, mi);
-  const matchAfter = partsMatch(timeZone, candidateAfter, y, mo, d, h, mi);
+  const candidateBefore = guess - offsetBefore * 60_000
+  const candidateAfter = guess - offsetAfter * 60_000
+  const matchBefore = partsMatch(timeZone, candidateBefore, y, mo, d, h, mi)
+  const matchAfter = partsMatch(timeZone, candidateAfter, y, mo, d, h, mi)
 
   if (matchBefore && matchAfter) {
     return {
       instant: Math.min(candidateBefore, candidateAfter),
       ambiguous: true,
       nonExistent: false,
-    };
+    }
   }
-  if (matchBefore) return { instant: candidateBefore, ambiguous: false, nonExistent: false };
-  if (matchAfter) return { instant: candidateAfter, ambiguous: false, nonExistent: false };
+  if (matchBefore)
+    return { instant: candidateBefore, ambiguous: false, nonExistent: false }
+  if (matchAfter)
+    return { instant: candidateAfter, ambiguous: false, nonExistent: false }
 
   // Neither candidate reproduces the requested wall clock: it falls inside a
   // spring-forward gap. Binary-search for the transition instant and resolve
   // to it, per spec.
-  let lo = Math.min(candidateBefore, candidateAfter);
-  let hi = Math.max(candidateBefore, candidateAfter);
-  const loOffset = offsetMinutesAt(timeZone, lo);
+  let lo = Math.min(candidateBefore, candidateAfter)
+  let hi = Math.max(candidateBefore, candidateAfter)
+  const loOffset = offsetMinutesAt(timeZone, lo)
   while (hi - lo > 1_000) {
-    const mid = lo + Math.floor((hi - lo) / 2);
+    const mid = lo + Math.floor((hi - lo) / 2)
     if (offsetMinutesAt(timeZone, mid) === loOffset) {
-      lo = mid;
+      lo = mid
     } else {
-      hi = mid;
+      hi = mid
     }
   }
   // Real-world DST transitions always land on a whole minute; snap away the
@@ -144,20 +167,20 @@ export function resolveWallClockToInstant(
     instant: Math.round(hi / 60_000) * 60_000,
     ambiguous: false,
     nonExistent: true,
-  };
+  }
 }
 
 export function addDays(date: string, days: number): string {
-  const [y, mo, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y, mo - 1, d + days)).toISOString().slice(0, 10);
+  const [y, mo, d] = date.split("-").map(Number)
+  return new Date(Date.UTC(y, mo - 1, d + days)).toISOString().slice(0, 10)
 }
 
 function buildDay(index: number, date: string, timezone: string): Day {
-  const [y, mo, d] = date.split("-").map(Number);
-  const start = resolveWallClockToInstant(y, mo, d, 0, 0, timezone);
-  const nextDate = addDays(date, 1);
-  const [ny, nmo, nd] = nextDate.split("-").map(Number);
-  const end = resolveWallClockToInstant(ny, nmo, nd, 0, 0, timezone);
+  const [y, mo, d] = date.split("-").map(Number)
+  const start = resolveWallClockToInstant(y, mo, d, 0, 0, timezone)
+  const nextDate = addDays(date, 1)
+  const [ny, nmo, nd] = nextDate.split("-").map(Number)
+  const end = resolveWallClockToInstant(ny, nmo, nd, 0, 0, timezone)
   return {
     index,
     date,
@@ -166,7 +189,7 @@ function buildDay(index: number, date: string, timezone: string): Day {
     // is known. Day 0's offset is always 0.
     startOffset: 0,
     lengthMinutes: Math.round((end.instant - start.instant) / 60_000),
-  };
+  }
 }
 
 /** The DST-correct length, in minutes, of one local calendar date in an
@@ -174,7 +197,7 @@ function buildDay(index: number, date: string, timezone: string): Day {
  * Used for midnight-spanning FixedRule resolution at frame edges where
  * `frame.days[i+1]` doesn't exist. */
 export function lengthMinutesOfDate(date: string, timezone: string): number {
-  return buildDay(0, date, timezone).lengthMinutes;
+  return buildDay(0, date, timezone).lengthMinutes
 }
 
 /**
@@ -183,21 +206,32 @@ export function lengthMinutesOfDate(date: string, timezone: string): number {
  * as the pre-Drop-1 `resolveDayFrame` built a `DayFrame` — local midnight to
  * local midnight, sampled from the timezone database.
  */
-export function resolveFrame(date: string, dayCount: number, timezone: string): Frame {
-  const [y0, mo0, d0] = date.split("-").map(Number);
-  const startInstant = resolveWallClockToInstant(y0, mo0, d0, 0, 0, timezone).instant;
+export function resolveFrame(
+  date: string,
+  dayCount: number,
+  timezone: string
+): Frame {
+  const [y0, mo0, d0] = date.split("-").map(Number)
+  const startInstant = resolveWallClockToInstant(
+    y0,
+    mo0,
+    d0,
+    0,
+    0,
+    timezone
+  ).instant
 
-  const days: Day[] = [];
-  let cursorDate = date;
-  let cursorOffset = 0;
+  const days: Day[] = []
+  let cursorDate = date
+  let cursorOffset = 0
   for (let index = 0; index < dayCount; index++) {
-    const day = buildDay(index, cursorDate, timezone);
-    days.push({ ...day, startOffset: cursorOffset });
-    cursorOffset += day.lengthMinutes;
-    cursorDate = addDays(cursorDate, 1);
+    const day = buildDay(index, cursorDate, timezone)
+    days.push({ ...day, startOffset: cursorOffset })
+    cursorOffset += day.lengthMinutes
+    cursorDate = addDays(cursorDate, 1)
   }
 
-  const lengthMinutes = days.reduce((sum, day) => sum + day.lengthMinutes, 0);
+  const lengthMinutes = days.reduce((sum, day) => sum + day.lengthMinutes, 0)
 
   return {
     startDate: date,
@@ -207,13 +241,13 @@ export function resolveFrame(date: string, dayCount: number, timezone: string): 
     dayCount,
     lengthMinutes,
     days,
-  };
+  }
 }
 
 /** Resolves the day frame for a local calendar date in an IANA zone. Retained as an
  * alias of `resolveFrame(date, 1, timezone)` (SPEC-v2.md Section 3.2). */
 export function resolveDayFrame(date: string, timezone: string): DayFrame {
-  return resolveFrame(date, 1, timezone);
+  return resolveFrame(date, 1, timezone)
 }
 
 /**
@@ -221,18 +255,24 @@ export function resolveDayFrame(date: string, timezone: string): DayFrame {
  * frame, on the given day (SPEC-v2.md Section 3.1). `dayIndex` defaults to 0,
  * so with a single-day frame this is arithmetically identical to before.
  */
-export function resolveWallClock(wall: string, frame: DayFrame, dayIndex = 0): number {
-  const day = frame.days[dayIndex];
-  const [h, mi] = wall.split(":").map(Number);
-  const [y, mo, d] = day.date.split("-").map(Number);
-  const resolved = resolveWallClockToInstant(y, mo, d, h, mi, frame.timezone);
-  const dayStartInstant = frame.startInstant + day.startOffset * 60_000;
-  return day.startOffset + Math.round((resolved.instant - dayStartInstant) / 60_000);
+export function resolveWallClock(
+  wall: string,
+  frame: DayFrame,
+  dayIndex = 0
+): number {
+  const day = frame.days[dayIndex]
+  const [h, mi] = wall.split(":").map(Number)
+  const [y, mo, d] = day.date.split("-").map(Number)
+  const resolved = resolveWallClockToInstant(y, mo, d, h, mi, frame.timezone)
+  const dayStartInstant = frame.startInstant + day.startOffset * 60_000
+  return (
+    day.startOffset + Math.round((resolved.instant - dayStartInstant) / 60_000)
+  )
 }
 
 export function weekdayOf(date: string): Weekday {
-  const [y, mo, d] = date.split("-").map(Number);
-  return WEEKDAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()];
+  const [y, mo, d] = date.split("-").map(Number)
+  return WEEKDAYS[new Date(Date.UTC(y, mo - 1, d)).getUTCDay()]
 }
 
 /**
@@ -244,13 +284,13 @@ export function weekdayOf(date: string): Weekday {
  * `year` comes back), which would make every `period: "week"` bucket empty.
  */
 export function isoWeekKey(date: string): string {
-  const [y, mo, d] = date.split("-").map(Number);
-  const thursday = new Date(Date.UTC(y, mo - 1, d));
-  const isoDayNum = thursday.getUTCDay() || 7; // Mon=1..Sun=7
-  thursday.setUTCDate(thursday.getUTCDate() + 4 - isoDayNum);
-  const isoYear = thursday.getUTCFullYear();
-  const yearStart = Date.UTC(isoYear, 0, 1);
-  const diffDays = (thursday.getTime() - yearStart) / 86_400_000;
-  const weekNo = Math.ceil((diffDays + 1) / 7);
-  return `${isoYear}-W${String(weekNo).padStart(2, "0")}`;
+  const [y, mo, d] = date.split("-").map(Number)
+  const thursday = new Date(Date.UTC(y, mo - 1, d))
+  const isoDayNum = thursday.getUTCDay() || 7 // Mon=1..Sun=7
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - isoDayNum)
+  const isoYear = thursday.getUTCFullYear()
+  const yearStart = Date.UTC(isoYear, 0, 1)
+  const diffDays = (thursday.getTime() - yearStart) / 86_400_000
+  const weekNo = Math.ceil((diffDays + 1) / 7)
+  return `${isoYear}-W${String(weekNo).padStart(2, "0")}`
 }

@@ -1,20 +1,36 @@
-import type { Activity, ExclusionWindow, RepeatRule, Rule, Weekday } from "./types";
+import type {
+  Activity,
+  ExclusionWindow,
+  RepeatRule,
+  Rule,
+  Weekday,
+} from "./types"
 
-const ALL_DAYS: readonly Weekday[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const ALL_DAYS: readonly Weekday[] = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+]
 
 function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-")
 }
 
 function isFullWeek(days: readonly Weekday[]): boolean {
-  return ALL_DAYS.every((d) => days.includes(d)) && days.length === ALL_DAYS.length;
+  return (
+    ALL_DAYS.every((d) => days.includes(d)) && days.length === ALL_DAYS.length
+  )
 }
 
 interface WindowSpec {
-  readonly startWall: string;
-  readonly endWall: string;
-  readonly maxDriftMinutes: number;
-  readonly days?: readonly Weekday[];
+  readonly startWall: string
+  readonly endWall: string
+  readonly maxDriftMinutes: number
+  readonly days?: readonly Weekday[]
 }
 
 /**
@@ -35,35 +51,35 @@ interface WindowSpec {
  * ```
  */
 export class ActivityBuilder {
-  private activityId: string;
-  private durationMinutes = 30;
-  private priorityRank: number | null = null;
-  private allowedDays: readonly Weekday[] = ALL_DAYS;
-  private enabled = true;
-  private rules: Rule[] = [];
-  private windowSpecs: WindowSpec[] = [];
-  private requiredCount = 0;
+  private activityId: string
+  private durationMinutes = 30
+  private priorityRank: number | null = null
+  private allowedDays: readonly Weekday[] = ALL_DAYS
+  private enabled = true
+  private rules: Rule[] = []
+  private windowSpecs: WindowSpec[] = []
+  private requiredCount = 0
 
   constructor(private readonly name: string) {
-    this.activityId = slugify(name);
+    this.activityId = slugify(name)
   }
 
   /** Overrides the auto-generated (slugified) id. */
   id(id: string): this {
-    this.activityId = id;
-    return this;
+    this.activityId = id
+    return this
   }
 
   /** Priority rank used for cost weighting and hard-set ordering (SPEC.md Section 4). Required. */
   rank(r: number): this {
-    this.priorityRank = r;
-    return this;
+    this.priorityRank = r
+    return this
   }
 
   /** Full (unshrunk, unchunked) duration in minutes. Defaults to 30. */
   minutes(m: number): this {
-    this.durationMinutes = m;
-    return this;
+    this.durationMinutes = m
+    return this
   }
 
   /**
@@ -73,36 +89,40 @@ export class ActivityBuilder {
    * `.flexible()`/`.window()` call created one. Defaults to every day.
    */
   days(...days: Weekday[]): this {
-    this.allowedDays = days;
-    return this;
+    this.allowedDays = days
+    return this
   }
 
   /** Marks the activity disabled — excluded from solving entirely. */
   disabled(): this {
-    this.enabled = false;
-    return this;
+    this.enabled = false
+    return this
   }
 
   /** Adds a `FixedRule`: an immovable wall-clock span, may span midnight (SPEC.md Section 5.1). */
   fixed(startWall: string, endWall: string): this {
-    this.rules.push({ type: "fixed", source: "template", startWall, endWall });
-    return this;
+    this.rules.push({ type: "fixed", source: "template", startWall, endWall })
+    return this
   }
 
   /** Adds a `WindowRule` with zero drift: must be placed entirely inside this window. */
   strict(startWall: string, endWall: string): this {
-    this.windowSpecs.push({ startWall, endWall, maxDriftMinutes: 0 });
-    return this;
+    this.windowSpecs.push({ startWall, endWall, maxDriftMinutes: 0 })
+    return this
   }
 
   /** Adds a `WindowRule`: preferred window, allowed to drift outside it by `opts.drift` minutes. */
-  flexible(startWall: string, endWall: string, opts?: { drift?: number }): this {
+  flexible(
+    startWall: string,
+    endWall: string,
+    opts?: { drift?: number }
+  ): this {
     this.windowSpecs.push({
       startWall,
       endWall,
       maxDriftMinutes: opts?.drift ?? 0,
-    });
-    return this;
+    })
+    return this
   }
 
   /**
@@ -114,21 +134,21 @@ export class ActivityBuilder {
   window(
     startWall: string,
     endWall: string,
-    opts?: { drift?: number; days?: readonly Weekday[] },
+    opts?: { drift?: number; days?: readonly Weekday[] }
   ): this {
     this.windowSpecs.push({
       startWall,
       endWall,
       maxDriftMinutes: opts?.drift ?? 0,
       days: opts?.days,
-    });
-    return this;
+    })
+    return this
   }
 
   /** Sets `requiredCount` to 1: placed via the bounded-backtracking hard set instead of the greedy pass. */
   mandatory(): this {
-    this.requiredCount = 1;
-    return this;
+    this.requiredCount = 1
+    return this
   }
 
   /**
@@ -136,8 +156,8 @@ export class ActivityBuilder {
    * is sugar for `.required(1)`. Drop 1 permits only 0 or 1.
    */
   required(n: number): this {
-    this.requiredCount = n;
-    return this;
+    this.requiredCount = n
+    return this
   }
 
   /**
@@ -150,13 +170,18 @@ export class ActivityBuilder {
    * than the full duration, as long as it still clears `opts.floor`
    * (SPEC.md 14.6b).
    */
-  shrink(opts: { floor: number; chunking?: boolean; minChunk?: number; maxChunks?: number }): this {
+  shrink(opts: {
+    floor: number
+    chunking?: boolean
+    minChunk?: number
+    maxChunks?: number
+  }): this {
     this.rules.push({
       type: "elasticity",
       source: "template",
       minTotalMinutes: opts.floor,
       minBlockMinutes: opts.minChunk ?? opts.floor,
-    });
+    })
     if (opts.chunking) {
       this.rules.push({
         type: "repeat",
@@ -165,9 +190,9 @@ export class ActivityBuilder {
         count: opts.maxChunks ?? 3,
         sharedBudget: true,
         minSeparationMinutes: 0,
-      });
+      })
     }
-    return this;
+    return this
   }
 
   /** Adds an `ElasticityRule` directly (SPEC-v2.md Section 4.3). */
@@ -177,8 +202,8 @@ export class ActivityBuilder {
       source: "template",
       minTotalMinutes: opts.minTotal,
       minBlockMinutes: opts.minBlock ?? opts.minTotal,
-    });
-    return this;
+    })
+    return this
   }
 
   /**
@@ -190,10 +215,10 @@ export class ActivityBuilder {
    * (SPEC-v2.1 §6.1, step 4).
    */
   repeat(opts: {
-    count: number;
-    period?: RepeatRule["period"];
-    sharedBudget?: boolean;
-    minSeparationMinutes?: number;
+    count: number
+    period?: RepeatRule["period"]
+    sharedBudget?: boolean
+    minSeparationMinutes?: number
   }): this {
     this.rules.push({
       type: "repeat",
@@ -202,27 +227,31 @@ export class ActivityBuilder {
       count: opts.count,
       sharedBudget: opts.sharedBudget ?? true,
       minSeparationMinutes: opts.minSeparationMinutes ?? 0,
-    });
-    return this;
+    })
+    return this
   }
 
   /** Adds a `SequenceRule`: this activity must run immediately before/after `linkedActivityId`. */
-  sequence(role: "pre" | "post", linkedActivityId: string, opts?: { maxGap?: number }): this {
+  sequence(
+    role: "pre" | "post",
+    linkedActivityId: string,
+    opts?: { maxGap?: number }
+  ): this {
     this.rules.push({
       type: "sequence",
       source: "template",
       role,
       linkedActivityId,
       maxGapMinutes: opts?.maxGap ?? 0,
-    });
-    return this;
+    })
+    return this
   }
 
   /** Adds an `OverlapRule`: this activity may host guest activities nested inside it, within a time budget. */
   overlap(opts: {
-    budget: number;
-    guests: readonly string[];
-    exclusions?: readonly ExclusionWindow[];
+    budget: number
+    guests: readonly string[]
+    exclusions?: readonly ExclusionWindow[]
   }): this {
     this.rules.push({
       type: "overlap",
@@ -230,14 +259,14 @@ export class ActivityBuilder {
       budgetMinutes: opts.budget,
       allowedGuestIds: opts.guests,
       exclusionWindows: opts.exclusions ?? [],
-    });
-    return this;
+    })
+    return this
   }
 
   /** Builds the immutable `Activity` template. Throws if `.rank()` was never called. */
   build(): Activity {
     if (this.priorityRank === null) {
-      throw new Error(`activity "${this.name}" is missing .rank(n)`);
+      throw new Error(`activity "${this.name}" is missing .rank(n)`)
     }
 
     const windowRules: Rule[] = this.windowSpecs.map((spec) => ({
@@ -247,7 +276,7 @@ export class ActivityBuilder {
       startWall: spec.startWall,
       endWall: spec.endWall,
       maxDriftMinutes: spec.maxDriftMinutes,
-    }));
+    }))
 
     // No explicit window was ever created, but `.days()` restricted
     // eligibility away from the default — synthesize a whole-day, zero-drift
@@ -262,7 +291,7 @@ export class ActivityBuilder {
         startWall: "00:00",
         endWall: "24:00",
         maxDriftMinutes: 0,
-      });
+      })
     }
 
     return {
@@ -273,11 +302,11 @@ export class ActivityBuilder {
       enabled: this.enabled,
       rules: [...this.rules, ...windowRules],
       requiredCount: this.requiredCount,
-    };
+    }
   }
 }
 
 /** Starts a fluent `Activity` template builder. See `ActivityBuilder`. */
 export function activity(name: string): ActivityBuilder {
-  return new ActivityBuilder(name);
+  return new ActivityBuilder(name)
 }

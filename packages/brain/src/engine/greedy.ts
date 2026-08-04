@@ -1,7 +1,11 @@
-import { computeFreeIntervals } from "./intervals";
-import { findBestNestedPlacement, overlapRuleOf, resolveAbsoluteExclusions } from "./overlap";
-import { placeWithElasticity } from "./shrink";
-import type { ResolvedActivity } from "./resolve";
+import { computeFreeIntervals } from "./intervals"
+import {
+  findBestNestedPlacement,
+  overlapRuleOf,
+  resolveAbsoluteExclusions,
+} from "./overlap"
+import { placeWithElasticity } from "./shrink"
+import type { ResolvedActivity } from "./resolve"
 import type {
   Activity,
   CostConstants,
@@ -11,10 +15,13 @@ import type {
   Placement,
   RepeatRule,
   SkipReason,
-} from "./types";
+} from "./types"
 
 function elasticityRuleOf(activity: Activity): ElasticityRule | null {
-  return activity.rules.find((r): r is ElasticityRule => r.type === "elasticity") ?? null;
+  return (
+    activity.rules.find((r): r is ElasticityRule => r.type === "elasticity") ??
+    null
+  )
 }
 
 // SPEC-v2.1 §5.4: an activity may carry a chunking RepeatRule (sharedBudget:
@@ -23,45 +30,49 @@ function elasticityRuleOf(activity: Activity): ElasticityRule | null {
 // chunking one is relevant here, so this must not just grab whichever
 // RepeatRule happens to appear first in `rules`.
 export function repeatRuleOf(activity: Activity): RepeatRule | null {
-  return activity.rules.find((r): r is RepeatRule => r.type === "repeat" && r.sharedBudget) ?? null;
+  return (
+    activity.rules.find(
+      (r): r is RepeatRule => r.type === "repeat" && r.sharedBudget
+    ) ?? null
+  )
 }
 
 function elasticityFloorOf(activity: Activity): number {
-  const rule = elasticityRuleOf(activity);
-  return rule ? rule.minTotalMinutes : activity.durationMinutes;
+  const rule = elasticityRuleOf(activity)
+  return rule ? rule.minTotalMinutes : activity.durationMinutes
 }
 
 export interface GreedyContext {
-  readonly freezeBoundary: number;
-  readonly grid: number;
-  readonly lengthMinutes: number;
-  readonly constants: CostConstants;
-  readonly resolve: (activity: Activity) => ResolvedActivity;
-  readonly weight: (activity: Activity) => number;
-  readonly dayFrame: DayFrame;
+  readonly freezeBoundary: number
+  readonly grid: number
+  readonly lengthMinutes: number
+  readonly constants: CostConstants
+  readonly resolve: (activity: Activity) => ResolvedActivity
+  readonly weight: (activity: Activity) => number
+  readonly dayFrame: DayFrame
   /** Every activity in today's catalogue, to look up a guest's hosts by id. */
-  readonly allActivities: readonly Activity[];
+  readonly allActivities: readonly Activity[]
   /** Host placements already settled in phase 1 (fixed + hard-set). */
-  readonly initialHostPlacements: ReadonlyMap<string, Placement>;
+  readonly initialHostPlacements: ReadonlyMap<string, Placement>
   /** SPEC-v2.1 §15 row 2: see HardSetContext.dayBoundOf's docstring. */
-  readonly dayBoundOf?: (activity: Activity) => Interval | undefined;
+  readonly dayBoundOf?: (activity: Activity) => Interval | undefined
   /** SPEC-v2.1 §6.1: per-activity `minSeparationMinutes` from its RepeatRule. */
-  readonly minSeparationOf?: (activity: Activity) => number;
+  readonly minSeparationOf?: (activity: Activity) => number
   /** SPEC-v2.1 §6.1: starts of sibling occurrences already placed (greedy
    *  visits each occurrence in turn, so the prior ones are the siblings). */
   readonly siblingStartsOf?: (
     activity: Activity,
-    placements: ReadonlyMap<string, Placement>,
-  ) => readonly number[];
+    placements: ReadonlyMap<string, Placement>
+  ) => readonly number[]
   /** SPEC-v2.1 §7.4: absolute exclusion windows resolve against the host
    * occurrence's own bucket day. Undefined reproduces v1 "always day 0". */
-  readonly dayIndexOf?: (activity: Activity) => number;
+  readonly dayIndexOf?: (activity: Activity) => number
 }
 
 export interface GreedyOutcome {
-  readonly placements: ReadonlyMap<string, Placement>;
-  readonly chunks: ReadonlyMap<string, readonly Placement[]>;
-  readonly skipped: ReadonlyMap<string, SkipReason>;
+  readonly placements: ReadonlyMap<string, Placement>
+  readonly chunks: ReadonlyMap<string, readonly Placement[]>
+  readonly skipped: ReadonlyMap<string, SkipReason>
 }
 
 /**
@@ -82,36 +93,40 @@ export interface GreedyOutcome {
 export function placeGreedy(
   candidates: readonly Activity[],
   baseOccupied: readonly Interval[],
-  ctx: GreedyContext,
+  ctx: GreedyContext
 ): GreedyOutcome {
-  const placements = new Map<string, Placement>();
-  const chunks = new Map<string, readonly Placement[]>();
-  const skipped = new Map<string, SkipReason>();
-  const occupied: Interval[] = [...baseOccupied];
+  const placements = new Map<string, Placement>()
+  const chunks = new Map<string, readonly Placement[]>()
+  const skipped = new Map<string, SkipReason>()
+  const occupied: Interval[] = [...baseOccupied]
 
-  const hostPlacements = new Map(ctx.initialHostPlacements);
-  const hostGuests = new Map<string, Placement[]>();
+  const hostPlacements = new Map(ctx.initialHostPlacements)
+  const hostGuests = new Map<string, Placement[]>()
 
-  const guestToHosts = new Map<string, Activity[]>();
+  const guestToHosts = new Map<string, Activity[]>()
   for (const a of ctx.allActivities) {
-    const rule = overlapRuleOf(a);
-    if (!rule) continue;
+    const rule = overlapRuleOf(a)
+    if (!rule) continue
     for (const guestId of rule.allowedGuestIds) {
-      const hosts = guestToHosts.get(guestId) ?? [];
-      hosts.push(a);
-      guestToHosts.set(guestId, hosts);
+      const hosts = guestToHosts.get(guestId) ?? []
+      hosts.push(a)
+      guestToHosts.set(guestId, hosts)
     }
   }
 
-  const ordered = [...candidates].sort((a, b) => a.priorityRank - b.priorityRank);
+  const ordered = [...candidates].sort(
+    (a, b) => a.priorityRank - b.priorityRank
+  )
   for (const activity of ordered) {
-    const resolved = ctx.resolve(activity);
-    const dayBound = ctx.dayBoundOf?.(activity);
+    const resolved = ctx.resolve(activity)
+    const dayBound = ctx.dayBoundOf?.(activity)
     const freeIntervals = computeFreeIntervals(
       occupied,
-      dayBound ? Math.max(ctx.freezeBoundary, dayBound.start) : ctx.freezeBoundary,
-      dayBound ? Math.min(ctx.lengthMinutes, dayBound.end) : ctx.lengthMinutes,
-    );
+      dayBound
+        ? Math.max(ctx.freezeBoundary, dayBound.start)
+        : ctx.freezeBoundary,
+      dayBound ? Math.min(ctx.lengthMinutes, dayBound.end) : ctx.lengthMinutes
+    )
     const context = {
       freeIntervals,
       freezeBoundary: ctx.freezeBoundary,
@@ -122,29 +137,29 @@ export function placeGreedy(
       absoluteExclusions: resolveAbsoluteExclusions(
         overlapRuleOf(activity),
         ctx.dayFrame,
-        ctx.dayIndexOf?.(activity) ?? 0,
+        ctx.dayIndexOf?.(activity) ?? 0
       ),
       minSeparationMinutes: ctx.minSeparationOf?.(activity) ?? 0,
       siblingStarts: ctx.siblingStartsOf?.(activity, placements),
-    };
+    }
     const freeResult = placeWithElasticity(
       resolved,
       elasticityRuleOf(activity),
       repeatRuleOf(activity),
-      context,
-    );
+      context
+    )
 
     let bestNested: {
-      host: Activity;
-      placement: Placement;
-      cost: number;
-      scheduledMinutes: number;
-    } | null = null;
+      host: Activity
+      placement: Placement
+      cost: number
+      scheduledMinutes: number
+    } | null = null
     for (const host of guestToHosts.get(activity.id) ?? []) {
-      const hostPlacement = hostPlacements.get(host.id);
-      if (!hostPlacement) continue; // host not placed yet — no nesting today
-      const overlapRule = overlapRuleOf(host);
-      if (!overlapRule) continue;
+      const hostPlacement = hostPlacements.get(host.id)
+      if (!hostPlacement) continue // host not placed yet — no nesting today
+      const overlapRule = overlapRuleOf(host)
+      if (!overlapRule) continue
       const found = findBestNestedPlacement(
         resolved,
         elasticityFloorOf(activity),
@@ -152,41 +167,45 @@ export function placeGreedy(
         overlapRule,
         hostGuests.get(host.id) ?? [],
         ctx.dayFrame,
-        context,
-      );
+        context
+      )
       if (found && (!bestNested || found.cost < bestNested.cost)) {
-        bestNested = { host, ...found };
+        bestNested = { host, ...found }
       }
     }
 
-    if (bestNested && (!freeResult.placement || bestNested.cost < freeResult.cost)) {
-      const hostInstanceId = `${bestNested.host.id}@${ctx.dayFrame.date}#1`;
+    if (
+      bestNested &&
+      (!freeResult.placement || bestNested.cost < freeResult.cost)
+    ) {
+      const hostInstanceId = `${bestNested.host.id}@${ctx.dayFrame.date}#1`
       const placement: Placement = {
         start: bestNested.placement.start,
         end: bestNested.placement.end,
         nestedIn: hostInstanceId,
-      };
-      placements.set(activity.id, placement);
-      const guests = hostGuests.get(bestNested.host.id) ?? [];
-      guests.push(placement);
-      hostGuests.set(bestNested.host.id, guests);
+      }
+      placements.set(activity.id, placement)
+      const guests = hostGuests.get(bestNested.host.id) ?? []
+      guests.push(placement)
+      hostGuests.set(bestNested.host.id, guests)
     } else if (freeResult.chunks) {
-      chunks.set(activity.id, freeResult.chunks);
-      for (const c of freeResult.chunks) occupied.push({ start: c.start, end: c.end });
+      chunks.set(activity.id, freeResult.chunks)
+      for (const c of freeResult.chunks)
+        occupied.push({ start: c.start, end: c.end })
     } else if (freeResult.placement) {
-      placements.set(activity.id, freeResult.placement);
+      placements.set(activity.id, freeResult.placement)
       occupied.push({
         start: freeResult.placement.start,
         end: freeResult.placement.end,
-      });
+      })
     } else if (freeResult.skipReason) {
-      skipped.set(activity.id, freeResult.skipReason);
+      skipped.set(activity.id, freeResult.skipReason)
     }
 
     if (overlapRuleOf(activity) && placements.has(activity.id)) {
-      hostPlacements.set(activity.id, placements.get(activity.id) as Placement);
+      hostPlacements.set(activity.id, placements.get(activity.id) as Placement)
     }
   }
 
-  return { placements, chunks, skipped };
+  return { placements, chunks, skipped }
 }

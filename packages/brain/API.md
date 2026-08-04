@@ -9,7 +9,12 @@ solver does what it does), see `SPEC.md`; this document only
 covers how to call it.
 
 ```ts
-import { activity, resolveDayFrame, solve, validateCatalog } from "@balanced/brain";
+import {
+  activity,
+  resolveDayFrame,
+  solve,
+  validateCatalog,
+} from "@balanced/brain"
 ```
 
 ## Mental model
@@ -37,16 +42,25 @@ Each call's `result.timeline.instances` becomes the next call's `existing`.
 ## Quick start
 
 ```ts
-import { activity, resolveDayFrame, solve, validateCatalog } from "@balanced/brain";
+import {
+  activity,
+  resolveDayFrame,
+  solve,
+  validateCatalog,
+} from "@balanced/brain"
 
-const dayFrame = resolveDayFrame("2026-07-27", "America/New_York");
+const dayFrame = resolveDayFrame("2026-07-27", "America/New_York")
 
 const catalog = [
-  activity("Gym").rank(1).minutes(60).flexible("18:00", "20:00", { drift: 15 }).build(),
+  activity("Gym")
+    .rank(1)
+    .minutes(60)
+    .flexible("18:00", "20:00", { drift: 15 })
+    .build(),
   activity("Standup").rank(2).minutes(15).fixed("09:00", "09:15").build(),
-];
+]
 
-const issues = validateCatalog(catalog); // surface template mistakes before solving
+const issues = validateCatalog(catalog) // surface template mistakes before solving
 if (issues.some((i) => i.severity === "error")) {
   // don't solve a catalogue with structural errors
 }
@@ -58,12 +72,12 @@ const result = solve({
   existing: [], // yesterday's finalised state, or [] for a fresh day
   carryIn: [], // midnight-spanning residue from yesterday, if any
   event: { type: "GENERATE_DAY" },
-});
+})
 
-result.status; // "OK" | "DEGRADED" | "REJECTED"
-result.timeline.instances; // the schedule
-result.timeline.diagnostics; // warnings/explanations (shrinks, chunks, skips)
-result.timeline.cost; // cost breakdown, for comparing alternatives
+result.status // "OK" | "DEGRADED" | "REJECTED"
+result.timeline.instances // the schedule
+result.timeline.diagnostics // warnings/explanations (shrinks, chunks, skips)
+result.timeline.cost // cost breakdown, for comparing alternatives
 ```
 
 Every subsequent call passes the previous `result.timeline.instances` back
@@ -78,7 +92,7 @@ const ticked = solve({
   carryIn: [],
   event: { type: "TICK" },
   revision: result.timeline.revision,
-});
+})
 ```
 
 At end of day, send `{ type: "FINALISE_DAY" }` and carry
@@ -105,7 +119,7 @@ const gym = activity("Gym")
   .minutes(60)
   .flexible("18:00", "20:00", { drift: 15 })
   .shrink({ floor: 30 })
-  .build();
+  .build()
 ```
 
 | Method                                                 | Adds                 | Notes                                                                                                                                                    |
@@ -157,9 +171,9 @@ validateCatalog(activities: readonly Activity[]): ValidationIssue[]
   alone is enough for a full pre-flight check.
 
 ```ts
-const issues = validateCatalog(catalog);
-const errors = issues.filter((i) => i.severity === "error");
-const warnings = issues.filter((i) => i.severity === "warning");
+const issues = validateCatalog(catalog)
+const errors = issues.filter((i) => i.severity === "error")
+const warnings = issues.filter((i) => i.severity === "warning")
 ```
 
 `severity: "error"` means don't proceed to `solve()` with this catalogue.
@@ -172,7 +186,7 @@ to whoever authored the catalogue (e.g. `NO_ALLOWED_DAYS`,
 ## Driving the solver: `solve()`
 
 ```ts
-function solve(input: SolveInput): SolveResult;
+function solve(input: SolveInput): SolveResult
 ```
 
 ### `SolveInput`
@@ -301,7 +315,7 @@ export const DEFAULT_COST_CONSTANTS: CostConstants = {
   IDLE: 1,
   GRID: 15,
   HARD_SET_NODE_LIMIT: 5_000,
-};
+}
 ```
 
 Pass `constants: {...}` in `SolveInput` to override any subset — unset
@@ -316,7 +330,7 @@ future default change doesn't silently regress an unrelated field.
 ## Debug / display: `renderAscii`
 
 ```ts
-function renderAscii(timeline: Timeline): string;
+function renderAscii(timeline: Timeline): string
 ```
 
 Deterministic ASCII rendering of a `Timeline` — placed instances in start

@@ -1,10 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveDayFrame, resolveFrame } from "../src/engine/time";
-import { activity } from "./support/fixtures";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveDayFrame, resolveFrame } from "../src/engine/time"
+import { activity } from "./support/fixtures"
 
-const dayFrame = resolveDayFrame("2024-06-17", "UTC");
+const dayFrame = resolveDayFrame("2024-06-17", "UTC")
 
 // SPEC-v2.md Section 12.1 acceptance criterion 6 / SPEC.md Section 16.3
 // criterion 7: "a full solve of a 20-activity day still completes in under
@@ -21,10 +21,28 @@ describe("solve — performance (SPEC-v2.md 12.1 criterion 6)", () => {
         .strict("09:00", "17:00")
         .overlap({ budget: 60, guests: ["email", "call"] })
         .build(),
-      activity("Email").id("email").rank(2).minutes(15).strict("09:00", "09:15").build(),
-      activity("Call").id("call").rank(3).minutes(15).strict("10:00", "10:15").build(),
-      activity("Commute Morning").rank(4).minutes(30).sequence("pre", "work").build(),
-      activity("Commute Evening").rank(5).minutes(30).sequence("post", "work").build(),
+      activity("Email")
+        .id("email")
+        .rank(2)
+        .minutes(15)
+        .strict("09:00", "09:15")
+        .build(),
+      activity("Call")
+        .id("call")
+        .rank(3)
+        .minutes(15)
+        .strict("10:00", "10:15")
+        .build(),
+      activity("Commute Morning")
+        .rank(4)
+        .minutes(30)
+        .sequence("pre", "work")
+        .build(),
+      activity("Commute Evening")
+        .rank(5)
+        .minutes(30)
+        .sequence("post", "work")
+        .build(),
       activity("Standup").rank(6).minutes(15).fixed("09:00", "09:15").build(),
       activity("Gym")
         .rank(7)
@@ -38,25 +56,69 @@ describe("solve — performance (SPEC-v2.md 12.1 criterion 6)", () => {
         .flexible("20:00", "22:00", { drift: 30 })
         .shrink({ floor: 15 })
         .build(),
-      activity("Breakfast").rank(9).minutes(20).flexible("07:00", "08:00", { drift: 15 }).build(),
-      activity("Lunch").rank(10).minutes(30).flexible("12:00", "13:30", { drift: 30 }).build(),
-      activity("Dinner").rank(11).minutes(40).flexible("19:00", "21:00", { drift: 30 }).build(),
-      activity("Meditation").rank(12).minutes(15).flexible("06:30", "08:00", { drift: 20 }).build(),
-      activity("Errand One").rank(13).minutes(25).flexible("11:00", "16:00", { drift: 60 }).build(),
-      activity("Errand Two").rank(14).minutes(25).flexible("11:00", "16:00", { drift: 60 }).build(),
-      activity("Journal").rank(15).minutes(10).flexible("21:00", "23:00", { drift: 60 }).build(),
-      activity("Planning").rank(16).minutes(20).flexible("07:00", "09:00", { drift: 60 }).build(),
-      activity("Stretch").rank(17).minutes(10).flexible("17:00", "19:00", { drift: 60 }).build(),
+      activity("Breakfast")
+        .rank(9)
+        .minutes(20)
+        .flexible("07:00", "08:00", { drift: 15 })
+        .build(),
+      activity("Lunch")
+        .rank(10)
+        .minutes(30)
+        .flexible("12:00", "13:30", { drift: 30 })
+        .build(),
+      activity("Dinner")
+        .rank(11)
+        .minutes(40)
+        .flexible("19:00", "21:00", { drift: 30 })
+        .build(),
+      activity("Meditation")
+        .rank(12)
+        .minutes(15)
+        .flexible("06:30", "08:00", { drift: 20 })
+        .build(),
+      activity("Errand One")
+        .rank(13)
+        .minutes(25)
+        .flexible("11:00", "16:00", { drift: 60 })
+        .build(),
+      activity("Errand Two")
+        .rank(14)
+        .minutes(25)
+        .flexible("11:00", "16:00", { drift: 60 })
+        .build(),
+      activity("Journal")
+        .rank(15)
+        .minutes(10)
+        .flexible("21:00", "23:00", { drift: 60 })
+        .build(),
+      activity("Planning")
+        .rank(16)
+        .minutes(20)
+        .flexible("07:00", "09:00", { drift: 60 })
+        .build(),
+      activity("Stretch")
+        .rank(17)
+        .minutes(10)
+        .flexible("17:00", "19:00", { drift: 60 })
+        .build(),
       activity("Call Family")
         .rank(18)
         .minutes(20)
         .flexible("18:00", "21:00", { drift: 90 })
         .build(),
-      activity("Tidy Up").rank(19).minutes(15).flexible("21:00", "22:30", { drift: 60 }).build(),
-      activity("Wind Down").rank(20).minutes(20).flexible("22:00", "23:30", { drift: 60 }).build(),
-    ];
+      activity("Tidy Up")
+        .rank(19)
+        .minutes(15)
+        .flexible("21:00", "22:30", { drift: 60 })
+        .build(),
+      activity("Wind Down")
+        .rank(20)
+        .minutes(20)
+        .flexible("22:00", "23:30", { drift: 60 })
+        .build(),
+    ]
 
-    const start = performance.now();
+    const start = performance.now()
     const result = solve({
       dayFrame,
       now: 0,
@@ -64,20 +126,20 @@ describe("solve — performance (SPEC-v2.md 12.1 criterion 6)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
-    const elapsedMs = performance.now() - start;
+    })
+    const elapsedMs = performance.now() - start
 
-    expect(result.status).not.toBe("REJECTED");
-    expect(result.timeline.instances.length).toBeGreaterThan(0);
-    expect(elapsedMs).toBeLessThan(1000);
-  });
-});
+    expect(result.status).not.toBe("REJECTED")
+    expect(result.timeline.instances.length).toBeGreaterThan(0)
+    expect(elapsedMs).toBeLessThan(1000)
+  })
+})
 
 // SPEC-v2.1 §15.1 criterion 6: "20×7-day < 100 ms, 20×30-day < 500 ms."
 // Same catalogue, multi-day frames, threshold widened to 10x for CI jitter.
 describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () => {
   it("solves a 7-day frame with the 20-activity catalogue under 1000ms", () => {
-    const frame = resolveFrame("2024-06-17", 7, "UTC");
+    const frame = resolveFrame("2024-06-17", 7, "UTC")
     const catalog = [
       activity("Work")
         .rank(1)
@@ -98,10 +160,14 @@ describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () =>
         .repeat({ count: 3, period: "week", sharedBudget: false })
         .build(),
       activity("Reading").rank(4).minutes(45).window("20:00", "22:00").build(),
-      activity("Breakfast").rank(5).minutes(20).window("07:00", "08:00").build(),
-    ];
+      activity("Breakfast")
+        .rank(5)
+        .minutes(20)
+        .window("07:00", "08:00")
+        .build(),
+    ]
 
-    const start = performance.now();
+    const start = performance.now()
     const result = solve({
       dayFrame: frame,
       now: 0,
@@ -109,14 +175,14 @@ describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () =>
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
-    const elapsedMs = performance.now() - start;
-    expect(result.status).not.toBe("REJECTED");
-    expect(elapsedMs).toBeLessThan(1000);
-  });
+    })
+    const elapsedMs = performance.now() - start
+    expect(result.status).not.toBe("REJECTED")
+    expect(elapsedMs).toBeLessThan(1000)
+  })
 
   it("solves a 30-day frame with the 20-activity catalogue under 5000ms", () => {
-    const frame = resolveFrame("2024-06-17", 30, "UTC");
+    const frame = resolveFrame("2024-06-17", 30, "UTC")
     const catalog = [
       activity("Work")
         .rank(1)
@@ -137,10 +203,14 @@ describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () =>
         .repeat({ count: 3, period: "week", sharedBudget: false })
         .build(),
       activity("Reading").rank(4).minutes(45).window("20:00", "22:00").build(),
-      activity("Breakfast").rank(5).minutes(20).window("07:00", "08:00").build(),
-    ];
+      activity("Breakfast")
+        .rank(5)
+        .minutes(20)
+        .window("07:00", "08:00")
+        .build(),
+    ]
 
-    const start = performance.now();
+    const start = performance.now()
     const result = solve({
       dayFrame: frame,
       now: 0,
@@ -148,9 +218,9 @@ describe("solve — multi-day performance (SPEC-v2.1 §15.1 criterion 6)", () =>
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
-    const elapsedMs = performance.now() - start;
-    expect(result.status).not.toBe("REJECTED");
-    expect(elapsedMs).toBeLessThan(5000);
-  });
-});
+    })
+    const elapsedMs = performance.now() - start
+    expect(result.status).not.toBe("REJECTED")
+    expect(elapsedMs).toBeLessThan(5000)
+  })
+})

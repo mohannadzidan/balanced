@@ -1,4 +1,4 @@
-import { resolveWallClock } from "./time";
+import { resolveWallClock } from "./time"
 import type {
   Activity,
   DayFrame,
@@ -8,25 +8,33 @@ import type {
   SequenceRule,
   Weekday,
   WindowRule,
-} from "./types";
+} from "./types"
 
-export type { ResolvedWindow };
+export type { ResolvedWindow }
 
-const ALL_WEEKDAYS: readonly Weekday[] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const ALL_WEEKDAYS: readonly Weekday[] = [
+  "SUN",
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+]
 
 export interface CandidateVerdict {
-  readonly feasible: boolean;
-  readonly driftMinutes: number;
+  readonly feasible: boolean
+  readonly driftMinutes: number
 }
 
 /** An activity's WindowRules resolved to numeric offsets for one DayFrame. */
 export interface ResolvedActivity {
-  readonly activity: Activity;
-  readonly windows: readonly ResolvedWindow[];
+  readonly activity: Activity
+  readonly windows: readonly ResolvedWindow[]
 }
 
 export function windowRulesOf(activity: Activity): readonly WindowRule[] {
-  return activity.rules.filter((r): r is WindowRule => r.type === "window");
+  return activity.rules.filter((r): r is WindowRule => r.type === "window")
 }
 
 /**
@@ -36,15 +44,15 @@ export function windowRulesOf(activity: Activity): readonly WindowRule[] {
  * window is a day the activity cannot be placed on.
  */
 export function eligibleWeekdaysOf(activity: Activity): ReadonlySet<Weekday> {
-  const windows = windowRulesOf(activity);
-  if (windows.length === 0) return new Set(ALL_WEEKDAYS);
-  const days = new Set<Weekday>();
-  for (const w of windows) for (const d of w.days) days.add(d);
-  return days;
+  const windows = windowRulesOf(activity)
+  if (windows.length === 0) return new Set(ALL_WEEKDAYS)
+  const days = new Set<Weekday>()
+  for (const w of windows) for (const d of w.days) days.add(d)
+  return days
 }
 
 export function isEligibleOnDay(activity: Activity, weekday: Weekday): boolean {
-  return eligibleWeekdaysOf(activity).has(weekday);
+  return eligibleWeekdaysOf(activity).has(weekday)
 }
 
 /** Phase 0, step 7 (SPEC.md Section 8.3): resolve wall-clock rules to offsets.
@@ -52,10 +60,13 @@ export function isEligibleOnDay(activity: Activity, weekday: Weekday): boolean {
  * a `defaultDayWindow`, the activity is constrained to that window on day 0
  * (Drop 1 callers that pass `dayCount = 1` see exactly the same single window
  * the new logic emits; the difference only shows up over multi-day frames). */
-export function resolveActivity(activity: Activity, dayFrame: DayFrame): ResolvedActivity {
-  const day = dayFrame.days[0];
-  const rules = windowRulesOf(activity);
-  const dw = dayFrame.defaultDayWindow;
+export function resolveActivity(
+  activity: Activity,
+  dayFrame: DayFrame
+): ResolvedActivity {
+  const day = dayFrame.days[0]
+  const rules = windowRulesOf(activity)
+  const dw = dayFrame.defaultDayWindow
   const windows =
     rules.length > 0
       ? rules.map((rule) => ({
@@ -77,8 +88,8 @@ export function resolveActivity(activity: Activity, dayFrame: DayFrame): Resolve
               daySpanEnd: day.startOffset + day.lengthMinutes,
             },
           ]
-        : [];
-  return { activity, windows };
+        : []
+  return { activity, windows }
 }
 
 /**
@@ -97,12 +108,15 @@ export function resolveActivity(activity: Activity, dayFrame: DayFrame): Resolve
  * per-day resolved window with `maxDriftMinutes: 0` — preserving "no
  * WindowRule at all" exactly when `defaultDayWindow` is also unset.
  */
-export function resolveWindows(activity: Activity, frame: Frame): readonly ResolvedWindow[] {
-  const rules = windowRulesOf(activity);
+export function resolveWindows(
+  activity: Activity,
+  frame: Frame
+): readonly ResolvedWindow[] {
+  const rules = windowRulesOf(activity)
   if (rules.length === 0) {
-    const dw = frame.defaultDayWindow;
-    if (!dw) return [];
-    const windows: ResolvedWindow[] = [];
+    const dw = frame.defaultDayWindow
+    if (!dw) return []
+    const windows: ResolvedWindow[] = []
     for (const day of frame.days) {
       windows.push({
         start: resolveWallClock(dw.startWall, frame, day.index),
@@ -111,38 +125,40 @@ export function resolveWindows(activity: Activity, frame: Frame): readonly Resol
         dayIndex: day.index,
         daySpanStart: day.startOffset,
         daySpanEnd: day.startOffset + day.lengthMinutes,
-      });
+      })
     }
-    return windows;
+    return windows
   }
 
-  const windows: ResolvedWindow[] = [];
+  const windows: ResolvedWindow[] = []
   for (const rule of rules) {
     for (const day of frame.days) {
-      if (!rule.days.includes(day.weekday)) continue;
-      const start = resolveWallClock(rule.startWall, frame, day.index);
+      if (!rule.days.includes(day.weekday)) continue
+      const start = resolveWallClock(rule.startWall, frame, day.index)
       // Spanning window: endWall ≤ startWall → resolve end against the next
       // day's offset so it becomes one contiguous interval.
-      let end: number;
+      let end: number
       if (rule.endWall > rule.startWall) {
-        end = resolveWallClock(rule.endWall, frame, day.index);
+        end = resolveWallClock(rule.endWall, frame, day.index)
       } else {
         // Spanning: resolve end against the next day (or the last day itself
         // if there is no next). resolveWallClock already returns frame-relative
         // offset, so adding nextDay.startOffset would double-count.
-        const nextDayIndex = day.index + 1 < frame.days.length ? day.index + 1 : day.index;
-        end = resolveWallClock(rule.endWall, frame, nextDayIndex);
+        const nextDayIndex =
+          day.index + 1 < frame.days.length ? day.index + 1 : day.index
+        end = resolveWallClock(rule.endWall, frame, nextDayIndex)
       }
       // §4.1's eligible day span: this day's full extent, plus the next
       // day's too when the window spans midnight (its own `end` already
       // lies there) — the hard bound drift may soften a window against but
       // never cross.
-      const spansMidnight = rule.endWall <= rule.startWall;
-      const daySpanStart = day.startOffset;
+      const spansMidnight = rule.endWall <= rule.startWall
+      const daySpanStart = day.startOffset
       const daySpanEnd =
         spansMidnight && day.index + 1 < frame.days.length
-          ? frame.days[day.index + 1].startOffset + frame.days[day.index + 1].lengthMinutes
-          : day.startOffset + day.lengthMinutes;
+          ? frame.days[day.index + 1].startOffset +
+            frame.days[day.index + 1].lengthMinutes
+          : day.startOffset + day.lengthMinutes
       windows.push({
         start,
         end,
@@ -150,10 +166,10 @@ export function resolveWindows(activity: Activity, frame: Frame): readonly Resol
         dayIndex: day.index,
         daySpanStart,
         daySpanEnd,
-      });
+      })
     }
   }
-  return windows;
+  return windows
 }
 
 /**
@@ -176,25 +192,26 @@ export function resolveWindows(activity: Activity, frame: Frame): readonly Resol
 export function evaluateCandidate(
   resolved: ResolvedActivity,
   start: number,
-  end: number,
+  end: number
 ): CandidateVerdict {
-  const { windows } = resolved;
-  if (windows.length === 0) return { feasible: true, driftMinutes: 0 };
+  const { windows } = resolved
+  if (windows.length === 0) return { feasible: true, driftMinutes: 0 }
 
-  let minDrift = Number.POSITIVE_INFINITY;
-  let driftFeasible = false;
+  let minDrift = Number.POSITIVE_INFINITY
+  let driftFeasible = false
   for (const window of windows) {
     // Minutes of the activity before the window start, and after the window
     // end — each capped against the other bound so a candidate entirely on
     // one side isn't double-counted past its own duration.
-    const before = Math.max(0, Math.min(end, window.start) - start);
-    const after = Math.max(0, end - Math.max(start, window.end));
-    const driftMinutes = before + after;
-    if (driftMinutes < minDrift) minDrift = driftMinutes;
-    if (driftMinutes <= window.maxDriftMinutes) driftFeasible = true;
+    const before = Math.max(0, Math.min(end, window.start) - start)
+    const after = Math.max(0, end - Math.max(start, window.end))
+    const driftMinutes = before + after
+    if (driftMinutes < minDrift) minDrift = driftMinutes
+    if (driftMinutes <= window.maxDriftMinutes) driftFeasible = true
   }
-  const feasible = driftFeasible && isContainedInEligibleDaySpan(windows, start, end);
-  return { feasible, driftMinutes: minDrift };
+  const feasible =
+    driftFeasible && isContainedInEligibleDaySpan(windows, start, end)
+  return { feasible, driftMinutes: minDrift }
 }
 
 /** The union of every window's `[daySpanStart, daySpanEnd)`, merged, checked
@@ -202,22 +219,22 @@ export function evaluateCandidate(
 function isContainedInEligibleDaySpan(
   windows: readonly ResolvedWindow[],
   start: number,
-  end: number,
+  end: number
 ): boolean {
   const spans = [...windows]
     .map((w) => ({ start: w.daySpanStart, end: w.daySpanEnd }))
-    .sort((a, b) => a.start - b.start);
+    .sort((a, b) => a.start - b.start)
 
-  const merged: { start: number; end: number }[] = [];
+  const merged: { start: number; end: number }[] = []
   for (const span of spans) {
-    const last = merged[merged.length - 1];
+    const last = merged[merged.length - 1]
     if (last && span.start <= last.end) {
-      last.end = Math.max(last.end, span.end);
+      last.end = Math.max(last.end, span.end)
     } else {
-      merged.push({ ...span });
+      merged.push({ ...span })
     }
   }
-  return merged.some((m) => start >= m.start && end <= m.end);
+  return merged.some((m) => start >= m.start && end <= m.end)
 }
 
 /**
@@ -230,15 +247,24 @@ function isContainedInEligibleDaySpan(
  * cross-reference (§7.1: `resolveFixedPlacement` now resolves against each
  * occurrence's own bucket day), so it no longer disqualifies ghosting.
  */
-export function isGhostable(activity: Activity, catalog: readonly Activity[]): boolean {
-  if (activity.rules.some((r) => r.type === "overlap" || r.type === "sequence")) {
-    return false;
+export function isGhostable(
+  activity: Activity,
+  catalog: readonly Activity[]
+): boolean {
+  if (
+    activity.rules.some((r) => r.type === "overlap" || r.type === "sequence")
+  ) {
+    return false
   }
   for (const other of catalog) {
-    const overlap = other.rules.find((r): r is OverlapRule => r.type === "overlap");
-    if (overlap?.allowedGuestIds.includes(activity.id)) return false;
-    const sequence = other.rules.find((r): r is SequenceRule => r.type === "sequence");
-    if (sequence?.linkedActivityId === activity.id) return false;
+    const overlap = other.rules.find(
+      (r): r is OverlapRule => r.type === "overlap"
+    )
+    if (overlap?.allowedGuestIds.includes(activity.id)) return false
+    const sequence = other.rules.find(
+      (r): r is SequenceRule => r.type === "sequence"
+    )
+    if (sequence?.linkedActivityId === activity.id) return false
   }
-  return true;
+  return true
 }

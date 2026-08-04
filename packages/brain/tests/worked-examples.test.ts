@@ -1,34 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveDayFrame } from "../src/engine/time";
-import type { Activity, TimelineActivity } from "../src/engine/types";
-import { activity } from "./support/fixtures";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveDayFrame } from "../src/engine/time"
+import type { Activity, TimelineActivity } from "../src/engine/types"
+import { activity } from "./support/fixtures"
 
-const dayFrame = resolveDayFrame("2024-06-17", "UTC");
+const dayFrame = resolveDayFrame("2024-06-17", "UTC")
 
-function byName(instances: readonly TimelineActivity[], name: string): TimelineActivity {
-  const found = instances.find((i) => i.name === name);
-  if (!found) throw new Error(`no instance named "${name}"`);
-  return found;
+function byName(
+  instances: readonly TimelineActivity[],
+  name: string
+): TimelineActivity {
+  const found = instances.find((i) => i.name === name)
+  if (!found) throw new Error(`no instance named "${name}"`)
+  return found
 }
 
 /** SPEC.md 14.1's catalogue, with the variations 14.2/14.3 apply to it. */
 function baselineCatalog(
   opts: {
-    gymMandatory?: boolean;
-    gymShrink?: boolean;
-    dinnerFixed?: boolean;
-  } = {},
+    gymMandatory?: boolean
+    gymShrink?: boolean
+    dinnerFixed?: boolean
+  } = {}
 ): Activity[] {
-  const gym = activity("Gym").rank(4).minutes(60).flexible("18:00", "20:00", { drift: 30 });
-  if (opts.gymShrink ?? true) gym.shrink({ floor: 45 });
-  if (opts.gymMandatory) gym.mandatory();
+  const gym = activity("Gym")
+    .rank(4)
+    .minutes(60)
+    .flexible("18:00", "20:00", { drift: 30 })
+  if (opts.gymShrink ?? true) gym.shrink({ floor: 45 })
+  if (opts.gymMandatory) gym.mandatory()
 
-  const dinner = activity("Dinner").rank(3).minutes(45);
-  if (opts.dinnerFixed) dinner.fixed("19:00", "19:45");
-  else dinner.flexible("19:00", "20:30", { drift: 30 });
-  dinner.mandatory();
+  const dinner = activity("Dinner").rank(3).minutes(45)
+  if (opts.dinnerFixed) dinner.fixed("19:00", "19:45")
+  else dinner.flexible("19:00", "20:30", { drift: 30 })
+  dinner.mandatory()
 
   return [
     activity("Work")
@@ -60,7 +66,7 @@ function baselineCatalog(
       .flexible("21:00", "23:00", { drift: 60 })
       .shrink({ floor: 20, chunking: true, minChunk: 15 })
       .build(),
-  ];
+  ]
 }
 
 describe("solve — worked examples (SPEC.md Section 14)", () => {
@@ -105,7 +111,7 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
         .flexible("21:00", "23:00", { drift: 60 })
         .shrink({ floor: 20, chunking: true, minChunk: 15 })
         .build(),
-    ];
+    ]
 
     const result = solve({
       dayFrame,
@@ -114,18 +120,18 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
-    expect(result.status).toBe("OK");
-    const instances = result.timeline.instances;
+    expect(result.status).toBe("OK")
+    const instances = result.timeline.instances
 
-    const commute = byName(instances, "Commute");
-    expect(commute.plannedStart).toBe(510); // 08:30
-    expect(commute.plannedEnd).toBe(540); // 09:00
+    const commute = byName(instances, "Commute")
+    expect(commute.plannedStart).toBe(510) // 08:30
+    expect(commute.plannedEnd).toBe(540) // 09:00
 
-    const work = byName(instances, "Work");
-    expect(work.plannedStart).toBe(540); // 09:00
-    expect(work.plannedEnd).toBe(1020); // 17:00
+    const work = byName(instances, "Work")
+    expect(work.plannedStart).toBe(540) // 09:00
+    expect(work.plannedEnd).toBe(1020) // 17:00
 
     // SPEC.md 14.1's prose says Email nests inside Work at 09:00-09:30, but
     // Email carries no rules of its own, so nesting and a free placement
@@ -138,27 +144,27 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
     // first open slot instead of nesting it. Confirmed as intended: nesting
     // is for when the day has no free time left (see the "congested day"
     // case below), not a standing preference over open time.
-    const email = byName(instances, "Email");
-    expect(email.hostInstanceId).toBeNull();
-    expect(email.plannedStart).toBe(0);
-    expect(email.plannedEnd).toBe(30);
+    const email = byName(instances, "Email")
+    expect(email.hostInstanceId).toBeNull()
+    expect(email.plannedStart).toBe(0)
+    expect(email.plannedEnd).toBe(30)
 
-    const gym = byName(instances, "Gym");
-    expect(gym.plannedStart).toBe(1080); // 18:00
-    expect(gym.plannedEnd).toBe(1140); // 19:00
+    const gym = byName(instances, "Gym")
+    expect(gym.plannedStart).toBe(1080) // 18:00
+    expect(gym.plannedEnd).toBe(1140) // 19:00
 
-    const dinner = byName(instances, "Dinner");
-    expect(dinner.plannedStart).toBe(1140); // 19:00
-    expect(dinner.plannedEnd).toBe(1185); // 19:45
+    const dinner = byName(instances, "Dinner")
+    expect(dinner.plannedStart).toBe(1140) // 19:00
+    expect(dinner.plannedEnd).toBe(1185) // 19:45
 
-    const reading = byName(instances, "Reading");
-    expect(reading.plannedStart).toBe(1260); // 21:00
-    expect(reading.plannedEnd).toBe(1305); // 21:45
+    const reading = byName(instances, "Reading")
+    expect(reading.plannedStart).toBe(1260) // 21:00
+    expect(reading.plannedEnd).toBe(1305) // 21:45
 
     for (const inst of instances) {
-      expect(inst.relaxations).toEqual([]);
+      expect(inst.relaxations).toEqual([])
     }
-  });
+  })
 
   it("nests a guest when the day is fully congested and no free top-level time exists anywhere", () => {
     const catalog = [
@@ -168,7 +174,7 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
         .overlap({ budget: 60, guests: ["email"] })
         .build(),
       activity("Email").rank(2).minutes(30).build(),
-    ];
+    ]
 
     const result = solve({
       dayFrame,
@@ -177,21 +183,21 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
-    expect(result.status).toBe("OK");
-    const instances = result.timeline.instances;
-    const work = byName(instances, "Work");
-    expect(work.plannedStart).toBe(0);
-    expect(work.plannedEnd).toBe(dayFrame.lengthMinutes);
+    expect(result.status).toBe("OK")
+    const instances = result.timeline.instances
+    const work = byName(instances, "Work")
+    expect(work.plannedStart).toBe(0)
+    expect(work.plannedEnd).toBe(dayFrame.lengthMinutes)
 
-    const email = byName(instances, "Email");
-    expect(email.hostInstanceId).toBe(work.id);
-    expect(email.state).toBe("PLANNED");
-  });
+    const email = byName(instances, "Email")
+    expect(email.hostInstanceId).toBe(work.id)
+    expect(email.state).toBe("PLANNED")
+  })
 
   it("14.2 extend cascades into a shrink: Gym gives up 10 minutes rather than being skipped", () => {
-    const catalog = baselineCatalog({ gymMandatory: true, dinnerFixed: true });
+    const catalog = baselineCatalog({ gymMandatory: true, dinnerFixed: true })
     const generated = solve({
       dayFrame,
       now: 0,
@@ -199,7 +205,7 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
     const active = solve({
       dayFrame,
@@ -209,9 +215,9 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       carryIn: [],
       event: { type: "TICK" },
       revision: generated.timeline.revision,
-    });
-    const activeWork = active.timeline.instances.find((i) => i.name === "Work")!;
-    expect(activeWork.state).toBe("ACTIVE");
+    })
+    const activeWork = active.timeline.instances.find((i) => i.name === "Work")!
+    expect(activeWork.state).toBe("ACTIVE")
 
     // Extended (in one shot, equivalent to the spec's "repeatedly") to end
     // at 18:10 — the gap before Dinner's fixed 19:00 start is only 50
@@ -225,30 +231,30 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       carryIn: [],
       event: { type: "EXTEND", instanceId: activeWork.id, minutes: 70 },
       revision: active.timeline.revision,
-    });
+    })
 
-    expect(extended.status).toBe("OK");
-    const work = byName(extended.timeline.instances, "Work");
-    expect(work.plannedEnd).toBe(1090); // 18:10
+    expect(extended.status).toBe("OK")
+    const work = byName(extended.timeline.instances, "Work")
+    expect(work.plannedEnd).toBe(1090) // 18:10
 
     // SPEC.md 14.2's prose says Gym shrinks to 45 minutes, but the 50-minute
     // gap before Dinner (1090-1140) can hold a 50-minute Gym with only 10
     // unscheduled minutes (cost 10 x SHRINK x W = 200W) instead of 15 (300W)
     // — a cheaper legal placement the prose didn't check for. Trusting the
     // cost formula (Section 7.3/8.6), as agreed for the Email case above.
-    const gym = byName(extended.timeline.instances, "Gym");
-    expect(gym.plannedStart).toBe(1090); // 18:10
-    expect(gym.plannedEnd).toBe(1140); // 19:00, right up against Dinner
-    expect(gym.scheduledMinutes).toBe(50);
-    expect(gym.relaxations).toEqual([{ type: "shrink", minutes: 10 }]);
-  });
+    const gym = byName(extended.timeline.instances, "Gym")
+    expect(gym.plannedStart).toBe(1090) // 18:10
+    expect(gym.plannedEnd).toBe(1140) // 19:00, right up against Dinner
+    expect(gym.scheduledMinutes).toBe(50)
+    expect(gym.relaxations).toEqual([{ type: "shrink", minutes: 10 }])
+  })
 
   it("14.3 extend rejected: without a ShrinkRule, Gym has nowhere left to go", () => {
     const catalog = baselineCatalog({
       gymMandatory: true,
       gymShrink: false,
       dinnerFixed: true,
-    });
+    })
     const generated = solve({
       dayFrame,
       now: 0,
@@ -256,9 +262,9 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
-    const gymBefore = byName(generated.timeline.instances, "Gym");
-    expect(gymBefore.state).toBe("PLANNED");
+    })
+    const gymBefore = byName(generated.timeline.instances, "Gym")
+    expect(gymBefore.state).toBe("PLANNED")
 
     const active = solve({
       dayFrame,
@@ -268,8 +274,8 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       carryIn: [],
       event: { type: "TICK" },
       revision: generated.timeline.revision,
-    });
-    const activeWork = active.timeline.instances.find((i) => i.name === "Work")!;
+    })
+    const activeWork = active.timeline.instances.find((i) => i.name === "Work")!
 
     const result = solve({
       dayFrame,
@@ -279,26 +285,34 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       carryIn: [],
       event: { type: "EXTEND", instanceId: activeWork.id, minutes: 70 },
       revision: active.timeline.revision,
-    });
+    })
 
-    expect(result.status).toBe("REJECTED");
-    expect(result.rejection?.code).toBe("MANDATORY_UNPLACEABLE");
-    const gym = byName(active.timeline.instances, "Gym");
-    expect(result.rejection?.conflictingInstanceIds).toEqual([gym.id]);
-    expect(result.timeline.instances).toEqual(active.timeline.instances);
-  });
+    expect(result.status).toBe("REJECTED")
+    expect(result.rejection?.code).toBe("MANDATORY_UNPLACEABLE")
+    const gym = byName(active.timeline.instances, "Gym")
+    expect(result.rejection?.conflictingInstanceIds).toEqual([gym.id])
+    expect(result.timeline.instances).toEqual(active.timeline.instances)
+  })
 
   it("14.6 chunking beats skipping: Deep Work splits across the day's two free gaps", () => {
     const catalog = [
-      activity("Midday Block").rank(1).minutes(240).fixed("10:00", "14:00").build(),
-      activity("Evening Meeting").rank(2).minutes(120).fixed("15:00", "17:00").build(),
+      activity("Midday Block")
+        .rank(1)
+        .minutes(240)
+        .fixed("10:00", "14:00")
+        .build(),
+      activity("Evening Meeting")
+        .rank(2)
+        .minutes(120)
+        .fixed("15:00", "17:00")
+        .build(),
       activity("Deep Work")
         .rank(3)
         .minutes(120)
         .flexible("09:00", "17:00", { drift: 0 })
         .shrink({ floor: 60, chunking: true, minChunk: 45, maxChunks: 3 })
         .build(),
-    ];
+    ]
 
     const result = solve({
       dayFrame,
@@ -307,20 +321,20 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
-    expect(result.status).toBe("OK");
+    expect(result.status).toBe("OK")
     const chunks = result.timeline.instances
       .filter((i) => i.name === "Deep Work")
-      .sort((a, b) => a.blockIndex - b.blockIndex);
-    expect(chunks).toHaveLength(2);
-    expect(chunks[0].plannedStart).toBe(540); // 09:00
-    expect(chunks[0].plannedEnd).toBe(600); // 10:00
-    expect(chunks[1].plannedStart).toBe(840); // 14:00
-    expect(chunks[1].plannedEnd).toBe(900); // 15:00
-    expect(chunks[0].chunkGroupId).toBe(chunks[1].chunkGroupId);
-    expect(chunks[0].relaxations).toEqual([{ type: "chunk", minutes: 1 }]);
-  });
+      .sort((a, b) => a.blockIndex - b.blockIndex)
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].plannedStart).toBe(540) // 09:00
+    expect(chunks[0].plannedEnd).toBe(600) // 10:00
+    expect(chunks[1].plannedStart).toBe(840) // 14:00
+    expect(chunks[1].plannedEnd).toBe(900) // 15:00
+    expect(chunks[0].chunkGroupId).toBe(chunks[1].chunkGroupId)
+    expect(chunks[0].relaxations).toEqual([{ type: "chunk", minutes: 1 }])
+  })
 
   it("14.7 guest displaced by an exclusion window: Email's whole window is excluded, so it's skipped", () => {
     const catalog = [
@@ -343,7 +357,7 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
         })
         .build(),
       activity("Email").rank(2).minutes(30).strict("09:00", "10:00").build(),
-    ];
+    ]
 
     const result = solve({
       dayFrame,
@@ -352,11 +366,11 @@ describe("solve — worked examples (SPEC.md Section 14)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
+    })
 
-    const email = byName(result.timeline.instances, "Email");
-    expect(email.state).toBe("SKIPPED");
-    expect(email.skipReason).toBe("WINDOW_UNSATISFIABLE");
-    expect(email.hostInstanceId).toBeNull();
-  });
-});
+    const email = byName(result.timeline.instances, "Email")
+    expect(email.state).toBe("SKIPPED")
+    expect(email.skipReason).toBe("WINDOW_UNSATISFIABLE")
+    expect(email.hostInstanceId).toBeNull()
+  })
+})

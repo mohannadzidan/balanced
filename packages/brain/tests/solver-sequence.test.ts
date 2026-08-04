@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { DEFAULT_COST_CONSTANTS } from "../src/engine/constants";
-import { priorityWeight } from "../src/engine/cost";
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveDayFrame } from "../src/engine/time";
-import { activity } from "./support/fixtures";
-import { expectPlacements } from "./support/expect-placements";
+import { DEFAULT_COST_CONSTANTS } from "../src/engine/constants"
+import { priorityWeight } from "../src/engine/cost"
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveDayFrame } from "../src/engine/time"
+import { activity } from "./support/fixtures"
+import { expectPlacements } from "./support/expect-placements"
 
-const dayFrame = resolveDayFrame("2024-06-17", "UTC");
-const C = DEFAULT_COST_CONSTANTS;
+const dayFrame = resolveDayFrame("2024-06-17", "UTC")
+const C = DEFAULT_COST_CONSTANTS
 
 function generate(catalog: ReturnType<typeof activity>[]) {
   return solve({
@@ -18,7 +18,7 @@ function generate(catalog: ReturnType<typeof activity>[]) {
     existing: [],
     carryIn: [],
     event: { type: "GENERATE_DAY" },
-  });
+  })
 }
 
 describe("solve — SequenceRule", () => {
@@ -26,23 +26,27 @@ describe("solve — SequenceRule", () => {
     const result = generate([
       activity("Work").rank(1).minutes(60).mandatory().strict("09:00", "10:00"),
       activity("Commute").rank(2).minutes(30).sequence("pre", "work"),
-    ]);
+    ])
     expectPlacements(result, {
       Work: "09:00-10:00",
       Commute: "08:30-09:00",
-    });
-  });
+    })
+  })
 
   it("places a post-dependent immediately after its host", () => {
     const result = generate([
       activity("Work").rank(1).minutes(60).mandatory().strict("09:00", "10:00"),
-      activity("Commute").id("commute-home").rank(2).minutes(30).sequence("post", "work"),
-    ]);
+      activity("Commute")
+        .id("commute-home")
+        .rank(2)
+        .minutes(30)
+        .sequence("post", "work"),
+    ])
     expectPlacements(result, {
       Work: "09:00-10:00",
       Commute: "10:00-10:30",
-    });
-  });
+    })
+  })
 
   it("skips the dependent with HOST_SKIPPED at zero cost when the host is skipped", () => {
     // Work is optional (not mandatory) and its window is unsatisfiable
@@ -51,17 +55,17 @@ describe("solve — SequenceRule", () => {
     const result = generate([
       activity("Work").rank(1).minutes(90).strict("09:00", "09:30"),
       activity("Commute").rank(2).minutes(30).sequence("pre", "work"),
-    ]);
-    expectPlacements(result, { Work: "SKIPPED", Commute: "SKIPPED" });
+    ])
+    expectPlacements(result, { Work: "SKIPPED", Commute: "SKIPPED" })
 
-    const commute = result.timeline.instances.find((i) => i.name === "Commute")!;
-    expect(commute.skipReason).toBe("HOST_SKIPPED");
+    const commute = result.timeline.instances.find((i) => i.name === "Commute")!
+    expect(commute.skipReason).toBe("HOST_SKIPPED")
 
     // Dependent skip costs nothing, unlike an ordinary optional skip.
-    const weight = priorityWeight(2, 2);
-    expect(result.cost.skip).not.toBe(weight * C.SKIP);
-    expect(result.cost.perInstance["commute@2024-06-17#1"]).toBe(0);
-  });
+    const weight = priorityWeight(2, 2)
+    expect(result.cost.skip).not.toBe(weight * C.SKIP)
+    expect(result.cost.perInstance["commute@2024-06-17#1"]).toBe(0)
+  })
 
   it("pays the sequence gap cost when the tight slot is unavailable", () => {
     // Work: 09:00-10:00. A fixed meeting occupies 08:45-09:00, so the zero-
@@ -70,27 +74,30 @@ describe("solve — SequenceRule", () => {
     const result = generate([
       activity("Work").rank(1).minutes(60).mandatory().strict("09:00", "10:00"),
       activity("Meeting").rank(2).minutes(15).fixed("08:45", "09:00"),
-      activity("Commute").rank(3).minutes(15).sequence("pre", "work", { maxGap: 30 }),
-    ]);
+      activity("Commute")
+        .rank(3)
+        .minutes(15)
+        .sequence("pre", "work", { maxGap: 30 }),
+    ])
     expectPlacements(result, {
       Work: "09:00-10:00",
       Meeting: "08:45-09:00",
       Commute: "08:30-08:45",
-    });
-    const commute = result.timeline.instances.find((i) => i.name === "Commute")!;
-    expect(commute.relaxations).toEqual([{ type: "gap", minutes: 15 }]);
-  });
+    })
+    const commute = result.timeline.instances.find((i) => i.name === "Commute")!
+    expect(commute.relaxations).toEqual([{ type: "gap", minutes: 15 }])
+  })
 
   it("resolves a chain: A pre B, B pre C", () => {
     const result = generate([
       activity("C").rank(1).minutes(60).mandatory().strict("10:00", "11:00"),
       activity("B").rank(2).minutes(20).sequence("pre", "c"),
       activity("A").rank(3).minutes(10).sequence("pre", "b"),
-    ]);
+    ])
     expectPlacements(result, {
       C: "10:00-11:00",
       B: "09:40-10:00",
       A: "09:30-09:40",
-    });
-  });
-});
+    })
+  })
+})

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest"
 
-import { solveChecked as solve } from "./support/solve-checked";
-import { resolveDayFrame } from "../src/engine/time";
-import { activity } from "./support/fixtures";
+import { solveChecked as solve } from "./support/solve-checked"
+import { resolveDayFrame } from "../src/engine/time"
+import { activity } from "./support/fixtures"
 
 /**
  * Deep-freezes an object graph so any attempted mutation throws (ESM modules
@@ -12,17 +12,17 @@ import { activity } from "./support/fixtures";
  */
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    Object.freeze(value);
+    Object.freeze(value)
     for (const key of Object.getOwnPropertyNames(value)) {
-      deepFreeze((value as Record<string, unknown>)[key]);
+      deepFreeze((value as Record<string, unknown>)[key])
     }
   }
-  return value;
+  return value
 }
 
 describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
   it("accepts deep-frozen catalog/existing/carryIn across GENERATE_DAY, TICK, SKIP, EXTEND, and a rejection", () => {
-    const dayFrame = deepFreeze(resolveDayFrame("2024-06-17", "UTC"));
+    const dayFrame = deepFreeze(resolveDayFrame("2024-06-17", "UTC"))
     const catalog = deepFreeze([
       activity("Work")
         .rank(1)
@@ -51,7 +51,7 @@ describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
         .shrink({ floor: 45 })
         .build(),
       activity("Email").rank(4).minutes(30).build(),
-    ]);
+    ])
 
     expect(() =>
       solve({
@@ -61,8 +61,8 @@ describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
         existing: deepFreeze([]),
         carryIn: deepFreeze([]),
         event: deepFreeze({ type: "GENERATE_DAY" }),
-      }),
-    ).not.toThrow();
+      })
+    ).not.toThrow()
 
     const generated = solve({
       dayFrame,
@@ -71,9 +71,9 @@ describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
       existing: [],
       carryIn: [],
       event: { type: "GENERATE_DAY" },
-    });
-    const existing = deepFreeze(generated.timeline.instances);
-    const work = existing.find((i) => i.name === "Work")!;
+    })
+    const existing = deepFreeze(generated.timeline.instances)
+    const work = existing.find((i) => i.name === "Work")!
 
     expect(() =>
       solve({
@@ -84,10 +84,10 @@ describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
         carryIn: deepFreeze([]),
         event: deepFreeze({ type: "TICK" }),
         revision: generated.timeline.revision,
-      }),
-    ).not.toThrow();
+      })
+    ).not.toThrow()
 
-    const gym = existing.find((i) => i.name === "Gym")!;
+    const gym = existing.find((i) => i.name === "Gym")!
     expect(() =>
       solve({
         dayFrame,
@@ -97,8 +97,8 @@ describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
         carryIn: [],
         event: deepFreeze({ type: "SKIP", instanceId: gym.id }),
         revision: generated.timeline.revision,
-      }),
-    ).not.toThrow();
+      })
+    ).not.toThrow()
 
     // A rejection (unknown instance) is a discarded path — it must not
     // mutate the frozen input either, and must still echo it back exactly.
@@ -114,15 +114,15 @@ describe("solve — never mutates its input (SPEC.md 11, edge case 20)", () => {
         minutes: 5,
       }),
       revision: generated.timeline.revision,
-    });
-    expect(rejected.status).toBe("REJECTED");
-    expect(rejected.timeline.instances).toEqual(existing);
+    })
+    expect(rejected.status).toBe("REJECTED")
+    expect(rejected.timeline.instances).toEqual(existing)
 
     // Deep-frozen values throw on write, so simply reaching this point
     // without an uncaught TypeError already proves nothing was mutated;
     // this is the final check that the identity/values are still intact.
-    expect(Object.isFrozen(catalog)).toBe(true);
-    expect(Object.isFrozen(existing)).toBe(true);
-    expect(work.plannedStart).not.toBeNull();
-  });
-});
+    expect(Object.isFrozen(catalog)).toBe(true)
+    expect(Object.isFrozen(existing)).toBe(true)
+    expect(work.plannedStart).not.toBeNull()
+  })
+})
