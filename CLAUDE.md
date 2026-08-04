@@ -2,8 +2,9 @@
 
 ### I. Component-First UI (shadcn/ui)
 
-Every UI element MUST be built from shadcn/ui primitives (`components/ui`, as configured
-in `components.json`) before any custom component is written from scratch. New primitives
+Every UI element MUST be built from shadcn/ui primitives (`apps/web/components/ui`, as
+configured in `apps/web/components.json`) before any custom component is written from
+scratch. New primitives
 MUST be added via `npx shadcn@latest add <component>`, not hand-copied or reimplemented.
 Customization happens through composition, Tailwind utility classes, and variant props
 (`class-variance-authority`); forking a primitive's internals is permitted only to fix an
@@ -120,27 +121,42 @@ improvement costs one line; a smuggled refactor costs a debugging session.
 
 ## Technology Stack Constraints
 
-- **Framework**: Next.js 16.2 (App Router), matching the `app/` structure already
-  scaffolded in this repo. Next.js 16.2 has breaking changes relative to older training
-  data — any code touching routing, data fetching, caching, or server actions MUST first
-  be checked against `node_modules/next/dist/docs/` per `AGENTS.md`.
+- **Repo layout**: pnpm monorepo (`pnpm-workspace.yaml`: `apps/*`, `packages/*`).
+  `apps/web` is the Next.js app; `apps/api` is a Fastify service (scaffold only — not
+  yet wired to the brain engine or the DB layer); `packages/brain` is the framework-
+  agnostic scheduling engine; `packages/typescript-config` and `packages/vitest-config`
+  are the shared tsconfig/vitest bases every package extends. Root-level `pnpm <script>`
+  commands fan out across the workspace (`pnpm -r run <script>`, or a single root-level
+  invocation for oxlint/oxfmt, which cover the whole tree via nested config).
+- **Framework**: Next.js 16.2 (App Router), matching the `apps/web/app/` structure.
+  Next.js 16.2 has breaking changes relative to older training data — any code touching
+  routing, data fetching, caching, or server actions MUST first be checked against
+  `apps/web/node_modules/next/dist/docs/` per `AGENTS.md`.
 - **UI**: shadcn/ui on Radix primitives with Tailwind CSS v4, as configured in
-  `components.json`.
+  `apps/web/components.json`.
 - **Database**: Turso (libSQL) is the only persistence backend. Introducing another
-  database or storage engine requires a constitution amendment.
+  database or storage engine requires a constitution amendment. The data-access layer
+  currently lives in `apps/web/lib/db`; `apps/api` will own DB access directly once it's
+  wired up, at which point `apps/web` is expected to call it over HTTP rather than query
+  Turso in-process (not yet done — tracked as follow-up work, not a current dual-write
+  path).
 - **Package manager**: pnpm (`pnpm-workspace.yaml`, `pnpm-lock.yaml`). All dependency
   operations MUST use pnpm, not npm or yarn.
-- **Language**: TypeScript in strict mode across the codebase.
-- **Formatting/Linting**: Prettier (with `prettier-plugin-tailwindcss`) and ESLint
-  (`eslint-config-next`) MUST pass before a change is considered complete.
+- **Language**: TypeScript in strict mode across the codebase, via the shared
+  `@balanced/typescript-config` base with per-runtime overrides (`nextjs.json`,
+  `node.json`).
+- **Formatting/Linting**: oxfmt and oxlint MUST pass before a change is considered
+  complete. Root `.oxlintrc.json`/`.oxfmtrc.json` are the shared base; `apps/web` adds
+  a nested `.oxlintrc.json` (`extends` the root config) for Next-specific rules only —
+  oxfmt has no `extends` mechanism, so formatting stays a single root config.
 
 ## Development Workflow
 
-- New UI work is composed from `components/ui`; run `pnpm lint` and `pnpm typecheck`
-  before considering any change complete.
+- New UI work is composed from `apps/web/components/ui`; run `pnpm lint` and
+  `pnpm typecheck` before considering any change complete.
 - Before using a Next.js 16.2 API you have not verified in this codebase, consult
-  `node_modules/next/dist/docs/` rather than relying on prior training data (per
-  `AGENTS.md`).
+  `apps/web/node_modules/next/dist/docs/` rather than relying on prior training data
+  (per `AGENTS.md`).
 - Database schema changes go through explicit, reviewed migration files — never manual
   edits to a running database.
 - Feature specs, plans, and tasks produced by `/speckit-specify`, `/speckit-plan`, and
@@ -177,9 +193,9 @@ Every increment MUST satisfy all of the following before the next slice begins:
 Run each gate after a change that could affect it. Re-running a gate that already passed,
 with no intervening code change, adds no information and MUST NOT be used as reassurance.
 
-Note: this repository currently defines no `test` script in `package.json`. Until one
-exists, `pnpm typecheck`, `pnpm lint`, and `pnpm build` are the binding gates, and any
-verification beyond them MUST be stated explicitly as a manual check.
+`pnpm typecheck`, `pnpm lint`, `pnpm build`, and `pnpm test` are all wired at the
+workspace root and are the binding gates; `pnpm test` runs every package's Vitest suite
+via `test.projects` in the root `vitest.config.ts`.
 
 ### Anti-Patterns
 
