@@ -1,6 +1,7 @@
-# dependencies
-/node_modules
-/.pnp
+# dependencies (unanchored: matches at any depth, since every workspace
+# package under apps/*, packages/* has its own node_modules)
+node_modules
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -9,14 +10,15 @@
 !.yarn/versions
 
 # testing
-/coverage
+coverage
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
-/build
+build
+dist
 
 # misc
 .DS_Store

@@ -7,6 +7,15 @@ settings:
 importers:
 
   .:
+    devDependencies:
+      oxfmt:
+        specifier: ^0.62.0
+        version: 0.62.0
+      oxlint:
+        specifier: ^1.77.0
+        version: 1.77.0
+
+  apps/web:
     dependencies:
       '@base-ui/react':
         specifier: ^1.6.0
@@ -75,12 +84,6 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
-      oxfmt:
-        specifier: ^0.62.0
-        version: 0.62.0
-      oxlint:
-        specifier: ^1.77.0
-        version: 1.77.0
       tailwindcss:
         specifier: ^4
         version: 4.3.3
