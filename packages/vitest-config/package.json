@@ -1,0 +1,10 @@
+{
+  "name": "@balanced/vitest-config",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./base.ts",
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

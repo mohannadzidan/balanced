@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@balanced/typescript-config": "workspace:*",
+    "@balanced/vitest-config": "workspace:*",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

@@ -1,8 +1,10 @@
 import { fileURLToPath } from "node:url"
 
-import { defineConfig } from "vitest/config"
+import { mergeConfig } from "vitest/config"
 
-export default defineConfig({
+import { baseConfig } from "@balanced/vitest-config/base"
+
+export default mergeConfig(baseConfig, {
   resolve: {
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
@@ -10,8 +12,5 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
-    environment: "node",
-    // Tests arrive in Phase 2 (T009); keeps the per-task gate green until then.
-    passWithNoTests: true,
   },
 })

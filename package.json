@@ -7,13 +7,14 @@
     "lint": "oxlint .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "typecheck": "pnpm --filter web run typecheck",
-    "build": "pnpm --filter web run build",
-    "test": "pnpm --filter web run test"
+    "typecheck": "pnpm -r run typecheck",
+    "build": "pnpm -r run build",
+    "test": "vitest run"
   },
   "devDependencies": {
     "oxfmt": "^0.62.0",
-    "oxlint": "^1.77.0"
+    "oxlint": "^1.77.0",
+    "vitest": "^4.1.10"
   },
   "engines": {
     "node": ">=22"
